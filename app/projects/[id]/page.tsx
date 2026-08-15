@@ -1,0 +1,194 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/auth";
+import { AppShell } from "@/components/AppShell";
+import { StatusBadge } from "@/components/StatusBadge";
+import { InstructionForm } from "@/components/InstructionForm";
+import { ActivityTimeline } from "@/components/ActivityTimeline";
+
+export const dynamic = "force-dynamic";
+
+type Props = { params: Promise<{ id: string }> };
+
+export default async function ProjectDetailPage({ params }: Props) {
+  if (!(await getSession())) redirect("/login");
+
+  const { id } = await params;
+
+  const project = await prisma.project.findUnique({
+    where: { id },
+    include: {
+      instructions: { orderBy: { createdAt: "desc" } },
+      agentRuns: { orderBy: { createdAt: "desc" }, take: 10 },
+      activityLogs: { orderBy: { createdAt: "desc" }, take: 50 },
+    },
+  });
+
+  if (!project) notFound();
+
+  return (
+    <AppShell>
+      <div className="flex flex-col gap-6">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {project.name}
+            </h1>
+            <StatusBadge status={project.status} />
+          </div>
+          <p className="mt-1 font-mono text-sm text-text-dim">
+            /{project.slug}
+          </p>
+          {project.description ? (
+            <p className="mt-3 max-w-2xl text-sm text-neutral-300">
+              {project.description}
+            </p>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-3 text-xs text-text-dim">
+            {project.devUrl ? (
+              <a
+                href={project.devUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 transition hover:border-accent/50"
+              >
+                DEV ↗
+              </a>
+            ) : null}
+            {project.repoUrl ? (
+              <a
+                href={project.repoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-border bg-surface px-3 py-1.5 transition hover:border-accent/50"
+              >
+                Repo ↗
+              </a>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            disabled
+            title="Coming soon"
+            className="cursor-not-allowed rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-dim opacity-60"
+          >
+            Prepare DEV
+          </button>
+          <button
+            disabled
+            title="Coming soon"
+            className="cursor-not-allowed rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-dim opacity-60"
+          >
+            Request AI analysis
+          </button>
+          <button
+            disabled
+            title="Coming soon"
+            className="cursor-not-allowed rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-dim opacity-60"
+          >
+            Prepare PRO
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <div className="rounded-xl border border-border bg-surface p-6">
+              <h2 className="text-lg font-semibold tracking-tight">
+                Instructions
+              </h2>
+              <p className="mt-1 text-sm text-text-dim">
+                Capture what needs to happen next.
+              </p>
+
+              <div className="mt-5">
+                <InstructionForm projectId={project.id} />
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3">
+                {project.instructions.length === 0 ? (
+                  <p className="text-sm text-text-dim">
+                    No instructions yet.
+                  </p>
+                ) : (
+                  project.instructions.map((instruction) => (
+                    <div
+                      key={instruction.id}
+                      className="rounded-lg border border-border bg-background p-4"
+                    >
+                      <p className="whitespace-pre-wrap text-sm text-neutral-200">
+                        {instruction.content}
+                      </p>
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-text-dim">
+                        <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+                          {instruction.source}
+                        </span>
+                        <span
+                          className={`rounded bg-surface-2 px-1.5 py-0.5 font-mono ${
+                            instruction.status === "pending"
+                              ? "text-amber-300"
+                              : "text-emerald-300"
+                          }`}
+                        >
+                          {instruction.status}
+                        </span>
+                        <span>{instruction.createdAt.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+              <h2 className="text-lg font-semibold tracking-tight">
+                Agent runs
+              </h2>
+              <p className="mt-1 text-sm text-text-dim">
+                Future executions (mock for now).
+              </p>
+              <div className="mt-5 flex flex-col gap-3">
+                {project.agentRuns.length === 0 ? (
+                  <p className="text-sm text-text-dim">
+                    No agent runs yet.
+                  </p>
+                ) : (
+                  project.agentRuns.map((run) => (
+                    <div
+                      key={run.id}
+                      className="rounded-lg border border-border bg-background p-4"
+                    >
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium text-neutral-200">
+                          {run.agentName ?? "agent"}
+                        </span>
+                        <span className="text-text-dim">
+                          · {run.model ?? "model"}
+                        </span>
+                        <span className="ml-auto rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-text-dim">
+                          {run.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="rounded-xl border border-border bg-surface p-6">
+              <h2 className="text-lg font-semibold tracking-tight">Activity</h2>
+              <div className="mt-5">
+                <ActivityTimeline activities={project.activityLogs} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}

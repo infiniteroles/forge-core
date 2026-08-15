@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Project {
+  id            String        @id @default(cuid())
+  name          String
+  slug          String        @unique
+  description   String?
+  status        String        @default("draft")
+  devUrl        String?
+  productionUrl String?
+  repoUrl       String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  instructions  Instruction[]
+  agentRuns     AgentRun[]
+  activityLogs  ActivityLog[]
+  environments  Environment[]
+}
+
+model Instruction {
+  id        String     @id @default(cuid())
+  projectId String
+  content   String
+  source    String     @default("manual")
+  status    String     @default("pending")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentRuns AgentRun[]
+}
+
+model AgentRun {
+  id            String       @id @default(cuid())
+  projectId     String
+  instructionId String?
+  agentName     String?
+  model         String?
+  status        String       @default("queued")
+  input         String?
+  output        String?
+  costEstimate  String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: SetNull)
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  projectId String?
+  type      String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Environment {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  type      String   @default("dev")
+  url       String?
+  provider  String?
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
