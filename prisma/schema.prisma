@@ -17,20 +17,28 @@ model User {
 }
 
 model Project {
-  id            String        @id @default(cuid())
-  name          String
-  slug          String        @unique
-  description   String?
-  status        String        @default("draft")
-  devUrl        String?
-  productionUrl String?
-  repoUrl       String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  instructions  Instruction[]
-  agentRuns     AgentRun[]
-  activityLogs  ActivityLog[]
-  environments  Environment[]
+  id                   String        @id @default(cuid())
+  name                 String
+  slug                 String        @unique
+  description          String?
+  status               String        @default("draft")
+  devUrl               String?
+  productionUrl        String?
+  repoUrl              String?
+  targetDevDomain      String?
+  preferredStack       String?
+  repositoryProvider   String?
+  repositoryFullName   String?
+  coolifyApplicationId String?
+  coolifyProjectId     String?
+  notes                String?
+  archivedAt           DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  instructions         Instruction[]
+  agentRuns            AgentRun[]
+  activityLogs         ActivityLog[]
+  environments         Environment[]
 }
 
 model Instruction {

@@ -1,7 +1,21 @@
+# Dependencies
 node_modules/
+
+# Build outputs
 .next/
 out/
+dist/
+coverage/
+
+# Environment & secrets
 .env
-.env.local
+.env.*
+!.env.example
+.credentials
+*.pem
+*.key
+*.crt
+
+# OS & logs
 .DS_Store
 *.log

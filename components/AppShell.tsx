@@ -32,6 +32,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               >
                 Projects
               </Link>
+              <Link
+                href="/settings"
+                className="transition hover:text-neutral-100"
+              >
+                Settings
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4">

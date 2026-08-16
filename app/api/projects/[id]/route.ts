@@ -49,23 +49,44 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const data = parsed.data;
 
-  const project = await prisma.project.update({
-    where: { id },
-    data: {
-      name: data.name,
-      slug: data.slug,
-      description: data.description ?? undefined,
-      devUrl: data.devUrl ?? undefined,
-      productionUrl: data.productionUrl ?? undefined,
-      repoUrl: data.repoUrl ?? undefined,
-    },
-  });
+  try {
+    const project = await prisma.project.update({
+      where: { id },
+      data: {
+        name: data.name,
+        slug: data.slug,
+        description: data.description,
+        status: data.status,
+        devUrl: data.devUrl,
+        productionUrl: data.productionUrl,
+        repoUrl: data.repoUrl,
+        targetDevDomain: data.targetDevDomain,
+        preferredStack: data.preferredStack,
+        repositoryProvider: data.repositoryProvider,
+        repositoryFullName: data.repositoryFullName,
+        coolifyApplicationId: data.coolifyApplicationId,
+        coolifyProjectId: data.coolifyProjectId,
+        notes: data.notes,
+      },
+    });
 
-  await logActivity({
-    projectId: project.id,
-    type: "project.updated",
-    message: `Project "${project.name}" updated`,
-  });
+    await logActivity({
+      projectId: project.id,
+      type: "project.updated",
+      message: `Project "${project.name}" updated`,
+    });
 
-  return NextResponse.json({ project });
+    return NextResponse.json({ project });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.toLowerCase().includes("unique constraint")
+    ) {
+      return NextResponse.json(
+        { error: "Slug already in use" },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 }

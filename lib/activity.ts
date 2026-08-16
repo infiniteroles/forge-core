@@ -4,6 +4,7 @@ import { prisma } from "./db";
 export const ACTIVITY_TYPES = [
   "project.created",
   "project.updated",
+  "project.archived",
   "instruction.created",
   "agent.run.created",
   "agent.run.completed",
