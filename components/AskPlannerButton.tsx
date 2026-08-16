@@ -23,6 +23,7 @@ export function AskPlannerButton({ projectId }: { projectId: string }) {
         router.refresh();
       } else {
         setError(data.error || "The planner could not be run.");
+        router.refresh();
       }
     } catch {
       setError("Network error while contacting the planner.");
