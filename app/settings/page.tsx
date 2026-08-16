@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
+import { getLLMConfig, isLLMConfigured } from "@/lib/llm/client";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +11,21 @@ export default async function SettingsPage() {
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? "https://forge-app.dev.core01.io";
 
+  const llmConfigured = isLLMConfigured();
+  const llmConfig = getLLMConfig();
+
   const rows: { label: string; value: string }[] = [
     { label: "App name", value: "Forge Core01" },
     { label: "Environment", value: "DEV" },
     { label: "App URL", value: appUrl },
     { label: "Default DEV wildcard", value: "*.dev.core01.io" },
     { label: "GitHub integration", value: "Not configured" },
-    { label: "DeepSeek integration", value: "Not configured" },
+    {
+      label: "DeepSeek integration",
+      value: llmConfigured ? "Configured" : "Not configured",
+    },
+    { label: "DeepSeek model", value: llmConfigured ? llmConfig.model : "Not configured" },
+    { label: "DeepSeek base URL", value: llmConfigured ? llmConfig.baseUrl : "Not configured" },
     { label: "Telegram bot", value: "Not configured" },
     { label: "Coolify API", value: "Not configured" },
   ];

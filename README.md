@@ -11,11 +11,12 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - Single-admin auth (email + bcrypt password, JWT session cookie).
 - Projects: create, edit, archive (logical, no hard delete) and detail view.
 - Instructions: capture work for future agents (manual source for now).
-- Activity log: timeline of `project.created`, `project.updated`, `project.archived`, `instruction.created`.
+- Activity log: timeline of `project.created`, `project.updated`, `project.archived`, `instruction.created`, `agent.run.*`.
+- **DeepSeek Planner**: "Ask Planner" runs an LLM planning agent (direct DeepSeek API, OpenAI-compatible) and stores the result as an `AgentRun`.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
-Not implemented yet (planned for later phases): DeepSeek, Telegram, GitHub App, Coolify API, real agents.
+Not implemented yet (planned for later phases): Telegram, GitHub App, Coolify API, LiteLLM, Ollama, real code-writing agents.
 
 ## Stack
 
@@ -33,6 +34,10 @@ Not implemented yet (planned for later phases): DeepSeek, Telegram, GitHub App, 
 | `ADMIN_EMAIL` | The single admin email used to log in. |
 | `ADMIN_PASSWORD_HASH` | bcrypt hash of the admin password. |
 | `NEXT_PUBLIC_APP_URL` | Public URL of the app (used for absolute links and `/settings`). |
+| `DEEPSEEK_API_KEY` | DeepSeek API key (OpenAI-compatible). Empty/absent disables the LLM features. |
+| `DEEPSEEK_BASE_URL` | LLM provider base URL (default `https://api.deepseek.com`). |
+| `DEEPSEEK_MODEL` | Model id (default `deepseek-v4-pro`). |
+| `LLM_REQUEST_TIMEOUT_MS` | Request timeout in ms (default `90000`). |
 
 Generate the admin password hash with:
 
@@ -108,9 +113,55 @@ On Coolify:
 - `GET /api/projects/[id]` — project detail.
 - `PATCH /api/projects/[id]` — update a project (name, slug, description, status, URLs, target domain, stack, repository, notes).
 - `POST /api/projects/[id]/archive` — archive a project (sets `archivedAt` and `status = paused`).
+- `POST /api/projects/[id]/planner` — run the DeepSeek Planner agent.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
+
+## LLM / DeepSeek (Ask Planner)
+
+The Planner is the first real AI integration. It calls DeepSeek directly through an
+OpenAI-compatible `chat/completions` endpoint (no LiteLLM yet). The client lives in
+`lib/llm/` and is provider-agnostic (base URL + model + key come from env).
+
+On the project detail page, click **Ask Planner** to:
+
+1. create an `AgentRun` (status `running`);
+2. collect project data + latest instructions + recent activity;
+3. call the model asking for a structured JSON plan (technical/product, not code);
+4. save the result and mark the run `completed`, `completed_with_warnings` or `failed`;
+5. log `agent.run.created` / `agent.run.completed` / `agent.run.failed`.
+
+### Configure in Coolify
+
+Add these environment variables to the application:
+
+- `DEEPSEEK_API_KEY` — your DeepSeek API key.
+- `DEEPSEEK_BASE_URL` — default `https://api.deepseek.com`.
+- `DEEPSEEK_MODEL` — default `deepseek-v4-pro`.
+- `LLM_REQUEST_TIMEOUT_MS` — default `90000`.
+
+Then redeploy. Without `DEEPSEEK_API_KEY` the app keeps working and `/settings`
+shows "DeepSeek integration: Not configured".
+
+### Endpoint
+
+```
+POST /api/projects/[id]/planner
+```
+
+Authenticated. Returns `{ "ok": true, "agentRun": ... }` on success, or
+`{ "ok": false, "error": "LLM provider is not configured" }` when no key is set.
+
+### Troubleshooting
+
+- **API key missing**: `/settings` shows "Not configured"; the endpoint returns a
+  clear error and the app keeps working.
+- **Timeout**: controlled by `LLM_REQUEST_TIMEOUT_MS`. The run is marked `failed`.
+- **Invalid JSON from the model**: the raw output is preserved and the run is marked
+  `completed_with_warnings`.
+- **Provider error** (HTTP 4xx/5xx): the run is marked `failed` and the error is
+  stored in the run output and the activity log.
 
 ## Security notes
 
@@ -118,12 +169,13 @@ Mutating endpoints require an authenticated session.
 - Sessions are signed JWTs stored in `httpOnly` cookies (`AUTH_SECRET`).
 - `/dashboard`, `/projects` and `/settings` are protected by middleware.
 - Do not commit real secrets. `.env`, `.env.*`, `.credentials`, `*.pem`, `*.key` and `*.crt` are gitignored (`.env.example` is the only tracked env template).
+- The LLM API key is only read server-side from `DEEPSEEK_API_KEY`; it is never logged, exposed in `/settings`, or sent to the browser.
 
 ## Pending
 
-- DeepSeek integration
 - Telegram bot
 - GitHub App
 - Coolify API
-- Real agent runs
+- LiteLLM / multi-provider routing
+- Real code-writing agents
 

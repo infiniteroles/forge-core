@@ -7,6 +7,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { InstructionForm } from "@/components/InstructionForm";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { ProjectArchiveButton } from "@/components/ProjectArchiveButton";
+import { AskPlannerButton } from "@/components/AskPlannerButton";
+import { AgentRunCard } from "@/components/AgentRunCard";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +118,7 @@ export default async function ProjectDetailPage({ params }: Props) {
           ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             disabled
             title="Coming soon"
@@ -124,13 +126,7 @@ export default async function ProjectDetailPage({ params }: Props) {
           >
             Prepare DEV
           </button>
-          <button
-            disabled
-            title="Coming soon"
-            className="cursor-not-allowed rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-dim opacity-60"
-          >
-            Ask Planner
-          </button>
+          <AskPlannerButton projectId={project.id} />
           <button
             disabled
             title="Coming soon"
@@ -194,7 +190,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                 Agent runs
               </h2>
               <p className="mt-1 text-sm text-text-dim">
-                Future executions (mock for now).
+                Executions of planning and automation agents.
               </p>
               <div className="mt-5 flex flex-col gap-3">
                 {project.agentRuns.length === 0 ? (
@@ -203,22 +199,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                   </p>
                 ) : (
                   project.agentRuns.map((run) => (
-                    <div
-                      key={run.id}
-                      className="rounded-lg border border-border bg-background p-4"
-                    >
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="font-medium text-neutral-200">
-                          {run.agentName ?? "agent"}
-                        </span>
-                        <span className="text-text-dim">
-                          · {run.model ?? "model"}
-                        </span>
-                        <span className="ml-auto rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-text-dim">
-                          {run.status}
-                        </span>
-                      </div>
-                    </div>
+                    <AgentRunCard key={run.id} run={run} />
                   ))
                 )}
               </div>

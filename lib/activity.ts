@@ -8,6 +8,7 @@ export const ACTIVITY_TYPES = [
   "instruction.created",
   "agent.run.created",
   "agent.run.completed",
+  "agent.run.failed",
   "deploy.dev.requested",
   "deploy.pro.requested",
 ] as const;

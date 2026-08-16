@@ -35,6 +35,7 @@ export const AGENT_RUN_STATUSES = [
   "queued",
   "running",
   "completed",
+  "completed_with_warnings",
   "failed",
   "cancelled",
 ] as const;
