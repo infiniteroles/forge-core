@@ -70,6 +70,24 @@ export default async function SettingsPage() {
         ? "Available"
         : "Public only / Not configured",
     },
+    {
+      label: "Builder Commit Agent",
+      value: llmConfigured && githubConfigured ? "Available" : "Not configured",
+    },
+    {
+      label: "Builder model",
+      value: llmConfigured ? llmConfig.model : "Not configured",
+    },
+    {
+      label: "LLM provider",
+      value: llmConfigured ? "Configured" : "Not configured",
+    },
+    {
+      label: "GitHub write access",
+      value: githubConfigured ? "Available" : "Not configured",
+    },
+    { label: "Max files per run", value: "5" },
+    { label: "Max total change size", value: "120 KB" },
     { label: "Telegram bot", value: "Not configured" },
     { label: "Coolify API", value: "Not configured" },
   ];

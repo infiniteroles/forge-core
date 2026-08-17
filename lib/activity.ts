@@ -39,6 +39,11 @@ export const ACTIVITY_TYPES = [
   "builder.proposal.created",
   "builder.proposal.completed",
   "builder.proposal.failed",
+  "builder.commit.created",
+  "builder.commit.completed",
+  "builder.commit.completed_with_warnings",
+  "builder.commit.failed",
+  "builder.commit.checked",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

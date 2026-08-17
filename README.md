@@ -16,6 +16,7 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **Backlog**: turn a Planner run's `proposed_tasks` into editable `Task` records (create, edit, change status, mark done, cancel).
 - **GitHub links**: associate a project with a repo, and link tasks to GitHub issues, branches, plan commits and draft PRs (read/write via REST, read-only by default).
 - **Builder Proposal Agent**: analyze a single task + limited repository context and propose an implementation strategy via DeepSeek — analysis only, no code/commit/PR/deploy changes.
+- **Builder Commit Agent**: generate concrete, validated functional changes for a task and commit them **only** on the task branch (guarded by proposal, safe-file policy and strict limits).
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
@@ -134,6 +135,8 @@ On Coolify:
 - `POST /api/tasks/[id]/github/pr` — create a draft PR from the task branch.
 - `POST /api/tasks/[id]/github/pr/check` — refresh the linked PR metadata.
 - `POST /api/tasks/[id]/builder/proposal` — run the Builder Proposal agent for a task.
+- `POST /api/tasks/[id]/builder/commit` — run Builder Commit (validated write to the task branch).
+- `POST /api/tasks/[id]/builder/commit/check` — refresh Builder Commit metadata.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -231,15 +234,17 @@ Not configured", "Can create issues: No", "Can create branches: No",
 
 - Repository metadata read (`metadata: read`).
 - Repository contents read/write (`contents: write`) — read for the last-commit
-  lookup, write to create branch references and commit the plan Markdown file.
+  lookup, write to create branch references, commit the plan Markdown file and
+  commit Builder functional changes.
 - Issues read/write (`issues: write`) — required to create issues.
 - Pull requests read/write (`pull_requests: write`) — required to create PRs.
 
 Draft PRs are created only from the task branch towards the project base branch
-and are never merged automatically. No functional code is modified.
+and are never merged automatically. The Builder Commit agent writes functional
+code only on the task branch via the Contents API (no merge, no issue closing).
 
 Prefer a fine-grained token scoped to `infiniteroles/forge-core` (or only the
-needed repos).
+needed repos). The token is never shown in the UI, logs or ActivityLog.
 
 ### Repository endpoint
 
@@ -397,6 +402,134 @@ Events logged: `builder.proposal.created`, `builder.proposal.completed`,
   the change.
 
 Migration: `20260818050000_add_agent_run_task_link` links `AgentRun` to `Task`.
+
+## Builder Commit Agent
+
+The second Builder agent is the first one that can generate **real functional
+changes**, but under very strict limits. It only writes to the GitHub branch
+associated with the task — never `main`, never production, never a merge, never
+a deploy.
+
+Flow:
+
+```
+Task with branch + draft PR + Builder Proposal
+→ Run Builder Commit
+→ Forge validates the task is safe
+→ DeepSeek generates concrete, limited changes
+→ Forge validates the changes (safe-file policy)
+→ Forge applies changes ONLY on the task branch (Contents API, one commit per file)
+→ GitHub creates commit → PR draft picks it up
+→ Forge saves metadata + ActivityLog
+```
+
+### Safety gates (endpoint)
+
+Before anything runs, Forge checks in order:
+
+1. task belongs to a project with `repositoryFullName`;
+2. task has a `githubBranchName`;
+3. task has a `githubPrNumber` (draft PR);
+4. a completed Builder Proposal exists for the task;
+5. the proposal's `safe_to_attempt_next === true`;
+6. `DEEPSEEK_API_KEY` is configured;
+7. `GITHUB_TOKEN` is configured.
+
+If the model returns `safe_to_commit: false`, proposes a blocked path, more than
+5 files, a delete operation or non-JSON, Forge does **not** write to GitHub and
+marks the run `completed_with_warnings` with the reason.
+
+### Safe-file policy (`lib/github/safe-file-policy.ts`)
+
+Always blocked: `.env*`, `.credentials`, `*.pem|key|crt|p12|pfx`, `*.sqlite|db`,
+`.github/workflows/*`, `prisma/migrations/*`, `Dockerfile`,
+`docker-compose*`, `nginx/*`, `caddy/*`, `scripts/deploy*`, `scripts/ssh*`.
+
+Also blocked: absolute paths, `..`, binary files, files > 60 KB, more than 5
+files per run, more than 120 KB total, and any delete operation.
+
+Allowed zones (normal app code): `app/**`, `components/**`, `lib/**`,
+`docs/**`, `.forge/**`, `README.md`. Modifying `prisma/schema.prisma`,
+`README.md` or `.forge/**` should be justified by the task.
+
+### Commit context
+
+`buildBuilderCommitContext(taskId)` collects the task, project, branch, draft
+PR, plan file, the latest **completed Builder Proposal**, the files the proposal
+asked to inspect/modify (read from the task branch, read-only) and recent
+activity/runs. Limits: max 12 files with content, 30 KB per file, 150 KB total.
+Missing/blocked files are skipped with warnings. No `.env`, no secrets, no
+binaries.
+
+### Output structure
+
+`builderCommitOutputSchema` (Zod):
+
+- `summary`, `implementation_notes`
+- `files[{ path, operation: create|update, reason, content }]`
+- `validation_plan[{ command, purpose }]`
+- `risks[]`, `post_commit_notes[]`
+- `safe_to_commit` (boolean)
+
+### Endpoints
+
+```
+POST /api/tasks/[id]/builder/commit        — run Builder Commit (validated write)
+POST /api/tasks/[id]/builder/commit/check  — refresh the commit metadata
+```
+
+`builder/commit` returns `{ ok, status, changes, commits }` on success, or
+`{ ok: false, error: "Builder commit failed: <reason>" }` on failure.
+`builder/commit/check` requires `githubBuilderCommitSha` and refreshes URL,
+message, committed-at and last-checked from GitHub.
+
+### Task model fields (new in this phase)
+
+`githubBuilderCommitSha`, `githubBuilderCommitUrl`, `githubBuilderCommitMessage`,
+`githubBuilderCommittedAt`, `githubBuilderLastCheckedAt`, `builderLastRunId`,
+`builderLastStatus`, `builderLastSummary`.
+
+### UI
+
+- Task cards show a **Builder Commit** block with the right guard message
+  (run proposal first / not safe yet / create branch / create draft PR), then
+  **Run Builder Commit**; once a commit exists: `Builder commit: <short sha>` +
+  **Open Commit** + **Refresh Commit**.
+- The task edit page shows a read-only **Builder Commit** section (last run,
+  status, summary, commit SHA/URL/message, committed at, last checked, files
+  changed, validation plan, risks, post-commit notes).
+- The project Backlog adds `Builder commits: Y / total tasks`.
+- `/settings` adds Builder Commit Agent / model / LLM provider / GitHub write
+  access / Max files per run (5) / Max total change size (120 KB).
+
+Events logged: `builder.commit.created`, `builder.commit.completed`,
+`builder.commit.completed_with_warnings`, `builder.commit.failed`,
+`builder.commit.checked`. Metadata never includes the token or secrets.
+
+### Current limitations
+
+- One commit per file (Contents API) — no single atomic multi-file commit yet.
+- No merge, no issue closing, no deploy, no real command/test execution.
+- GitHub context is read-only and limited; `prisma/migrations`, workflows,
+  Dockerfile and infra files cannot be modified by the Builder.
+- No PR body update or review flow yet.
+
+### Reverting a Builder commit manually
+
+If a Builder commit needs to be reverted, do it on GitHub directly (or locally):
+
+```bash
+git fetch origin
+git checkout -b revert-branch origin/forge/<branch>
+git revert <commitSha>
+git push origin revert-branch
+# then open a normal PR, or force-push the reverted branch if you own it
+```
+
+### Next steps
+
+PR update/review flow, controlled test runner (build validation in a sandbox),
+Coolify DEV deploy button, single atomic multi-file commits via Git Data API.
 
 ## Backlog (Planner → tasks)
 

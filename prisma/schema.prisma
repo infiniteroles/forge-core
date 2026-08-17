@@ -150,6 +150,14 @@ model Task {
   githubPrUpdatedAt        DateTime?
   githubPrMergedAt         DateTime?
   githubPrLastCheckedAt    DateTime?
+  githubBuilderCommitSha        String?
+  githubBuilderCommitUrl        String?
+  githubBuilderCommitMessage    String?
+  githubBuilderCommittedAt      DateTime?
+  githubBuilderLastCheckedAt    DateTime?
+  builderLastRunId              String?
+  builderLastStatus             String?
+  builderLastSummary            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

@@ -68,6 +68,10 @@ export default async function ProjectDetailPage({ params }: Props) {
     (task) => task.agentRuns.length > 0
   ).length;
 
+  const builderCommitCount = project.tasks.filter(
+    (task) => task.githubBuilderCommitSha != null
+  ).length;
+
   function builderSummary(
     run: {
       id: string;
@@ -327,6 +331,9 @@ export default async function ProjectDetailPage({ params }: Props) {
                 Draft PRs opened: {prCount} / {project.tasks.length} tasks
               </p>              <p className="mt-1 text-xs text-text-dim">
                 Builder proposals: {builderProposalCount} / {project.tasks.length}{" "}
+                tasks
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                Builder commits: {builderCommitCount} / {project.tasks.length}{" "}
                 tasks
               </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (

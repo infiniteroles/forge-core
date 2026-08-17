@@ -14,6 +14,7 @@ import {
   BuilderProposalActions,
   BuilderProposalSummary,
 } from "./BuilderProposalActions";
+import { BuilderCommitActions } from "./BuilderCommitActions";
 
 type TaskProps = {
   id: string;
@@ -36,6 +37,9 @@ type TaskProps = {
   githubPrState: string | null;
   githubPrDraft: boolean | null;
   githubPrUrl: string | null;
+  githubBuilderCommitSha: string | null;
+  githubBuilderCommitUrl: string | null;
+  builderLastStatus: string | null;
 };
 
 export function TaskCard({
@@ -160,6 +164,18 @@ export function TaskCard({
         taskId={task.id}
         repositoryLinked={repositoryLinked ?? false}
         proposal={builderProposal ?? null}
+      />
+
+      <BuilderCommitActions
+        taskId={task.id}
+        repositoryLinked={repositoryLinked ?? false}
+        hasBranch={task.githubBranchName != null}
+        hasPr={task.githubPrNumber != null}
+        hasProposal={builderProposal != null}
+        proposalSafe={builderProposal?.safeToAttempt ?? null}
+        commitSha={task.githubBuilderCommitSha}
+        commitUrl={task.githubBuilderCommitUrl}
+        lastStatus={task.builderLastStatus}
       />
     </div>
   );

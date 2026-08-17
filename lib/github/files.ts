@@ -274,3 +274,18 @@ export async function getCommit(
     committedAt: data.commit?.committer?.date ?? null,
   };
 }
+
+/**
+ * Applies several file changes on a branch via the Contents API (one commit
+ * per file — simple and reliable for this phase). Stops on the first failure.
+ */
+export async function createOrUpdateFiles(
+  inputs: CreateOrUpdateFileInput[]
+): Promise<FileCommitResult[]> {
+  const results: FileCommitResult[] = [];
+  for (const input of inputs) {
+    const result = await createOrUpdateFile(input);
+    results.push(result);
+  }
+  return results;
+}

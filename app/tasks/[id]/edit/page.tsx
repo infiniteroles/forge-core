@@ -28,6 +28,11 @@ export default async function EditTaskPage({ params }: Props) {
   });
   if (!task) notFound();
 
+  const commitRun = await prisma.agentRun.findFirst({
+    where: { taskId: task.id, agentName: "builder-commit" },
+    orderBy: { createdAt: "desc" },
+  });
+
   const builderRun = task.agentRuns[0] ?? null;
   const builderOutput = builderRun
     ? parseBuilderProposalOutput(builderRun.output)
@@ -411,11 +416,241 @@ export default async function EditTaskPage({ params }: Props) {
           </div>
         ) : null}
 
+        {commitRun ? (
+          <div
+            id="builder-commit"
+            className="mt-6 rounded-xl border border-border bg-surface p-6"
+          >
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+              Builder Commit
+            </h2>
+            <p className="mt-1 text-xs text-text-dim">
+              Last functional commit run by the Builder agent (read-only, applied
+              only to the task branch).
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-text-dim">
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono ${
+                  commitRun.status === "completed"
+                    ? "bg-emerald-500/10 text-emerald-300"
+                    : commitRun.status === "completed_with_warnings"
+                      ? "bg-amber-500/10 text-amber-300"
+                      : "bg-red-500/10 text-red-300"
+                }`}
+              >
+                {commitRun.status}
+              </span>
+              {commitRun.model ? (
+                <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+                  {commitRun.model}
+                </span>
+              ) : null}
+              <span>{commitRun.createdAt.toLocaleString()}</span>
+            </div>
+
+            {commitRun.status === "failed" ? (
+              <pre className="mt-4 overflow-x-auto rounded-lg bg-background p-4 text-xs text-neutral-300">
+                {commitRun.output ?? "(no output)"}
+              </pre>
+            ) : null}
+
+            {commitRun.status === "completed_with_warnings" ? (
+              <BuilderCommitWarnings run={commitRun} />
+            ) : null}
+
+            {commitRun.status === "completed" ? (
+              <BuilderCommitDetail run={commitRun} task={task} />
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mt-8 rounded-xl border border-border bg-surface p-6">
           <TaskForm task={task} />
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function BuilderCommitWarnings({ run }: { run: { output: string | null } }) {
+  const parsed = (() => {
+    try {
+      return JSON.parse(run.output ?? "{}");
+    } catch {
+      return null;
+    }
+  })();
+  const reason: string = parsed?.reason ?? "Unknown warning";
+  const violations: string[] = parsed?.violations ?? [];
+  return (
+    <div className="mt-4 flex flex-col gap-3">
+      <p className="text-sm text-amber-300">{reason}</p>
+      {violations.length > 0 ? (
+        <ul className="flex list-disc flex-col gap-1 pl-4">
+          {violations.map((v, i) => (
+            <li key={i} className="text-sm text-neutral-300">
+              {v}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {parsed?.raw ? (
+        <pre className="overflow-x-auto rounded-lg bg-background p-4 text-xs text-neutral-300">
+          {parsed.raw}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
+function BuilderCommitDetail({
+  run,
+  task,
+}: {
+  run: { output: string | null };
+  task: {
+    githubBuilderCommitSha: string | null;
+    githubBuilderCommitUrl: string | null;
+    githubBuilderCommitMessage: string | null;
+    githubBuilderCommittedAt: Date | null;
+    githubBuilderLastCheckedAt: Date | null;
+  };
+}) {
+  const parsed = (() => {
+    try {
+      return JSON.parse(run.output ?? "{}");
+    } catch {
+      return null;
+    }
+  })();
+
+  const files: { path: string; operation: string; reason: string }[] =
+    parsed?.files ?? [];
+  const validationPlan: { command: string; purpose: string }[] =
+    parsed?.validation_plan ?? [];
+  const risks: string[] = parsed?.risks ?? [];
+  const postCommitNotes: string[] = parsed?.post_commit_notes ?? [];
+
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Summary
+          </dt>
+          <dd className="mt-0.5 text-neutral-200">
+            {parsed?.summary ?? "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Implementation notes
+          </dt>
+          <dd className="mt-0.5 text-neutral-200">
+            {parsed?.implementation_notes ?? "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Commit SHA
+          </dt>
+          <dd className="mt-0.5 break-all font-mono text-neutral-200">
+            {task.githubBuilderCommitSha ?? "—"}
+          </dd>
+        </div>
+        <div className="sm:col-span-2">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Commit URL
+          </dt>
+          <dd className="mt-0.5 break-all text-neutral-200">
+            {task.githubBuilderCommitUrl ? (
+              <a
+                href={task.githubBuilderCommitUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent transition hover:underline"
+              >
+                {task.githubBuilderCommitUrl}
+              </a>
+            ) : (
+              "—"
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Commit message
+          </dt>
+          <dd className="mt-0.5 break-all text-neutral-200">
+            {task.githubBuilderCommitMessage ?? "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Committed at
+          </dt>
+          <dd className="mt-0.5 text-neutral-200">
+            {task.githubBuilderCommittedAt
+              ? task.githubBuilderCommittedAt.toLocaleString()
+              : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Last checked
+          </dt>
+          <dd className="mt-0.5 text-neutral-200">
+            {task.githubBuilderLastCheckedAt
+              ? task.githubBuilderLastCheckedAt.toLocaleString()
+              : "—"}
+          </dd>
+        </div>
+      </dl>
+
+      <ProposalBlock title="Files changed">
+        {files.length === 0 ? (
+          <p className="text-sm text-text-dim">—</p>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {files.map((f, i) => (
+              <li key={i} className="text-sm text-neutral-300">
+                <span className="font-mono text-accent">{f.path}</span>
+                <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-text-dim">
+                  {f.operation}
+                </span>
+                <span className="text-text-dim"> — {f.reason}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </ProposalBlock>
+
+      <ProposalBlock title="Validation plan">
+        {validationPlan.length === 0 ? (
+          <p className="text-sm text-text-dim">—</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {validationPlan.map((c, i) => (
+              <div key={i}>
+                <code className="rounded bg-background px-2 py-1 font-mono text-xs text-neutral-200">
+                  {c.command}
+                </code>
+                <p className="mt-0.5 text-xs text-text-dim">{c.purpose}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </ProposalBlock>
+
+      <ProposalBlock title="Risks">
+        <ListOfStrings items={risks} />
+      </ProposalBlock>
+
+      <ProposalBlock title="Post-commit notes">
+        <ListOfStrings items={postCommitNotes} />
+      </ProposalBlock>
+    </div>
   );
 }
 

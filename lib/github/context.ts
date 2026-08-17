@@ -206,3 +206,99 @@ async function requestJson<T>(path: string): Promise<T> {
   }
   return (await res.json().catch(() => null)) as T;
 }
+
+export interface ReadRepoFilesInput {
+  repositoryFullName: string;
+  branchName: string;
+  paths: string[];
+  maxFiles?: number;
+  maxFileSize?: number;
+  maxTotal?: number;
+}
+
+export interface ReadRepoFilesResult {
+  files: RepoContextFile[];
+  warnings: string[];
+}
+
+/**
+ * Best-effort read of a specific set of files from a branch, with hard limits.
+ * Missing/blocked/oversized files are skipped with warnings.
+ */
+export async function readRepoFiles(
+  input: ReadRepoFilesInput
+): Promise<ReadRepoFilesResult> {
+  validateFullName(input.repositoryFullName);
+  requireToken();
+
+  const maxFiles = input.maxFiles ?? 12;
+  const maxFileSize = input.maxFileSize ?? 30 * 1024;
+  const maxTotal = input.maxTotal ?? 150 * 1024;
+
+  const result: ReadRepoFilesResult = { files: [], warnings: [] };
+  let totalBytes = 0;
+
+  const seen = new Set<string>();
+  const uniquePaths = input.paths.filter((p) => {
+    if (seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
+
+  for (const path of uniquePaths) {
+    if (result.files.length >= maxFiles) {
+      result.warnings.push("Reached maximum file count; skipped remaining files.");
+      break;
+    }
+    if (!path || isSensitive(path) || isBinary(path)) {
+      result.warnings.push(`Skipped ${path ?? "(empty)"} (blocked by policy).`);
+      continue;
+    }
+
+    try {
+      const file = await requestJson<{
+        size?: number;
+        content?: string;
+        encoding?: string;
+      }>(
+        `/repos/${input.repositoryFullName}/contents/${path
+          .split("/")
+          .map(encodeURIComponent)
+          .join("/")}?ref=${encodeURIComponent(input.branchName)}`
+      );
+
+      if (!file || typeof file.size !== "number") {
+        result.warnings.push(`Could not read ${path}.`);
+        continue;
+      }
+      if (file.size > maxFileSize) {
+        result.warnings.push(`Skipped ${path} (too large).`);
+        continue;
+      }
+
+      const raw =
+        file.encoding === "base64" && typeof file.content === "string"
+          ? Buffer.from(file.content, "base64").toString("utf8")
+          : file.content ?? "";
+      if (!raw) {
+        result.warnings.push(`Skipped ${path} (empty).`);
+        continue;
+      }
+      if (totalBytes + raw.length > maxTotal) {
+        result.warnings.push("Reached total context limit; skipped remaining files.");
+        break;
+      }
+
+      result.files.push({ path, content: truncate(raw, maxFileSize) });
+      totalBytes += raw.length;
+    } catch (error) {
+      if (error instanceof GithubError && error.code === "file_not_found") {
+        result.warnings.push(`Skipped ${path} (not found).`);
+      } else {
+        result.warnings.push(`Skipped ${path}.`);
+      }
+    }
+  }
+
+  return result;
+}
