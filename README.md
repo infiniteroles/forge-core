@@ -17,6 +17,7 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **GitHub links**: associate a project with a repo, and link tasks to GitHub issues, branches, plan commits and draft PRs (read/write via REST, read-only by default).
 - **Builder Proposal Agent**: analyze a single task + limited repository context and propose an implementation strategy via DeepSeek — analysis only, no code/commit/PR/deploy changes.
 - **Builder Commit Agent**: generate concrete, validated functional changes for a task and commit them **only** on the task branch (guarded by proposal, safe-file policy and strict limits).
+- **PR Review Gate**: analyze a task's draft PR, summarize the diff, flag risks and recommend ready-for-review (never merges, deploys or auto-approves).
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
@@ -137,6 +138,9 @@ On Coolify:
 - `POST /api/tasks/[id]/builder/proposal` — run the Builder Proposal agent for a task.
 - `POST /api/tasks/[id]/builder/commit` — run Builder Commit (validated write to the task branch).
 - `POST /api/tasks/[id]/builder/commit/check` — refresh Builder Commit metadata.
+- `POST /api/tasks/[id]/github/pr/review` — analyze a draft PR (structured review).
+- `POST /api/tasks/[id]/github/pr/review/check` — refresh PR + review metadata.
+- `POST /api/tasks/[id]/github/pr/ready` — convert a draft PR to ready for review (no merge).
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -526,9 +530,99 @@ git push origin revert-branch
 # then open a normal PR, or force-push the reverted branch if you own it
 ```
 
+## PR Review Gate
+
+Adds a human-assisted review phase for pull requests generated from Forge tasks.
+Forge reads the draft PR, summarizes the change, flags risks and gives a
+recommendation — it **never** merges, deploys, closes issues or auto-approves.
+
+Flow:
+
+```
+Task with Builder Commit + Draft PR
+→ Analyze PR
+→ Forge reads PR diff + metadata (limited)
+→ DeepSeek produces a structured review
+→ Forge saves AgentRun + result
+→ Human reviews
+→ Manual action: Mark Ready for Review (draft → ready), or keep draft / re-run
+```
+
+### What it reads (limited)
+
+- PR metadata (state, draft, base/head, merged), PR files with diff patches and
+  PR commits, via `lib/github/pr-context.ts`.
+- Limits: max 40 files, 8 KB per diff, 150 KB total context. No full file
+  contents, no secrets, no binaries.
+- The changed-file paths are classified with the **safe-file-policy**
+  (`assessPrPaths`) to flag blocked/sensitive/infra/workflow paths.
+
+### Output structure
+
+`prReviewOutputSchema` (Zod):
+
+- `summary`, `change_overview`
+- `files_changed[{ path, change_type, summary, risk }]`
+- `safety_assessment{ touches_blocked_paths, touches_secrets, touches_infra, touches_tests, touches_runtime_code, notes[] }`
+- `review_findings[{ severity: info|warning|blocking, title, description, file }]`
+- `recommended_checks[{ command, purpose }]`
+- `risk_level`, `recommendation`, `ready_for_review`, `human_notes[]`
+
+### Ready-for-review rules
+
+- `ready_for_review=false` if the diff touches blocked/sensitive/infra paths.
+- `ready_for_review=false` if there are `blocking` findings.
+- `recommendation=keep_draft|needs_changes` when there are no sufficient
+  functional changes.
+- `recommendation=needs_human_decision` when context is insufficient.
+
+### Endpoints
+
+```
+POST /api/tasks/[id]/github/pr/review        — Analyze PR (structured review)
+POST /api/tasks/[id]/github/pr/review/check  — refresh PR + review metadata
+POST /api/tasks/[id]/github/pr/ready         — convert draft PR → ready (no merge)
+```
+
+`pr/ready` only works when the last completed review has
+`ready_for_review === true`. It never merges, closes issues, changes labels or
+requests reviewers.
+
+### Task model fields (new in this phase)
+
+`githubPrReviewRunId`, `githubPrReviewStatus`, `githubPrReviewSummary`,
+`githubPrReviewRecommendation`, `githubPrReviewRiskLevel`,
+`githubPrReviewReadyForReview`, `githubPrReviewLastCheckedAt`,
+`githubPrMarkedReadyAt`.
+
+### UI
+
+- Task cards show a **PR Review Gate** block: **Analyze PR**, the review result
+  (`PR Review: <recommendation> · risk <risk_level>` + `Ready for review:
+  Yes/No`), **View review**, and **Mark Ready for Review** (only when draft +
+  completed review with `ready_for_review=true`).
+- The task edit page shows a read-only **PR Review Gate** section (summary,
+  change overview, files changed, safety assessment, findings, recommended
+  checks, risk/recommendation/ready, human notes, last checked, marked ready at).
+- The project Backlog adds `PR reviews`, `PRs ready for review` and
+  `PRs marked ready` counters.
+- `/settings` adds PR Review Gate / model / can-mark-ready / LLM provider /
+  GitHub PR access.
+
+Events logged: `github.pr_review.created`, `github.pr_review.completed`,
+`github.pr_review.failed`, `github.pr.ready_for_review`,
+`github.pr.ready_for_review_failed`. Metadata never includes the token or
+secrets.
+
+### Current limitations
+
+- One review per Analyze PR click; no PR comments, no inline suggestions.
+- No merge, no deploy, no auto-approval, no reviewer requests.
+- Diff context is bounded (patches only, truncated at limits).
+
 ### Next steps
 
-PR update/review flow, controlled test runner (build validation in a sandbox),
+Controlled test runner (build validation in a sandbox), PR comments,
 Coolify DEV deploy button, single atomic multi-file commits via Git Data API.
 
 ## Backlog (Planner → tasks)

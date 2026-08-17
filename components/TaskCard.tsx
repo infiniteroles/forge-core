@@ -15,6 +15,7 @@ import {
   BuilderProposalSummary,
 } from "./BuilderProposalActions";
 import { BuilderCommitActions } from "./BuilderCommitActions";
+import { PrReviewGateActions } from "./PrReviewGateActions";
 
 type TaskProps = {
   id: string;
@@ -40,6 +41,11 @@ type TaskProps = {
   githubBuilderCommitSha: string | null;
   githubBuilderCommitUrl: string | null;
   builderLastStatus: string | null;
+  githubPrReviewStatus: string | null;
+  githubPrReviewSummary: string | null;
+  githubPrReviewRecommendation: string | null;
+  githubPrReviewRiskLevel: string | null;
+  githubPrReviewReadyForReview: boolean | null;
 };
 
 export function TaskCard({
@@ -176,6 +182,20 @@ export function TaskCard({
         commitSha={task.githubBuilderCommitSha}
         commitUrl={task.githubBuilderCommitUrl}
         lastStatus={task.builderLastStatus}
+      />
+
+      <PrReviewGateActions
+        taskId={task.id}
+        prNumber={task.githubPrNumber}
+        prDraft={task.githubPrDraft}
+        prState={task.githubPrState}
+        review={{
+          status: task.githubPrReviewStatus,
+          recommendation: task.githubPrReviewRecommendation,
+          riskLevel: task.githubPrReviewRiskLevel,
+          readyForReview: task.githubPrReviewReadyForReview,
+          summary: task.githubPrReviewSummary,
+        }}
       />
     </div>
   );

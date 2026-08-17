@@ -72,6 +72,18 @@ export default async function ProjectDetailPage({ params }: Props) {
     (task) => task.githubBuilderCommitSha != null
   ).length;
 
+  const prReviewCount = project.tasks.filter(
+    (task) => task.githubPrReviewRunId != null
+  ).length;
+
+  const prReadyReviewCount = project.tasks.filter(
+    (task) => task.githubPrReviewReadyForReview === true
+  ).length;
+
+  const prMarkedReadyCount = project.tasks.filter(
+    (task) => task.githubPrMarkedReadyAt != null
+  ).length;
+
   function builderSummary(
     run: {
       id: string;
@@ -334,6 +346,14 @@ export default async function ProjectDetailPage({ params }: Props) {
                 tasks
               </p>              <p className="mt-1 text-xs text-text-dim">
                 Builder commits: {builderCommitCount} / {project.tasks.length}{" "}
+                tasks
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                PR reviews: {prReviewCount} / {project.tasks.length} tasks
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                PRs ready for review: {prReadyReviewCount} / {project.tasks.length}{" "}
+                tasks
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                PRs marked ready: {prMarkedReadyCount} / {project.tasks.length}{" "}
                 tasks
               </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (

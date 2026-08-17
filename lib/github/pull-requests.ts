@@ -220,3 +220,34 @@ export async function findOpenPullRequestForBranch(
 
   return toGithubPullRequest(data[0]);
 }
+
+export interface MarkPullRequestReadyInput {
+  repositoryFullName: string;
+  prNumber: number;
+}
+
+/**
+ * Converts a draft pull request into a regular (ready for review) PR by
+ * setting `draft: false`. Never merges.
+ */
+export async function markPullRequestReady(
+  input: MarkPullRequestReadyInput
+): Promise<GithubPullRequest> {
+  requireToken();
+  validateFullName(input.repositoryFullName);
+
+  if (!Number.isInteger(input.prNumber) || input.prNumber <= 0) {
+    throw new GithubError("Invalid pull request number", "validation_error");
+  }
+
+  const data = await requestJson<PrPayload>(
+    `/repos/${input.repositoryFullName}/pulls/${input.prNumber}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft: false }),
+    }
+  );
+
+  return toGithubPullRequest(data);
+}

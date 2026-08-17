@@ -6,6 +6,8 @@ import { AppShell } from "@/components/AppShell";
 import { TaskForm } from "@/components/TaskForm";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import type { BuilderProposalOutput } from "@/lib/llm/builder-proposal";
+import { parsePrReviewOutput } from "@/lib/llm/pr-review";
+import type { PrReviewOutput } from "@/lib/llm/pr-review";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,12 @@ export default async function EditTaskPage({ params }: Props) {
     where: { taskId: task.id, agentName: "builder-commit" },
     orderBy: { createdAt: "desc" },
   });
+
+  const reviewRun = await prisma.agentRun.findFirst({
+    where: { taskId: task.id, agentName: "pr-review" },
+    orderBy: { createdAt: "desc" },
+  });
+  const reviewOutput = reviewRun ? parsePrReviewOutput(reviewRun.output) : null;
 
   const builderRun = task.agentRuns[0] ?? null;
   const builderOutput = builderRun
@@ -465,11 +473,217 @@ export default async function EditTaskPage({ params }: Props) {
           </div>
         ) : null}
 
+        {reviewRun ? (
+          <div
+            id="pr-review"
+            className="mt-6 rounded-xl border border-border bg-surface p-6"
+          >
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+              PR Review Gate
+            </h2>
+            <p className="mt-1 text-xs text-text-dim">
+              Latest human-assisted review of the task pull request (read-only,
+              no merge / no deploy).
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-text-dim">
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono ${
+                  reviewRun.status === "completed"
+                    ? "bg-emerald-500/10 text-emerald-300"
+                    : reviewRun.status === "completed_with_warnings"
+                      ? "bg-amber-500/10 text-amber-300"
+                      : "bg-red-500/10 text-red-300"
+                }`}
+              >
+                {reviewRun.status}
+              </span>
+              {reviewRun.model ? (
+                <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+                  {reviewRun.model}
+                </span>
+              ) : null}
+              <span>{reviewRun.createdAt.toLocaleString()}</span>
+            </div>
+
+            {reviewRun.status === "failed" ? (
+              <pre className="mt-4 overflow-x-auto rounded-lg bg-background p-4 text-xs text-neutral-300">
+                {reviewRun.output ?? "(no output)"}
+              </pre>
+            ) : null}
+
+            {reviewRun.status === "completed_with_warnings" ? (
+              <p className="mt-4 text-sm text-amber-300">
+                {(JSON.parse(reviewRun.output ?? "{}") as { reason?: string })
+                  .reason ?? "Unknown warning"}
+              </p>
+            ) : null}
+
+            {reviewRun.status === "completed" && reviewOutput ? (
+              <PrReviewDetail output={reviewOutput} task={task} />
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mt-8 rounded-xl border border-border bg-surface p-6">
           <TaskForm task={task} />
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function PrReviewDetail({
+  output,
+  task,
+}: {
+  output: PrReviewOutput;
+  task: {
+    githubPrReviewLastCheckedAt: Date | null;
+    githubPrMarkedReadyAt: Date | null;
+  };
+}) {
+  const sa = output.safety_assessment;
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <ProposalBlock title="Summary">
+        <p className="whitespace-pre-wrap text-sm text-neutral-200">
+          {output.summary}
+        </p>
+      </ProposalBlock>
+
+      <ProposalBlock title="Change overview">
+        <p className="whitespace-pre-wrap text-sm text-neutral-200">
+          {output.change_overview}
+        </p>
+      </ProposalBlock>
+
+      <ProposalBlock title="Files changed">
+        <ul className="flex flex-col gap-1.5">
+          {output.files_changed.map((f, i) => (
+            <li key={i} className="text-sm text-neutral-300">
+              <span className="font-mono text-accent">{f.path}</span>
+              <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-text-dim">
+                {f.change_type}
+              </span>
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+                  f.risk === "low"
+                    ? "bg-emerald-500/10 text-emerald-300"
+                    : f.risk === "medium"
+                      ? "bg-amber-500/10 text-amber-300"
+                      : "bg-red-500/10 text-red-300"
+                }`}
+              >
+                {f.risk}
+              </span>
+              <span className="text-text-dim"> — {f.summary}</span>
+            </li>
+          ))}
+        </ul>
+      </ProposalBlock>
+
+      <ProposalBlock title="Safety assessment">
+        <div className="flex flex-wrap gap-2 text-[11px] text-text-dim">
+          <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+            blocked paths: {sa.touches_blocked_paths ? "Yes" : "No"}
+          </span>
+          <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+            secrets: {sa.touches_secrets ? "Yes" : "No"}
+          </span>
+          <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+            infra: {sa.touches_infra ? "Yes" : "No"}
+          </span>
+          <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+            tests: {sa.touches_tests ? "Yes" : "No"}
+          </span>
+          <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+            runtime code: {sa.touches_runtime_code ? "Yes" : "No"}
+          </span>
+        </div>
+        <ListOfStrings items={sa.notes} />
+      </ProposalBlock>
+
+      <ProposalBlock title="Review findings">
+        {output.review_findings.length === 0 ? (
+          <p className="text-sm text-text-dim">—</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {output.review_findings.map((f, i) => (
+              <li key={i} className="text-sm text-neutral-300">
+                <span
+                  className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+                    f.severity === "info"
+                      ? "bg-sky-500/10 text-sky-300"
+                      : f.severity === "warning"
+                        ? "bg-amber-500/10 text-amber-300"
+                        : "bg-red-500/10 text-red-300"
+                  }`}
+                >
+                  {f.severity}
+                </span>{" "}
+                <span className="font-medium text-neutral-100">{f.title}</span>
+                {f.file ? (
+                  <span className="font-mono text-accent"> — {f.file}</span>
+                ) : null}
+                <p className="mt-0.5 text-text-dim">{f.description}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </ProposalBlock>
+
+      <ProposalBlock title="Recommended checks">
+        {output.recommended_checks.length === 0 ? (
+          <p className="text-sm text-text-dim">—</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {output.recommended_checks.map((c, i) => (
+              <div key={i}>
+                <code className="rounded bg-background px-2 py-1 font-mono text-xs text-neutral-200">
+                  {c.command}
+                </code>
+                <p className="mt-0.5 text-xs text-text-dim">{c.purpose}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </ProposalBlock>
+
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-dim">
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+          risk level: {output.risk_level}
+        </span>
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+          recommendation: {output.recommendation}
+        </span>
+        <span
+          className={`rounded px-1.5 py-0.5 font-mono ${
+            output.ready_for_review
+              ? "bg-emerald-500/10 text-emerald-300"
+              : "bg-amber-500/10 text-amber-300"
+          }`}
+        >
+          ready for review: {output.ready_for_review ? "Yes" : "No"}
+        </span>
+        <span>
+          last checked:{" "}
+          {task.githubPrReviewLastCheckedAt
+            ? task.githubPrReviewLastCheckedAt.toLocaleString()
+            : "—"}
+        </span>
+        <span>
+          marked ready at:{" "}
+          {task.githubPrMarkedReadyAt
+            ? task.githubPrMarkedReadyAt.toLocaleString()
+            : "—"}
+        </span>
+      </div>
+
+      <ProposalBlock title="Human notes">
+        <ListOfStrings items={output.human_notes} />
+      </ProposalBlock>
+    </div>
   );
 }
 

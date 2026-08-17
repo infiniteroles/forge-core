@@ -44,6 +44,11 @@ export const ACTIVITY_TYPES = [
   "builder.commit.completed_with_warnings",
   "builder.commit.failed",
   "builder.commit.checked",
+  "github.pr_review.created",
+  "github.pr_review.completed",
+  "github.pr_review.failed",
+  "github.pr.ready_for_review",
+  "github.pr.ready_for_review_failed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

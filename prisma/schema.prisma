@@ -158,6 +158,14 @@ model Task {
   builderLastRunId              String?
   builderLastStatus             String?
   builderLastSummary            String?
+  githubPrReviewRunId             String?
+  githubPrReviewStatus            String?
+  githubPrReviewSummary           String?
+  githubPrReviewRecommendation    String?
+  githubPrReviewRiskLevel         String?
+  githubPrReviewReadyForReview    Boolean?
+  githubPrReviewLastCheckedAt     DateTime?
+  githubPrMarkedReadyAt           DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

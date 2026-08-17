@@ -88,6 +88,26 @@ export default async function SettingsPage() {
     },
     { label: "Max files per run", value: "5" },
     { label: "Max total change size", value: "120 KB" },
+    {
+      label: "PR Review Gate",
+      value: llmConfigured && githubConfigured ? "Available" : "Not configured",
+    },
+    {
+      label: "PR Review model",
+      value: llmConfigured ? llmConfig.model : "Not configured",
+    },
+    {
+      label: "Can mark draft PR ready",
+      value: githubConfigured ? "Yes" : "No",
+    },
+    {
+      label: "LLM provider",
+      value: llmConfigured ? "Configured" : "Not configured",
+    },
+    {
+      label: "GitHub PR access",
+      value: githubConfigured ? "Available" : "Not configured",
+    },
     { label: "Telegram bot", value: "Not configured" },
     { label: "Coolify API", value: "Not configured" },
   ];

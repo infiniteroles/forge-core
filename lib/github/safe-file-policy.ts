@@ -122,3 +122,82 @@ export function validateBuilderCommitChanges(
 
   return { ok: violations.length === 0, violations };
 }
+
+// ── PR diff assessment ───────────────────────────────────────────────────────
+
+export interface PrPathAssessment {
+  touchesBlockedPaths: boolean;
+  touchesSecrets: boolean;
+  touchesInfra: boolean;
+  touchesWorkflow: boolean;
+  blockedPaths: string[];
+  sensitivePaths: string[];
+  infraPaths: string[];
+  workflowPaths: string[];
+}
+
+const SECRET_PATTERNS: RegExp[] = [
+  /^\.env$/,
+  /^\.env\..+/,
+  /^\.credentials$/,
+  /\.pem$/,
+  /\.key$/,
+  /\.crt$/,
+  /\.p12$/,
+  /\.pfx$/,
+];
+
+const INFRA_PATTERNS: RegExp[] = [
+  /^Dockerfile$/,
+  /^docker-compose\.ya?ml$/,
+  /^docker-compose\..+/,
+  /^nginx\/.*/,
+  /^caddy\/.*/,
+  /^scripts\/deploy.*/,
+  /^scripts\/ssh.*/,
+];
+
+const WORKFLOW_PATTERNS: RegExp[] = [/^\.github\/workflows\/.*/];
+
+function matchesAny(path: string, patterns: RegExp[]): boolean {
+  return patterns.some((p) => p.test(path));
+}
+
+/**
+ * Classifies a set of PR changed-file paths against the safe-file policy.
+ * Used by the PR Review Gate to flag risky diffs before recommending ready.
+ */
+export function assessPrPaths(paths: string[]): PrPathAssessment {
+  const assessment: PrPathAssessment = {
+    touchesBlockedPaths: false,
+    touchesSecrets: false,
+    touchesInfra: false,
+    touchesWorkflow: false,
+    blockedPaths: [],
+    sensitivePaths: [],
+    infraPaths: [],
+    workflowPaths: [],
+  };
+
+  for (const path of paths) {
+    if (!path) continue;
+    if (matchesAny(path, SECRET_PATTERNS)) {
+      assessment.touchesSecrets = true;
+      assessment.sensitivePaths.push(path);
+    }
+    if (matchesAny(path, INFRA_PATTERNS)) {
+      assessment.touchesInfra = true;
+      assessment.infraPaths.push(path);
+    }
+    if (matchesAny(path, WORKFLOW_PATTERNS)) {
+      assessment.touchesWorkflow = true;
+      assessment.workflowPaths.push(path);
+    }
+    if (isBlockedPath(path)) {
+      assessment.touchesBlockedPaths = true;
+      assessment.blockedPaths.push(path);
+    }
+  }
+
+  return assessment;
+}
