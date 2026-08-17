@@ -1,4 +1,5 @@
 import { PlannerOutput, plannerOutputSchema } from "@/lib/llm/types";
+import { CreateBacklogButton } from "./CreateBacklogButton";
 
 type AgentRunProps = {
   id: string;
@@ -42,7 +43,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export function AgentRunCard({ run }: { run: AgentRunProps }) {
+export function AgentRunCard({
+  run,
+  taskCount = 0,
+}: {
+  run: AgentRunProps;
+  taskCount?: number;
+}) {
   const plan = parsePlannerOutput(run.output);
   const tone = STATUS_TONES[run.status] ?? "bg-neutral-700/40 text-neutral-300";
 
@@ -66,6 +73,13 @@ export function AgentRunCard({ run }: { run: AgentRunProps }) {
           <span>Finished {run.finishedAt.toLocaleString()}</span>
         ) : null}
       </div>
+
+      {plan && plan.proposed_tasks.length > 0 ? (
+        <CreateBacklogButton
+          agentRunId={run.id}
+          alreadyCreated={taskCount > 0}
+        />
+      ) : null}
 
       {plan ? (
         <details className="mt-3">

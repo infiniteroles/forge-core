@@ -39,6 +39,7 @@ model Project {
   agentRuns            AgentRun[]
   activityLogs         ActivityLog[]
   environments         Environment[]
+  tasks                Task[]
 }
 
 model Instruction {
@@ -68,6 +69,7 @@ model AgentRun {
   createdAt     DateTime     @default(now())
   project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: SetNull)
+  tasks         Task[]
 }
 
 model ActivityLog {
@@ -91,4 +93,24 @@ model Environment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id               String    @id @default(cuid())
+  projectId        String
+  sourceAgentRunId String?
+  title            String
+  description      String?
+  type             String    @default("backend")
+  priority         String    @default("medium")
+  status           String    @default("todo")
+  sortOrder        Int       @default(0)
+  assignedAgent    String?
+  notes            String?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceAgentRun   AgentRun? @relation(fields: [sourceAgentRunId], references: [id], onDelete: SetNull)
 }

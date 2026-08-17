@@ -9,6 +9,11 @@ export const ACTIVITY_TYPES = [
   "agent.run.created",
   "agent.run.completed",
   "agent.run.failed",
+  "task.created",
+  "task.updated",
+  "task.completed",
+  "task.cancelled",
+  "backlog.created",
   "deploy.dev.requested",
   "deploy.pro.requested",
 ] as const;

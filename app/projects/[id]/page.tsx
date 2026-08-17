@@ -9,6 +9,7 @@ import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { ProjectArchiveButton } from "@/components/ProjectArchiveButton";
 import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
+import { TaskCard } from "@/components/TaskCard";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,13 @@ export default async function ProjectDetailPage({ params }: Props) {
     where: { id },
     include: {
       instructions: { orderBy: { createdAt: "desc" } },
-      agentRuns: { orderBy: { createdAt: "desc" }, take: 10 },
+      agentRuns: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: { _count: { select: { tasks: true } } },
+      },
       activityLogs: { orderBy: { createdAt: "desc" }, take: 50 },
+      tasks: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
     },
   });
 
@@ -199,7 +205,11 @@ export default async function ProjectDetailPage({ params }: Props) {
                   </p>
                 ) : (
                   project.agentRuns.map((run) => (
-                    <AgentRunCard key={run.id} run={run} />
+                    <AgentRunCard
+                      key={run.id}
+                      run={run}
+                      taskCount={run._count.tasks}
+                    />
                   ))
                 )}
               </div>
@@ -214,6 +224,22 @@ export default async function ProjectDetailPage({ params }: Props) {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-6">
+          <h2 className="text-lg font-semibold tracking-tight">Backlog</h2>
+          <p className="mt-1 text-sm text-text-dim">
+            Tasks derived from Planner runs and manual entries.
+          </p>
+          {project.tasks.length === 0 ? (
+            <p className="mt-5 text-sm text-text-dim">No tasks yet.</p>
+          ) : (
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {project.tasks.map((task) => (
+                <TaskCard key={task.id} task={task} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

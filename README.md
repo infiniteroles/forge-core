@@ -11,12 +11,13 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - Single-admin auth (email + bcrypt password, JWT session cookie).
 - Projects: create, edit, archive (logical, no hard delete) and detail view.
 - Instructions: capture work for future agents (manual source for now).
-- Activity log: timeline of `project.created`, `project.updated`, `project.archived`, `instruction.created`, `agent.run.*`.
+- Activity log: timeline of `project.*`, `instruction.created`, `agent.run.*`, `task.*`, `backlog.created`.
 - **DeepSeek Planner**: "Ask Planner" runs an LLM planning agent (direct DeepSeek API, OpenAI-compatible) and stores the result as an `AgentRun`.
+- **Backlog**: turn a Planner run's `proposed_tasks` into editable `Task` records (create, edit, change status, mark done, cancel).
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
-Not implemented yet (planned for later phases): Telegram, GitHub App, Coolify API, LiteLLM, Ollama, real code-writing agents.
+Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, Coolify API, LiteLLM, Ollama, real code-writing agents.
 
 ## Stack
 
@@ -114,6 +115,10 @@ On Coolify:
 - `PATCH /api/projects/[id]` — update a project (name, slug, description, status, URLs, target domain, stack, repository, notes).
 - `POST /api/projects/[id]/archive` — archive a project (sets `archivedAt` and `status = paused`).
 - `POST /api/projects/[id]/planner` — run the DeepSeek Planner agent.
+- `GET /api/projects/[id]/tasks` — list a project's tasks.
+- `POST /api/projects/[id]/tasks` — create a task manually.
+- `PATCH /api/tasks/[id]` — update a task (status, type, priority, assignee, notes…).
+- `POST /api/agent-runs/[id]/create-backlog` — convert a Planner run's `proposed_tasks` into tasks.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -163,6 +168,57 @@ Authenticated. Returns `{ "ok": true, "agentRun": ... }` on success, or
 - **Provider error** (HTTP 4xx/5xx): the run is marked `failed` and the error is
   stored in the run output and the activity log.
 
+## Backlog (Planner → tasks)
+
+Planner output can be turned into a real, editable backlog.
+
+Flow:
+
+```
+Ask Planner → AgentRun (proposed_tasks) → Create Backlog → Task records
+```
+
+On a completed Planner run, click **Create Backlog**. Forge:
+
+1. loads the `AgentRun` and parses its `output`;
+2. extracts `proposed_tasks`;
+3. creates a `Task` per proposed task (status `todo`), linked to the project and to the run (`sourceAgentRunId`);
+4. skips titles already created from that run (no duplicates);
+5. logs `backlog.created`.
+
+The action is manual — tasks are never created automatically.
+
+### Task model
+
+| Field | Notes |
+| --- | --- |
+| `title` | required |
+| `description` | optional |
+| `type` | `product` \| `frontend` \| `backend` \| `infra` \| `qa` \| `docs` |
+| `priority` | `high` \| `medium` \| `low` |
+| `status` | `todo` \| `ready` \| `in_progress` \| `blocked` \| `done` \| `cancelled` |
+| `sortOrder` | numeric |
+| `assignedAgent` | optional |
+| `notes` | optional |
+| `sourceAgentRunId` | optional, links the task to its originating Planner run |
+
+When a task transitions to `done`, `completedAt` is set; to `cancelled`, `cancelledAt` is set.
+
+### Activity events
+
+`task.created`, `task.updated`, `task.completed`, `task.cancelled`, `backlog.created`.
+
+### Endpoints
+
+```
+GET    /api/projects/[id]/tasks
+POST   /api/projects/[id]/tasks
+PATCH  /api/tasks/[id]
+POST   /api/agent-runs/[id]/create-backlog
+```
+
+`create-backlog` returns `{ "ok": true, "created": 7, "skipped": 0 }`.
+
 ## Security notes
 
 - Single admin user, configured via `ADMIN_EMAIL` + `ADMIN_PASSWORD_HASH` (bcrypt).
@@ -173,8 +229,9 @@ Authenticated. Returns `{ "ok": true, "agentRun": ... }` on success, or
 
 ## Pending
 
-- Telegram bot
+- Assign tasks to real agents (Builder / QA / Infra)
 - GitHub App
+- Telegram bot
 - Coolify API
 - LiteLLM / multi-provider routing
 - Real code-writing agents
