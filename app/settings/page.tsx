@@ -39,6 +39,10 @@ export default async function SettingsPage() {
       label: "Can create plan commits",
       value: githubConfigured ? "Yes" : "No",
     },
+    {
+      label: "Can create draft PRs",
+      value: githubConfigured ? "Yes" : "No",
+    },
     { label: "GitHub API Base URL", value: githubConfig.apiBaseUrl },
     { label: "GitHub Default owner", value: githubConfig.defaultOwner },
     { label: "GitHub token", value: githubConfigured ? "Hidden" : "Not set" },

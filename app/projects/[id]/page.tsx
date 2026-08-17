@@ -49,6 +49,10 @@ export default async function ProjectDetailPage({ params }: Props) {
     (task) => task.githubPlanCommitSha != null
   ).length;
 
+  const prCount = project.tasks.filter(
+    (task) => task.githubPrNumber != null
+  ).length;
+
   return (
     <AppShell>
       <div className="flex flex-col gap-6">
@@ -283,8 +287,9 @@ export default async function ProjectDetailPage({ params }: Props) {
               <p className="mt-1 text-xs text-text-dim">
                 Plan commits created: {planCommitCount} / {project.tasks.length}{" "}
                 tasks
-              </p>
-              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                Draft PRs opened: {prCount} / {project.tasks.length} tasks
+              </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (
                   <TaskCard key={task.id} task={task} />
                 ))}

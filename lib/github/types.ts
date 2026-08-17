@@ -26,6 +26,19 @@ export interface GithubBranch {
   sha: string | null;
 }
 
+export interface GithubPullRequest {
+  number: number;
+  html_url: string;
+  state: string;
+  title: string;
+  draft: boolean;
+  baseBranch: string;
+  headBranch: string;
+  created_at: string | null;
+  updated_at: string | null;
+  merged_at: string | null;
+}
+
 export type GithubErrorCode =
   | "not_configured"
   | "token_missing"
@@ -36,6 +49,8 @@ export type GithubErrorCode =
   | "branch_already_exists"
   | "branch_not_found"
   | "file_not_found"
+  | "pull_request_already_exists"
+  | "no_commits_between"
   | "forbidden"
   | "rate_limited"
   | "network_error"

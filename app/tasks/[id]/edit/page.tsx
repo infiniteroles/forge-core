@@ -234,6 +234,123 @@ export default async function EditTaskPage({ params }: Props) {
           </div>
         ) : null}
 
+        {task.githubPrNumber ? (
+          <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+              GitHub Pull Request
+            </h2>
+            <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Number
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  #{task.githubPrNumber}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  State
+                </dt>
+                <dd className="mt-0.5 font-mono text-neutral-200">
+                  {task.githubPrState ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Draft
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {task.githubPrDraft == null ? "—" : task.githubPrDraft ? "Yes" : "No"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Title
+                </dt>
+                <dd className="mt-0.5 break-all text-neutral-200">
+                  {task.githubPrTitle ?? "—"}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  URL
+                </dt>
+                <dd className="mt-0.5 break-all text-neutral-200">
+                  {task.githubPrUrl ? (
+                    <a
+                      href={task.githubPrUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-accent transition hover:underline"
+                    >
+                      {task.githubPrUrl}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Base branch
+                </dt>
+                <dd className="mt-0.5 font-mono text-neutral-200">
+                  {task.githubPrBaseBranch ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Head branch
+                </dt>
+                <dd className="mt-0.5 break-all font-mono text-neutral-200">
+                  {task.githubPrHeadBranch ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Created at
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {task.githubPrCreatedAt
+                    ? task.githubPrCreatedAt.toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Updated at
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {task.githubPrUpdatedAt
+                    ? task.githubPrUpdatedAt.toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Merged at
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {task.githubPrMergedAt
+                    ? task.githubPrMergedAt.toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Last checked
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {task.githubPrLastCheckedAt
+                    ? task.githubPrLastCheckedAt.toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ) : null}
+
         <div className="mt-8 rounded-xl border border-border bg-surface p-6">
           <TaskForm task={task} />
         </div>
