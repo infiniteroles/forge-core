@@ -16,6 +16,9 @@ export const ACTIVITY_TYPES = [
   "backlog.created",
   "deploy.dev.requested",
   "deploy.pro.requested",
+  "repository.checked",
+  "repository.linked",
+  "repository.check_failed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

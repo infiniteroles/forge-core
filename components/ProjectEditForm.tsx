@@ -15,6 +15,7 @@ type EditableProject = {
   repoUrl: string | null;
   targetDevDomain: string | null;
   preferredStack: string | null;
+  repositoryProvider: string | null;
   repositoryFullName: string | null;
   notes: string | null;
 };
@@ -41,6 +42,9 @@ export function ProjectEditForm({ project }: { project: EditableProject }) {
   const [preferredStack, setPreferredStack] = useState(
     project.preferredStack ?? ""
   );
+  const [repositoryProvider, setRepositoryProvider] = useState(
+    project.repositoryProvider ?? "github"
+  );
   const [repositoryFullName, setRepositoryFullName] = useState(
     project.repositoryFullName ?? ""
   );
@@ -66,6 +70,7 @@ export function ProjectEditForm({ project }: { project: EditableProject }) {
         repoUrl,
         targetDevDomain,
         preferredStack,
+        repositoryProvider,
         repositoryFullName,
         notes,
       }),
@@ -218,17 +223,30 @@ export function ProjectEditForm({ project }: { project: EditableProject }) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm text-text-dim" htmlFor="repositoryFullName">
-            Repository full name
+          <label className="text-sm text-text-dim" htmlFor="repositoryProvider">
+            Repository provider
           </label>
           <input
-            id="repositoryFullName"
+            id="repositoryProvider"
             className={inputClass}
-            value={repositoryFullName}
-            onChange={(e) => setRepositoryFullName(e.target.value)}
-            placeholder="owner/repo"
+            value={repositoryProvider}
+            onChange={(e) => setRepositoryProvider(e.target.value)}
+            placeholder="github"
           />
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm text-text-dim" htmlFor="repositoryFullName">
+          Repository full name
+        </label>
+        <input
+          id="repositoryFullName"
+          className={inputClass}
+          value={repositoryFullName}
+          onChange={(e) => setRepositoryFullName(e.target.value)}
+          placeholder="infiniteroles/forge-core"
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">

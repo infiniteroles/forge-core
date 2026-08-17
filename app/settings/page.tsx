@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { getLLMConfig, isLLMConfigured } from "@/lib/llm/client";
+import { getGithubConfig, isGithubConfigured } from "@/lib/github/client";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,21 @@ export default async function SettingsPage() {
   const llmConfigured = isLLMConfigured();
   const llmConfig = getLLMConfig();
 
+  const githubConfigured = isGithubConfigured();
+  const githubConfig = getGithubConfig();
+
   const rows: { label: string; value: string }[] = [
     { label: "App name", value: "Forge Core01" },
     { label: "Environment", value: "DEV" },
     { label: "App URL", value: appUrl },
     { label: "Default DEV wildcard", value: "*.dev.core01.io" },
-    { label: "GitHub integration", value: "Not configured" },
+    {
+      label: "GitHub integration",
+      value: githubConfigured ? "Configured" : "Public only / Not configured",
+    },
+    { label: "GitHub API Base URL", value: githubConfig.apiBaseUrl },
+    { label: "GitHub Default owner", value: githubConfig.defaultOwner },
+    { label: "GitHub token", value: githubConfigured ? "Hidden" : "Not set" },
     {
       label: "DeepSeek integration",
       value: llmConfigured ? "Configured" : "Not configured",

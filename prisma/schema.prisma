@@ -29,6 +29,15 @@ model Project {
   preferredStack       String?
   repositoryProvider   String?
   repositoryFullName   String?
+  repositoryUrl        String?
+  repositoryDefaultBranch String?
+  repositoryVisibility String?
+  repositoryDescription String?
+  repositoryLastCommitSha String?
+  repositoryLastCommitMessage String?
+  repositoryLastCommitUrl String?
+  repositoryLastCommitAt DateTime?
+  repositoryLastCheckedAt DateTime?
   coolifyApplicationId String?
   coolifyProjectId     String?
   notes                String?

@@ -10,6 +10,7 @@ import { ProjectArchiveButton } from "@/components/ProjectArchiveButton";
 import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
+import { RepositoryPanel } from "@/components/RepositoryPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,8 @@ export default async function ProjectDetailPage({ params }: Props) {
           ) : null}
         </div>
 
+        <RepositoryPanel project={project} />
+
         <div className="flex flex-wrap items-center gap-3">
           <button
             disabled
@@ -231,6 +234,28 @@ export default async function ProjectDetailPage({ params }: Props) {
           <p className="mt-1 text-sm text-text-dim">
             Tasks derived from Planner runs and manual entries.
           </p>
+          {project.repositoryFullName ? (
+            <p className="mt-3 rounded-md bg-background px-3 py-2 text-xs text-text-dim">
+              Repository context:{" "}
+              <span className="text-neutral-300">
+                {project.repositoryFullName}
+              </span>
+              {project.repositoryDefaultBranch ? (
+                <>
+                  {" · "}
+                  <span className="font-mono">
+                    {project.repositoryDefaultBranch}
+                  </span>
+                </>
+              ) : null}
+              {project.repositoryVisibility ? (
+                <>
+                  {" · "}
+                  <span>{project.repositoryVisibility}</span>
+                </>
+              ) : null}
+            </p>
+          ) : null}
           {project.tasks.length === 0 ? (
             <p className="mt-5 text-sm text-text-dim">No tasks yet.</p>
           ) : (

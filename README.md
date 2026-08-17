@@ -39,6 +39,9 @@ Not implemented yet (planned for later phases): assigning tasks to real agents, 
 | `DEEPSEEK_BASE_URL` | LLM provider base URL (default `https://api.deepseek.com`). |
 | `DEEPSEEK_MODEL` | Model id (default `deepseek-v4-pro`). |
 | `LLM_REQUEST_TIMEOUT_MS` | Request timeout in ms (default `90000`). |
+| `GITHUB_TOKEN` | Optional GitHub PAT for repository metadata lookups. Empty/absent → public repos only. |
+| `GITHUB_API_BASE_URL` | GitHub REST API base URL (default `https://api.github.com`). |
+| `GITHUB_DEFAULT_OWNER` | Default owner shown in `/settings` (default `infiniteroles`). |
 
 Generate the admin password hash with:
 
@@ -119,6 +122,7 @@ On Coolify:
 - `POST /api/projects/[id]/tasks` — create a task manually.
 - `PATCH /api/tasks/[id]` — update a task (status, type, priority, assignee, notes…).
 - `POST /api/agent-runs/[id]/create-backlog` — convert a Planner run's `proposed_tasks` into tasks.
+- `POST /api/projects/[id]/repository/check` — look up GitHub repository metadata and store it on the project.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -167,6 +171,59 @@ Authenticated. Returns `{ "ok": true, "agentRun": ... }` on success, or
   `completed_with_warnings`.
 - **Provider error** (HTTP 4xx/5xx): the run is marked `failed` and the error is
   stored in the run output and the activity log.
+
+## GitHub (read-only repository metadata)
+
+Forge can associate a project with a GitHub repository and fetch basic metadata.
+This phase is **read-only**: no repos, branches, commits, PRs or issues are created.
+
+Flow:
+
+```
+Project with repositoryFullName → Check repository → GitHub REST → save metadata → show context
+```
+
+On the project detail page, the **Repository** panel shows provider, full name,
+URL, visibility, default branch, description, last commit and last checked date.
+Click **Check repository** to look up the repo and store the result. The Backlog
+section also shows a compact `Repository context: owner/repo · branch · visibility` line.
+
+### Configure in Coolify
+
+- `GITHUB_TOKEN` — optional. A fine-grained or classic PAT. Leave empty to use
+  anonymous public lookups.
+- `GITHUB_API_BASE_URL` — default `https://api.github.com`.
+- `GITHUB_DEFAULT_OWNER` — default `infiniteroles`.
+
+Then redeploy. Without `GITHUB_TOKEN` `/settings` shows
+"GitHub integration: Public only / Not configured".
+
+### Minimum token permissions (this phase)
+
+- Repository metadata read (`metadata: read`).
+- Repository contents read (`contents: read`) — used for the last-commit lookup.
+
+No write permissions are required yet.
+
+### Endpoint
+
+```
+POST /api/projects/[id]/repository/check
+```
+
+Authenticated. Requires the project to have `repositoryFullName`. Returns
+`{ "ok": true, "repository": { ... } }` on success or
+`{ "ok": false, "error": "Repository not found or GitHub token lacks access" }`
+on failure. Events logged: `repository.checked`, `repository.linked` (first
+link), `repository.check_failed`.
+
+### Current limitations
+
+- Read-only REST; no GraphQL.
+- No branch listing, commits history, PRs, issues or webhooks.
+- Anonymous checks are subject to GitHub rate limits (60 req/h per IP).
+
+Next phases: branches, PRs, GitHub App, Builder Agent.
 
 ## Backlog (Planner → tasks)
 
