@@ -28,6 +28,7 @@ export interface GithubBranch {
 
 export interface GithubPullRequest {
   number: number;
+  nodeId: string | null;
   html_url: string;
   state: string;
   title: string;

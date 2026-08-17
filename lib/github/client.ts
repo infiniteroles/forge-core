@@ -69,3 +69,75 @@ export async function githubFetch(
     clearTimeout(timeout);
   }
 }
+
+interface GraphQLResponse {
+  data?: unknown;
+  errors?: { message?: string }[];
+}
+
+/**
+ * Minimal GitHub GraphQL client. Used for operations not exposed by the REST
+ * API (e.g. converting a draft PR to ready for review). Never logs the token.
+ */
+export async function githubGraphQL(
+  query: string,
+  variables: Record<string, unknown>,
+  config?: GithubConfig
+): Promise<GraphQLResponse> {
+  const cfg = config ?? getGithubConfig();
+
+  if (!cfg.token) {
+    throw new GithubError("No GitHub token configured", "token_missing");
+  }
+
+  const url = `${cfg.apiBaseUrl.replace(/\/+$/, "")}/graphql`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), cfg.timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cfg.token}`,
+      },
+      body: JSON.stringify({ query, variables }),
+      signal: controller.signal,
+    });
+
+    const data = (await res.json().catch(() => null)) as GraphQLResponse | null;
+
+    if (!data) {
+      throw new GithubError(
+        "GitHub GraphQL returned an invalid response",
+        "provider_error"
+      );
+    }
+
+    if (data.errors && data.errors.length > 0) {
+      throw new GithubError(
+        data.errors[0].message ?? "GitHub GraphQL error",
+        "validation_error"
+      );
+    }
+
+    if (!res.ok) {
+      throw new GithubError(
+        `GitHub GraphQL error (HTTP ${res.status})`,
+        "provider_error",
+        res.status
+      );
+    }
+
+    return data;
+  } catch (error) {
+    if (error instanceof GithubError) throw error;
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new GithubError("GitHub request timed out", "network_error");
+    }
+    throw new GithubError("GitHub API is unreachable", "network_error");
+  } finally {
+    clearTimeout(timeout);
+  }
+}

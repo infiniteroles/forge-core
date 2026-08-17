@@ -1,4 +1,4 @@
-import { githubFetch, getGithubConfig } from "./client";
+import { githubFetch, githubGraphQL, getGithubConfig } from "./client";
 import { GithubError, GithubErrorCode, GithubPullRequest } from "./types";
 
 const fullNameRegex = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -101,6 +101,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 interface PrPayload {
   number?: number;
+  node_id?: string;
   html_url?: string;
   state?: string;
   title?: string;
@@ -118,6 +119,7 @@ function toGithubPullRequest(data: PrPayload | null): GithubPullRequest {
   }
   return {
     number: data.number,
+    nodeId: data.node_id ?? null,
     html_url: data.html_url ?? "",
     state: data.state ?? "unknown",
     title: data.title ?? "",
@@ -227,8 +229,11 @@ export interface MarkPullRequestReadyInput {
 }
 
 /**
- * Converts a draft pull request into a regular (ready for review) PR by
- * setting `draft: false`. Never merges.
+ * Converts a draft pull request into a regular (ready for review) PR.
+ *
+ * The REST API does not expose a `draft` field on the "Update a pull request"
+ * endpoint, so this uses the GraphQL mutation `markPullRequestReadyForReview`.
+ * It never merges.
  */
 export async function markPullRequestReady(
   input: MarkPullRequestReadyInput
@@ -240,14 +245,42 @@ export async function markPullRequestReady(
     throw new GithubError("Invalid pull request number", "validation_error");
   }
 
-  const data = await requestJson<PrPayload>(
-    `/repos/${input.repositoryFullName}/pulls/${input.prNumber}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ draft: false }),
-    }
-  );
+  // 1. Fetch the PR to obtain its GraphQL node id.
+  const pr = await getPullRequest(input);
+  if (!pr.nodeId) {
+    throw new GithubError(
+      "Could not resolve the pull request node id",
+      "unknown"
+    );
+  }
 
-  return toGithubPullRequest(data);
+  // 2. Convert draft → ready for review via GraphQL.
+  const query = `
+    mutation MarkPullRequestReadyForReview($id: ID!) {
+      markPullRequestReadyForReview(input: { pullRequestId: $id }) {
+        pullRequest {
+          id
+          number
+          state
+          isDraft
+        }
+      }
+    }
+  `;
+  const result = await githubGraphQL(query, { id: pr.nodeId });
+  const pullRequest = (result.data as {
+    markPullRequestReadyForReview?: {
+      pullRequest?: { number?: number; state?: string; isDraft?: boolean };
+    };
+  })?.markPullRequestReadyForReview?.pullRequest;
+
+  if (!pullRequest) {
+    throw new GithubError(
+      "GitHub did not confirm the pull request was marked ready",
+      "unknown"
+    );
+  }
+
+  // 3. Return the fresh PR state.
+  return getPullRequest(input);
 }
