@@ -14,10 +14,12 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - Activity log: timeline of `project.*`, `instruction.created`, `agent.run.*`, `task.*`, `backlog.created`.
 - **DeepSeek Planner**: "Ask Planner" runs an LLM planning agent (direct DeepSeek API, OpenAI-compatible) and stores the result as an `AgentRun`.
 - **Backlog**: turn a Planner run's `proposed_tasks` into editable `Task` records (create, edit, change status, mark done, cancel).
+- **GitHub links**: associate a project with a repo, and link tasks to GitHub issues, branches, plan commits and draft PRs (read/write via REST, read-only by default).
+- **Builder Proposal Agent**: analyze a single task + limited repository context and propose an implementation strategy via DeepSeek — analysis only, no code/commit/PR/deploy changes.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
-Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, Coolify API, LiteLLM, Ollama, real code-writing agents.
+Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, Coolify API, LiteLLM, Ollama, Builder Agent commits/PR updates, real code-writing agents.
 
 ## Stack
 
@@ -131,6 +133,7 @@ On Coolify:
 - `POST /api/tasks/[id]/github/plan-commit/check` — refresh the plan commit metadata.
 - `POST /api/tasks/[id]/github/pr` — create a draft PR from the task branch.
 - `POST /api/tasks/[id]/github/pr/check` — refresh the linked PR metadata.
+- `POST /api/tasks/[id]/builder/proposal` — run the Builder Proposal agent for a task.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -316,7 +319,84 @@ Events logged: `github.branch.created`, `github.branch.checked`,
 - No bidirectional sync — Forge pulls issue/branch/plan/PR state on demand via Refresh.
 - Anonymous repository checks are subject to GitHub rate limits (60 req/h per IP).
 
-Next phases: Builder Agent, functional commits, GitHub App, Coolify API.
+Next phases: functional commits, Builder Agent commit/PR updates, GitHub App, Coolify API.
+
+## Builder Proposal Agent
+
+The first "Builder" agent is deliberately **read-only and analysis-only**: given a
+single task, it gathers a safe context and produces an implementation proposal via
+DeepSeek. It **never** writes code, creates commits, modifies files, opens PRs or
+deploys anything.
+
+Flow:
+
+```
+Task with linked repo → Ask Builder Proposal → build limited context
+  → DeepSeek → structured JSON proposal → save AgentRun(taskId) → ActivityLog
+```
+
+### What it reads (limited GitHub context)
+
+- Root tree of the task branch (top-level paths only).
+- A few key files, if present: `README.md`, `package.json`, `Dockerfile`,
+  `docker-compose.yml`, `next.config.*`, `tsconfig.json`, `prisma/schema.prisma`.
+- Path listings for `app/`, `lib/`, `src/` and `components/` (names only).
+- Task metadata, project metadata, linked issue/branch/plan/PR, recent activity
+  and recent agent runs.
+
+Safety limits: max 10 files with content, max 30 KB per file, max 120 KB total.
+Never reads `.env`, secrets, binaries or large files. Missing files are skipped
+without breaking the run. If the GitHub context cannot be read, the agent records
+a warning and continues with task/project context.
+
+### Output structure
+
+`builderProposalOutputSchema` (Zod) — all fields are produced by the model:
+
+- `summary`, `understanding`, `recommended_approach`
+- `files_to_inspect[{path, reason}]`
+- `files_likely_to_modify[{path, reason, change_type: create|update|delete|unknown}]`
+- `implementation_steps[{title, description, risk: low|medium|high}]`
+- `validation_commands[{command, purpose}]`
+- `risks[]`, `questions[]`, `acceptance_criteria[]`
+- `estimated_complexity` (low|medium|high), `safe_to_attempt_next` (boolean)
+
+### Endpoint
+
+```
+POST /api/tasks/[id]/builder/proposal
+```
+
+Authenticated. Requires the task's project to have a linked `repositoryFullName`
+(400 otherwise) and a configured LLM provider (503 otherwise). Returns
+`{ "ok": true, "agentRun": ... }` on success, storing the proposal JSON in the
+run output. The run is linked to the task via `taskId` on `AgentRun`.
+
+### UI
+
+- Each task card shows **Ask Builder Proposal**. Once a proposal exists, the card
+  shows a compact summary (summary, approach, complexity, "safe to attempt next")
+  with **View full proposal** and **Ask again**.
+- The task edit page shows a read-only **Builder Proposal** section with the full
+  proposal: summary, understanding, approach, files to inspect/modify,
+  implementation steps, validation commands, risks, questions, acceptance criteria
+  and complexity/safety flags.
+- The project Backlog shows a `Builder proposals: X / total tasks` line.
+- `/settings` shows Builder Proposal Agent status, model, LLM provider and GitHub
+  context availability (keys are never displayed).
+
+Events logged: `builder.proposal.created`, `builder.proposal.completed`,
+`builder.proposal.failed`.
+
+### Why it is safe
+
+- No GitHub write calls are made from the Builder code path.
+- GitHub context is limited and filtered (no secrets/large/binary files).
+- The model is explicitly instructed to only analyze and propose.
+- `safe_to_attempt_next` lets the human decide whether a later phase may attempt
+  the change.
+
+Migration: `20260818050000_add_agent_run_task_link` links `AgentRun` to `Task`.
 
 ## Backlog (Planner → tasks)
 

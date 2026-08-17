@@ -10,6 +10,10 @@ import { GithubIssueActions } from "./GithubIssueActions";
 import { GithubBranchActions } from "./GithubBranchActions";
 import { GithubPlanCommitActions } from "./GithubPlanCommitActions";
 import { GithubPrActions } from "./GithubPrActions";
+import {
+  BuilderProposalActions,
+  BuilderProposalSummary,
+} from "./BuilderProposalActions";
 
 type TaskProps = {
   id: string;
@@ -34,7 +38,15 @@ type TaskProps = {
   githubPrUrl: string | null;
 };
 
-export function TaskCard({ task }: { task: TaskProps }) {
+export function TaskCard({
+  task,
+  repositoryLinked,
+  builderProposal,
+}: {
+  task: TaskProps;
+  repositoryLinked?: boolean;
+  builderProposal?: BuilderProposalSummary | null;
+}) {
   const tone =
     TASK_STATUS_TONES[task.status] ?? "bg-neutral-700/40 text-neutral-300";
   const done = task.status === "done";
@@ -142,6 +154,12 @@ export function TaskCard({ task }: { task: TaskProps }) {
         prState={task.githubPrState}
         prDraft={task.githubPrDraft}
         prUrl={task.githubPrUrl}
+      />
+
+      <BuilderProposalActions
+        taskId={task.id}
+        repositoryLinked={repositoryLinked ?? false}
+        proposal={builderProposal ?? null}
       />
     </div>
   );

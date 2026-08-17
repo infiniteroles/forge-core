@@ -11,6 +11,8 @@ import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
 import { RepositoryPanel } from "@/components/RepositoryPanel";
+import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
+import type { BuilderProposalSummary } from "@/components/BuilderProposalActions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,16 @@ export default async function ProjectDetailPage({ params }: Props) {
         include: { _count: { select: { tasks: true } } },
       },
       activityLogs: { orderBy: { createdAt: "desc" }, take: 50 },
-      tasks: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+      tasks: {
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        include: {
+          agentRuns: {
+            where: { agentName: "builder-proposal" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
     },
   });
 
@@ -52,6 +63,31 @@ export default async function ProjectDetailPage({ params }: Props) {
   const prCount = project.tasks.filter(
     (task) => task.githubPrNumber != null
   ).length;
+
+  const builderProposalCount = project.tasks.filter(
+    (task) => task.agentRuns.length > 0
+  ).length;
+
+  function builderSummary(
+    run: {
+      id: string;
+      status: string;
+      output: string | null;
+      createdAt: Date;
+    } | null
+  ): BuilderProposalSummary | null {
+    if (!run) return null;
+    const parsed = parseBuilderProposalOutput(run.output);
+    return {
+      agentRunId: run.id,
+      status: run.status,
+      summary: parsed?.summary ?? null,
+      recommendedApproach: parsed?.recommended_approach ?? null,
+      complexity: parsed?.estimated_complexity ?? null,
+      safeToAttempt: parsed?.safe_to_attempt_next ?? null,
+      createdAt: run.createdAt.toISOString(),
+    };
+  }
 
   return (
     <AppShell>
@@ -289,9 +325,17 @@ export default async function ProjectDetailPage({ params }: Props) {
                 tasks
               </p>              <p className="mt-1 text-xs text-text-dim">
                 Draft PRs opened: {prCount} / {project.tasks.length} tasks
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                Builder proposals: {builderProposalCount} / {project.tasks.length}{" "}
+                tasks
               </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (
-                  <TaskCard key={task.id} task={task} />
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    repositoryLinked={project.repositoryFullName != null}
+                    builderProposal={builderSummary(task.agentRuns[0])}
+                  />
                 ))}
               </div>
             </>

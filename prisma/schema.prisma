@@ -67,6 +67,7 @@ model AgentRun {
   id            String       @id @default(cuid())
   projectId     String
   instructionId String?
+  taskId        String?
   agentName     String?
   model         String?
   status        String       @default("queued")
@@ -78,7 +79,8 @@ model AgentRun {
   createdAt     DateTime     @default(now())
   project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: SetNull)
-  tasks         Task[]
+  task          Task?        @relation("TaskRuns", fields: [taskId], references: [id], onDelete: SetNull)
+  tasks         Task[]       @relation("SourceAgentRuns")
 }
 
 model ActivityLog {
@@ -151,5 +153,6 @@ model Task {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sourceAgentRun   AgentRun? @relation(fields: [sourceAgentRunId], references: [id], onDelete: SetNull)
+  sourceAgentRun   AgentRun? @relation("SourceAgentRuns", fields: [sourceAgentRunId], references: [id], onDelete: SetNull)
+  agentRuns        AgentRun[] @relation("TaskRuns")
 }

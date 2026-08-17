@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { TaskForm } from "@/components/TaskForm";
+import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
+import type { BuilderProposalOutput } from "@/lib/llm/builder-proposal";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +16,22 @@ export default async function EditTaskPage({ params }: Props) {
 
   const { id } = await params;
 
-  const task = await prisma.task.findUnique({ where: { id } });
+  const task = await prisma.task.findUnique({
+    where: { id },
+    include: {
+      agentRuns: {
+        where: { agentName: "builder-proposal" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
   if (!task) notFound();
+
+  const builderRun = task.agentRuns[0] ?? null;
+  const builderOutput = builderRun
+    ? parseBuilderProposalOutput(builderRun.output)
+    : null;
 
   return (
     <AppShell>
@@ -351,10 +367,199 @@ export default async function EditTaskPage({ params }: Props) {
           </div>
         ) : null}
 
+        {builderRun ? (
+          <div
+            id="builder-proposal"
+            className="mt-6 rounded-xl border border-border bg-surface p-6"
+          >
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+              Builder Proposal
+            </h2>
+            <p className="mt-1 text-xs text-text-dim">
+              Last proposal from the Builder agent (read-only, no changes made).
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-text-dim">
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono ${
+                  builderRun.status === "completed"
+                    ? "bg-emerald-500/10 text-emerald-300"
+                    : builderRun.status === "completed_with_warnings"
+                      ? "bg-amber-500/10 text-amber-300"
+                      : "bg-red-500/10 text-red-300"
+                }`}
+              >
+                {builderRun.status}
+              </span>
+              {builderRun.model ? (
+                <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+                  {builderRun.model}
+                </span>
+              ) : null}
+              <span>{builderRun.createdAt.toLocaleString()}</span>
+            </div>
+
+            {builderRun.status !== "completed" && !builderOutput ? (
+              <pre className="mt-4 overflow-x-auto rounded-lg bg-background p-4 text-xs text-neutral-300">
+                {builderRun.output ?? "(no output)"}
+              </pre>
+            ) : null}
+
+            {builderOutput ? (
+              <BuilderProposalDetail output={builderOutput} />
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mt-8 rounded-xl border border-border bg-surface p-6">
           <TaskForm task={task} />
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function BuilderProposalDetail({
+  output,
+}: {
+  output: BuilderProposalOutput;
+}) {
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <ProposalBlock title="Summary">
+        <p className="whitespace-pre-wrap text-sm text-neutral-200">
+          {output.summary}
+        </p>
+      </ProposalBlock>
+      <ProposalBlock title="Understanding">
+        <p className="whitespace-pre-wrap text-sm text-neutral-200">
+          {output.understanding}
+        </p>
+      </ProposalBlock>
+      <ProposalBlock title="Recommended approach">
+        <p className="whitespace-pre-wrap text-sm text-neutral-200">
+          {output.recommended_approach}
+        </p>
+      </ProposalBlock>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <ProposalBlock title="Files to inspect">
+          <ul className="flex flex-col gap-1.5">
+            {output.files_to_inspect.map((f, i) => (
+              <li key={i} className="text-sm text-neutral-300">
+                <span className="font-mono text-accent">{f.path}</span>
+                <span className="text-text-dim"> — {f.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </ProposalBlock>
+        <ProposalBlock title="Files likely to modify">
+          <ul className="flex flex-col gap-1.5">
+            {output.files_likely_to_modify.map((f, i) => (
+              <li key={i} className="text-sm text-neutral-300">
+                <span className="font-mono text-accent">{f.path}</span>
+                <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-text-dim">
+                  {f.change_type}
+                </span>
+                <span className="text-text-dim"> — {f.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </ProposalBlock>
+      </div>
+
+      <ProposalBlock title="Implementation steps">
+        <ol className="flex flex-col gap-2">
+          {output.implementation_steps.map((s, i) => (
+            <li key={i} className="text-sm text-neutral-300">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-neutral-100">
+                  {i + 1}. {s.title}
+                </span>
+                <span
+                  className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+                    s.risk === "low"
+                      ? "bg-emerald-500/10 text-emerald-300"
+                      : s.risk === "medium"
+                        ? "bg-amber-500/10 text-amber-300"
+                        : "bg-red-500/10 text-red-300"
+                  }`}
+                >
+                  {s.risk} risk
+                </span>
+              </div>
+              <p className="mt-0.5 text-text-dim">{s.description}</p>
+            </li>
+          ))}
+        </ol>
+      </ProposalBlock>
+
+      <ProposalBlock title="Validation commands">
+        <div className="flex flex-col gap-1.5">
+          {output.validation_commands.map((c, i) => (
+            <div key={i}>
+              <code className="rounded bg-background px-2 py-1 font-mono text-xs text-neutral-200">
+                {c.command}
+              </code>
+              <p className="mt-0.5 text-xs text-text-dim">{c.purpose}</p>
+            </div>
+          ))}
+        </div>
+      </ProposalBlock>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <ProposalBlock title="Risks">
+          <ListOfStrings items={output.risks} />
+        </ProposalBlock>
+        <ProposalBlock title="Open questions">
+          <ListOfStrings items={output.questions} />
+        </ProposalBlock>
+        <ProposalBlock title="Acceptance criteria">
+          <ListOfStrings items={output.acceptance_criteria} />
+        </ProposalBlock>
+      </div>
+
+      <div className="flex flex-wrap gap-2 text-[11px] text-text-dim">
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+          estimated complexity: {output.estimated_complexity}
+        </span>
+        <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+          safe to attempt next:{" "}
+          {output.safe_to_attempt_next ? "Yes" : "No"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ProposalBlock({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+        {title}
+      </h3>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function ListOfStrings({ items }: { items: string[] }) {
+  if (items.length === 0) {
+    return <p className="text-sm text-text-dim">—</p>;
+  }
+  return (
+    <ul className="flex list-disc flex-col gap-1 pl-4">
+      {items.map((item, i) => (
+        <li key={i} className="text-sm text-neutral-300">
+          {item}
+        </li>
+      ))}
+    </ul>
   );
 }

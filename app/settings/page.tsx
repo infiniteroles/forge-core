@@ -52,6 +52,24 @@ export default async function SettingsPage() {
     },
     { label: "DeepSeek model", value: llmConfigured ? llmConfig.model : "Not configured" },
     { label: "DeepSeek base URL", value: llmConfigured ? llmConfig.baseUrl : "Not configured" },
+    {
+      label: "Builder Proposal Agent",
+      value: llmConfigured ? "Available" : "Not configured",
+    },
+    {
+      label: "Builder model",
+      value: llmConfigured ? llmConfig.model : "Not configured",
+    },
+    {
+      label: "Builder LLM provider",
+      value: llmConfigured ? "Configured" : "Not configured",
+    },
+    {
+      label: "Builder GitHub context",
+      value: githubConfigured
+        ? "Available"
+        : "Public only / Not configured",
+    },
     { label: "Telegram bot", value: "Not configured" },
     { label: "Coolify API", value: "Not configured" },
   ];

@@ -36,6 +36,9 @@ export const ACTIVITY_TYPES = [
   "github.pr.checked",
   "github.pr.create_failed",
   "github.pr.check_failed",
+  "builder.proposal.created",
+  "builder.proposal.completed",
+  "builder.proposal.failed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
