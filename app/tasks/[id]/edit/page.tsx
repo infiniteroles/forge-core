@@ -161,6 +161,79 @@ export default async function EditTaskPage({ params }: Props) {
           </div>
         ) : null}
 
+        {task.githubPlanCommitSha ? (
+          <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+              GitHub Plan Commit
+            </h2>
+            <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Path
+                </dt>
+                <dd className="mt-0.5 break-all font-mono text-neutral-200">
+                  {task.githubPlanPath ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Commit SHA
+                </dt>
+                <dd className="mt-0.5 break-all font-mono text-neutral-200">
+                  {task.githubPlanCommitSha}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Commit URL
+                </dt>
+                <dd className="mt-0.5 break-all text-neutral-200">
+                  {task.githubPlanCommitUrl ? (
+                    <a
+                      href={task.githubPlanCommitUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-accent transition hover:underline"
+                    >
+                      {task.githubPlanCommitUrl}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Commit message
+                </dt>
+                <dd className="mt-0.5 break-all text-neutral-200">
+                  {task.githubPlanCommitMessage ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Committed at
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {task.githubPlanCommittedAt
+                    ? task.githubPlanCommittedAt.toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                  Last checked
+                </dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {task.githubPlanLastCheckedAt
+                    ? task.githubPlanLastCheckedAt.toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ) : null}
+
         <div className="mt-8 rounded-xl border border-border bg-surface p-6">
           <TaskForm task={task} />
         </div>

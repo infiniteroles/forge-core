@@ -131,6 +131,12 @@ model Task {
   githubBaseSha            String?
   githubBranchCreatedAt    DateTime?
   githubBranchLastCheckedAt DateTime?
+  githubPlanPath           String?
+  githubPlanCommitSha      String?
+  githubPlanCommitUrl      String?
+  githubPlanCommitMessage  String?
+  githubPlanCommittedAt    DateTime?
+  githubPlanLastCheckedAt  DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

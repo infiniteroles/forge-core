@@ -35,6 +35,7 @@ export type GithubErrorCode =
   | "issues_disabled"
   | "branch_already_exists"
   | "branch_not_found"
+  | "file_not_found"
   | "forbidden"
   | "rate_limited"
   | "network_error"

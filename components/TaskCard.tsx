@@ -8,6 +8,7 @@ import {
 import { TaskStatusButton } from "./TaskStatusButton";
 import { GithubIssueActions } from "./GithubIssueActions";
 import { GithubBranchActions } from "./GithubBranchActions";
+import { GithubPlanCommitActions } from "./GithubPlanCommitActions";
 
 type TaskProps = {
   id: string;
@@ -24,6 +25,8 @@ type TaskProps = {
   githubIssueUrl: string | null;
   githubBranchName: string | null;
   githubBranchUrl: string | null;
+  githubPlanCommitSha: string | null;
+  githubPlanCommitUrl: string | null;
 };
 
 export function TaskCard({ task }: { task: TaskProps }) {
@@ -118,6 +121,13 @@ export function TaskCard({ task }: { task: TaskProps }) {
         taskId={task.id}
         branchName={task.githubBranchName}
         branchUrl={task.githubBranchUrl}
+      />
+
+      <GithubPlanCommitActions
+        taskId={task.id}
+        branchName={task.githubBranchName}
+        commitSha={task.githubPlanCommitSha}
+        commitUrl={task.githubPlanCommitUrl}
       />
     </div>
   );

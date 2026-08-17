@@ -45,6 +45,10 @@ export default async function ProjectDetailPage({ params }: Props) {
     (task) => task.githubBranchName != null
   ).length;
 
+  const planCommitCount = project.tasks.filter(
+    (task) => task.githubPlanCommitSha != null
+  ).length;
+
   return (
     <AppShell>
       <div className="flex flex-col gap-6">
@@ -274,6 +278,10 @@ export default async function ProjectDetailPage({ params }: Props) {
               </p>
               <p className="mt-1 text-xs text-text-dim">
                 GitHub branches linked: {linkedBranchCount} / {project.tasks.length}{" "}
+                tasks
+              </p>
+              <p className="mt-1 text-xs text-text-dim">
+                Plan commits created: {planCommitCount} / {project.tasks.length}{" "}
                 tasks
               </p>
               <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

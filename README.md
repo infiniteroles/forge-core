@@ -127,6 +127,8 @@ On Coolify:
 - `POST /api/tasks/[id]/github/issue/check` — refresh the linked issue metadata.
 - `POST /api/tasks/[id]/github/branch` — create a work branch from a task.
 - `POST /api/tasks/[id]/github/branch/check` — refresh the linked branch metadata.
+- `POST /api/tasks/[id]/github/plan-commit` — create/update the task plan file.
+- `POST /api/tasks/[id]/github/plan-commit/check` — refresh the plan commit metadata.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -178,14 +180,16 @@ Authenticated. Returns `{ "ok": true, "agentRun": ... }` on success, or
 
 ## GitHub integration
 
-Forge integrates with GitHub in three ways:
+Forge integrates with GitHub in four ways:
 
 1. **Repository metadata** — associate a project with a repository and fetch
    basic metadata (visibility, default branch, last commit).
 2. **Issues from tasks** — convert a Forge task into a GitHub Issue in the
    linked repository (Issues read/write).
 3. **Branches from tasks** — create a work branch from a task, based on the
-   repository default branch (Contents write for refs only; no commits/PRs).
+   repository default branch.
+4. **Plan commits from tasks** — create/update a planning Markdown file
+   (`.forge/tasks/<taskId>.md`) on the task branch via the Contents API.
 
 Flow:
 
@@ -193,31 +197,36 @@ Flow:
 Project with repositoryFullName → Check repository → GitHub REST → save metadata → show context
 Task in Forge → Create GitHub Issue → issue created → save number/URL/state → ActivityLog
 Task in Forge → Create Branch → branch created from default branch → save name/URL/base → ActivityLog
+Task in Forge → Create Plan Commit → .forge/tasks/<taskId>.md committed → save SHA/URL → ActivityLog
 ```
 
 On the project detail page, the **Repository** panel shows provider, full name,
 URL, visibility, default branch, description, last commit and last checked date.
 Click **Check repository** to look up the repo and store the result. The Backlog
 section shows a compact `Repository context: owner/repo · branch · visibility`
-line plus `GitHub issues linked: X / N tasks` and
-`GitHub branches linked: Y / N tasks` summaries.
+line plus `GitHub issues linked`, `GitHub branches linked` and
+`Plan commits created` summaries.
 
 ### Configure in Coolify
 
 - `GITHUB_TOKEN` — optional for reading public repository metadata, **required
-  to create issues and branches**. Fine-grained or classic PAT.
+  to create issues, branches and plan commits**. Fine-grained or classic PAT.
 - `GITHUB_API_BASE_URL` — default `https://api.github.com`.
 - `GITHUB_DEFAULT_OWNER` — default `infiniteroles`.
 
 Without `GITHUB_TOKEN`, `/settings` shows "GitHub integration: Public only /
-Not configured", "Can create issues: No" and "Can create branches: No".
+Not configured", "Can create issues: No", "Can create branches: No" and
+"Can create plan commits: No".
 
 ### Minimum token permissions
 
 - Repository metadata read (`metadata: read`).
 - Repository contents read/write (`contents: write`) — read for the last-commit
-  lookup, write to create branch references. No commits are created.
+  lookup, write to create branch references and commit the plan Markdown file.
 - Issues read/write (`issues: write`) — required to create issues.
+
+Plan commits are made only on the task branch — never on `main` — and only
+inside `.forge/tasks/`. No functional code is modified.
 
 Prefer a fine-grained token scoped to `infiniteroles/forge-core` (or only the
 needed repos).
@@ -248,11 +257,25 @@ POST /api/tasks/[id]/github/branch        — create a work branch from a task
 POST /api/tasks/[id]/github/branch/check  — refresh the linked branch metadata
 ```
 
-On the project detail page, each task card shows **Create GitHub Issue** (or,
-once linked, `Issue #N · state` with **Open Issue** and **Refresh Issue**) and
-**Create Branch** (or `Branch: forge/...` with **Open Branch** and
-**Refresh Branch**). The task edit page also shows the linked issue/branch
-metadata (name, URL, state/base, last checked).
+### Plan commit endpoints
+
+```
+POST /api/tasks/[id]/github/plan-commit        — create/update the task plan file
+POST /api/tasks/[id]/github/plan-commit/check  — refresh the plan commit metadata
+```
+
+The plan file lives at `.forge/tasks/<taskId>.md` on the task branch. If the
+file already exists, Forge updates it with a new commit instead of duplicating
+the path. Events logged: `github.plan_commit.created`, `github.plan_commit.updated`,
+`github.plan_commit.checked`, `github.plan_commit.create_failed`,
+`github.plan_commit.check_failed`.
+
+On the project detail page, each task card shows **Create GitHub Issue** (or
+`Issue #N · state` with **Open Issue** and **Refresh Issue**), **Create Branch**
+(or `Branch: forge/...` with **Open Branch** and **Refresh Branch**) and
+**Create Plan Commit** (or `Plan commit: <short sha>` with **Open Commit** and
+**Refresh Plan Commit**). If the task has no branch yet, the card shows
+"Create a branch before creating a plan commit."
 
 ### Branch naming convention
 
@@ -269,13 +292,13 @@ Events logged: `github.branch.created`, `github.branch.checked`,
 
 ### Current limitations
 
-- Read-only REST for metadata; issue creation and branch creation are the only
-  write operations (no commits, no file edits, no PRs).
+- Read-only REST for metadata; issue/branch creation and plan-file commits are
+  the only write operations (no functional code edits, no PRs).
 - No branch listing, commits history, PRs, webhooks, comments or issue closing.
-- No bidirectional sync — Forge pulls issue/branch state on demand via Refresh.
+- No bidirectional sync — Forge pulls issue/branch/plan state on demand via Refresh.
 - Anonymous repository checks are subject to GitHub rate limits (60 req/h per IP).
 
-Next phases: commits, PRs, GitHub App, Builder Agent.
+Next phases: Draft PR, Builder Agent, GitHub App.
 
 ## Backlog (Planner → tasks)
 
