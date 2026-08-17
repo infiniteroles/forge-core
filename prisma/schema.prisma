@@ -118,6 +118,13 @@ model Task {
   notes            String?
   completedAt      DateTime?
   cancelledAt      DateTime?
+  githubIssueNumber        Int?
+  githubIssueUrl           String?
+  githubIssueState         String?
+  githubIssueTitle         String?
+  githubIssueCreatedAt     DateTime?
+  githubIssueUpdatedAt     DateTime?
+  githubIssueLastCheckedAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)

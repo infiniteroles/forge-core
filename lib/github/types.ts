@@ -11,14 +11,28 @@ export interface GithubRepository {
   updatedAt: string | null;
 }
 
+export interface GithubIssue {
+  number: number;
+  html_url: string;
+  state: string;
+  title: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 export type GithubErrorCode =
   | "not_configured"
+  | "token_missing"
   | "invalid_full_name"
   | "not_found"
+  | "repository_not_found"
+  | "issues_disabled"
   | "forbidden"
   | "rate_limited"
   | "network_error"
-  | "provider_error";
+  | "validation_error"
+  | "provider_error"
+  | "unknown";
 
 export class GithubError extends Error {
   readonly code: GithubErrorCode;

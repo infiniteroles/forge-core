@@ -123,6 +123,8 @@ On Coolify:
 - `PATCH /api/tasks/[id]` — update a task (status, type, priority, assignee, notes…).
 - `POST /api/agent-runs/[id]/create-backlog` — convert a Planner run's `proposed_tasks` into tasks.
 - `POST /api/projects/[id]/repository/check` — look up GitHub repository metadata and store it on the project.
+- `POST /api/tasks/[id]/github/issue` — create a GitHub issue from a task.
+- `POST /api/tasks/[id]/github/issue/check` — refresh the linked issue metadata.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -172,40 +174,48 @@ Authenticated. Returns `{ "ok": true, "agentRun": ... }` on success, or
 - **Provider error** (HTTP 4xx/5xx): the run is marked `failed` and the error is
   stored in the run output and the activity log.
 
-## GitHub (read-only repository metadata)
+## GitHub integration
 
-Forge can associate a project with a GitHub repository and fetch basic metadata.
-This phase is **read-only**: no repos, branches, commits, PRs or issues are created.
+Forge integrates with GitHub in two ways:
+
+1. **Repository metadata** — associate a project with a repository and fetch
+   basic metadata (visibility, default branch, last commit).
+2. **Issues from tasks** — convert a Forge task into a GitHub Issue in the
+   linked repository (Issues read/write only; no branches, commits or PRs).
 
 Flow:
 
 ```
 Project with repositoryFullName → Check repository → GitHub REST → save metadata → show context
+Task in Forge → Create GitHub Issue → issue created → save number/URL/state → ActivityLog
 ```
 
 On the project detail page, the **Repository** panel shows provider, full name,
 URL, visibility, default branch, description, last commit and last checked date.
 Click **Check repository** to look up the repo and store the result. The Backlog
-section also shows a compact `Repository context: owner/repo · branch · visibility` line.
+section shows a compact `Repository context: owner/repo · branch · visibility`
+line plus a `GitHub issues linked: X / N tasks` summary.
 
 ### Configure in Coolify
 
-- `GITHUB_TOKEN` — optional. A fine-grained or classic PAT. Leave empty to use
-  anonymous public lookups.
+- `GITHUB_TOKEN` — optional for reading public repository metadata, **required
+  to create issues**. Fine-grained or classic PAT.
 - `GITHUB_API_BASE_URL` — default `https://api.github.com`.
 - `GITHUB_DEFAULT_OWNER` — default `infiniteroles`.
 
-Then redeploy. Without `GITHUB_TOKEN` `/settings` shows
-"GitHub integration: Public only / Not configured".
+Without `GITHUB_TOKEN`, `/settings` shows "GitHub integration: Public only /
+Not configured" and "Can create issues: No".
 
-### Minimum token permissions (this phase)
+### Minimum token permissions
 
 - Repository metadata read (`metadata: read`).
 - Repository contents read (`contents: read`) — used for the last-commit lookup.
+- Issues read/write (`issues: write`) — required to create issues.
 
-No write permissions are required yet.
+No write permissions on contents are required yet. Prefer a fine-grained token
+scoped to `infiniteroles/forge-core` (or only the needed repos).
 
-### Endpoint
+### Repository endpoint
 
 ```
 POST /api/projects/[id]/repository/check
@@ -217,13 +227,27 @@ Authenticated. Requires the project to have `repositoryFullName`. Returns
 on failure. Events logged: `repository.checked`, `repository.linked` (first
 link), `repository.check_failed`.
 
+### Issue endpoints
+
+```
+POST /api/tasks/[id]/github/issue        — create a GitHub issue from a task
+POST /api/tasks/[id]/github/issue/check  — refresh the linked issue metadata
+```
+
+On the project detail page, each task card shows **Create GitHub Issue** (or,
+once linked, `Issue #N · state` with **Open Issue** and **Refresh Issue**).
+The task edit page also shows the linked issue metadata (number, state, URL,
+last checked). Events logged: `github.issue.created`, `github.issue.checked`,
+`github.issue.create_failed`, `github.issue.check_failed`.
+
 ### Current limitations
 
-- Read-only REST; no GraphQL.
-- No branch listing, commits history, PRs, issues or webhooks.
-- Anonymous checks are subject to GitHub rate limits (60 req/h per IP).
+- Read-only REST for metadata; issue creation is the only write operation.
+- No branch listing, commits history, PRs, webhooks, comments or issue closing.
+- No bidirectional sync — Forge pulls issue state on demand via **Refresh Issue**.
+- Anonymous repository checks are subject to GitHub rate limits (60 req/h per IP).
 
-Next phases: branches, PRs, GitHub App, Builder Agent.
+Next phases: branch from task, PRs, GitHub App, Builder Agent.
 
 ## Backlog (Planner → tasks)
 

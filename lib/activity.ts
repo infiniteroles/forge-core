@@ -19,6 +19,10 @@ export const ACTIVITY_TYPES = [
   "repository.checked",
   "repository.linked",
   "repository.check_failed",
+  "github.issue.created",
+  "github.issue.checked",
+  "github.issue.create_failed",
+  "github.issue.check_failed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

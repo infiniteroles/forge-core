@@ -6,6 +6,7 @@ import {
   TASK_TYPE_LABELS,
 } from "@/lib/task";
 import { TaskStatusButton } from "./TaskStatusButton";
+import { GithubIssueActions } from "./GithubIssueActions";
 
 type TaskProps = {
   id: string;
@@ -17,6 +18,9 @@ type TaskProps = {
   sortOrder: number;
   assignedAgent: string | null;
   sourceAgentRunId: string | null;
+  githubIssueNumber: number | null;
+  githubIssueState: string | null;
+  githubIssueUrl: string | null;
 };
 
 export function TaskCard({ task }: { task: TaskProps }) {
@@ -99,6 +103,13 @@ export function TaskCard({ task }: { task: TaskProps }) {
           </>
         ) : null}
       </div>
+
+      <GithubIssueActions
+        taskId={task.id}
+        issueNumber={task.githubIssueNumber}
+        issueState={task.githubIssueState}
+        issueUrl={task.githubIssueUrl}
+      />
     </div>
   );
 }

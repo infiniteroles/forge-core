@@ -27,6 +27,10 @@ export default async function SettingsPage() {
       label: "GitHub integration",
       value: githubConfigured ? "Configured" : "Public only / Not configured",
     },
+    {
+      label: "Can create issues",
+      value: githubConfigured ? "Yes" : "No",
+    },
     { label: "GitHub API Base URL", value: githubConfig.apiBaseUrl },
     { label: "GitHub Default owner", value: githubConfig.defaultOwner },
     { label: "GitHub token", value: githubConfigured ? "Hidden" : "Not set" },
