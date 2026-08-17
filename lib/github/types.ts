@@ -20,6 +20,12 @@ export interface GithubIssue {
   updated_at: string | null;
 }
 
+export interface GithubBranch {
+  name: string;
+  url: string;
+  sha: string | null;
+}
+
 export type GithubErrorCode =
   | "not_configured"
   | "token_missing"
@@ -27,6 +33,8 @@ export type GithubErrorCode =
   | "not_found"
   | "repository_not_found"
   | "issues_disabled"
+  | "branch_already_exists"
+  | "branch_not_found"
   | "forbidden"
   | "rate_limited"
   | "network_error"

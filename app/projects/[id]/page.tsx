@@ -41,6 +41,10 @@ export default async function ProjectDetailPage({ params }: Props) {
     (task) => task.githubIssueNumber != null
   ).length;
 
+  const linkedBranchCount = project.tasks.filter(
+    (task) => task.githubBranchName != null
+  ).length;
+
   return (
     <AppShell>
       <div className="flex flex-col gap-6">
@@ -266,6 +270,10 @@ export default async function ProjectDetailPage({ params }: Props) {
             <>
               <p className="mt-3 text-xs text-text-dim">
                 GitHub issues linked: {linkedIssueCount} / {project.tasks.length}{" "}
+                tasks
+              </p>
+              <p className="mt-1 text-xs text-text-dim">
+                GitHub branches linked: {linkedBranchCount} / {project.tasks.length}{" "}
                 tasks
               </p>
               <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

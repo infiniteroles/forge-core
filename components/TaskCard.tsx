@@ -7,6 +7,7 @@ import {
 } from "@/lib/task";
 import { TaskStatusButton } from "./TaskStatusButton";
 import { GithubIssueActions } from "./GithubIssueActions";
+import { GithubBranchActions } from "./GithubBranchActions";
 
 type TaskProps = {
   id: string;
@@ -21,6 +22,8 @@ type TaskProps = {
   githubIssueNumber: number | null;
   githubIssueState: string | null;
   githubIssueUrl: string | null;
+  githubBranchName: string | null;
+  githubBranchUrl: string | null;
 };
 
 export function TaskCard({ task }: { task: TaskProps }) {
@@ -109,6 +112,12 @@ export function TaskCard({ task }: { task: TaskProps }) {
         issueNumber={task.githubIssueNumber}
         issueState={task.githubIssueState}
         issueUrl={task.githubIssueUrl}
+      />
+
+      <GithubBranchActions
+        taskId={task.id}
+        branchName={task.githubBranchName}
+        branchUrl={task.githubBranchUrl}
       />
     </div>
   );

@@ -125,6 +125,12 @@ model Task {
   githubIssueCreatedAt     DateTime?
   githubIssueUpdatedAt     DateTime?
   githubIssueLastCheckedAt DateTime?
+  githubBranchName         String?
+  githubBranchUrl          String?
+  githubBaseBranch         String?
+  githubBaseSha            String?
+  githubBranchCreatedAt    DateTime?
+  githubBranchLastCheckedAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
