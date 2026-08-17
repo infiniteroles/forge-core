@@ -32,12 +32,20 @@ export const builderProposalOutputSchema = z.object({
       risk: z.enum(["low", "medium", "high"]),
     })
   ),
-  validation_commands: z.array(
-    z.object({
-      command: z.string(),
-      purpose: z.string(),
-    })
-  ),
+  validation_commands: z
+    .array(
+      z.object({
+        command: z.string(),
+        purpose: z.string().optional(),
+        description: z.string().optional(),
+      })
+    )
+    .transform((commands) =>
+      commands.map((c) => ({
+        command: c.command,
+        purpose: (c.purpose ?? c.description ?? "").trim(),
+      }))
+    ),
   risks: z.array(z.string()),
   questions: z.array(z.string()),
   acceptance_criteria: z.array(z.string()),
@@ -100,7 +108,9 @@ Always reply with a single valid JSON object — no markdown fences, no extra te
   "acceptance_criteria": ["string"],
   "estimated_complexity": "low" | "medium" | "high",
   "safe_to_attempt_next": true
-}`;
+}
+
+In "validation_commands" always use the key "purpose" (never "description") for each command's explanation.`;
 
 function formatContext(ctx: BuilderProposalContext): string {
   const lines: string[] = [];
