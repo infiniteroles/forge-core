@@ -1,16 +1,25 @@
 import { prisma } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import {
   getCoolifyConfig,
   isCoolifyConfigured,
   coolifyFetch,
   checkCoolifyConnection,
+  listCoolifyApplications,
 } from "./client";
+import { buildPreviewAppName, buildPreviewDomain } from "./preview-domain";
 import {
   PreviewRunnerConfig,
   PreviewRunnerMode,
   PreviewDeploymentInput,
   PreviewStatus,
 } from "./types";
+
+export {
+  buildPreviewDomain,
+  buildFreePreviewDomain,
+  buildPreviewAppName,
+} from "./preview-domain";
 
 export function getPreviewRunnerMode(): PreviewRunnerMode {
   const raw = (process.env.PREVIEW_RUNNER_MODE ?? "disabled").trim();
@@ -30,16 +39,12 @@ export function getPreviewRunnerConfig(): PreviewRunnerConfig {
     projectUuid: cfg.projectUuid,
     environmentName: cfg.environmentName,
     domainSuffix: cfg.domainSuffix,
+    defaultPort: cfg.defaultPort,
+    buildPack: cfg.buildPack,
+    appNamePrefix: cfg.appNamePrefix,
+    deployTimeoutMs: cfg.deployTimeoutMs,
   };
 }
-
-export function buildPreviewDomain(taskId: string, workSessionId: string | null): string {
-  const cfg = getCoolifyConfig();
-  const short = workSessionId ? `ws-${workSessionId.slice(0, 6)}` : `preview-${taskId.slice(0, 6)}`;
-  return `${short}${cfg.domainSuffix}`;
-}
-
-// ── Coolify API (provider = coolify) ────────────────────────────────────────
 
 interface CoolifyApplication {
   uuid?: string;
@@ -50,34 +55,64 @@ interface CoolifyApplication {
 }
 
 /**
- * Best-effort: find an existing Coolify application whose domain matches the
- * preview domain, or create a new one for the task branch.
+ * Creates or reuses a Coolify application for a preview domain + branch.
+ *
+ * Priority:
+ *  1. an existing Forge PreviewDeployment already carrying coolifyApplicationUuid;
+ *  2. an existing Coolify application already serving the same domain;
+ *  3. create a new application (name forge-preview-<taskShort>, DEV env only).
+ *
+ * Never touches production. Never deletes resources.
  */
 export async function createOrReusePreviewApplication(input: {
-  domain: string;
+  projectId: string;
+  taskId: string;
+  workSessionId: string | null;
   repositoryFullName: string;
   branchName: string;
-}): Promise<{ applicationUuid: string; created: boolean }> {
+  domain: string;
+  commitSha?: string | null;
+}): Promise<{ applicationUuid: string; created: boolean; reused: boolean }> {
   if (!isCoolifyConfigured()) {
     throw new Error("Coolify API token is not configured");
   }
 
-  // 1. Look for an existing application that already serves this domain.
+  // 1. Reuse a Forge preview that already has a Coolify app for this session.
+  const existingForgePreview = await prisma.previewDeployment.findFirst({
+    where: {
+      workSessionId: input.workSessionId ?? undefined,
+      projectId: input.projectId,
+      coolifyApplicationUuid: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existingForgePreview?.coolifyApplicationUuid) {
+    return {
+      applicationUuid: existingForgePreview.coolifyApplicationUuid,
+      created: false,
+      reused: true,
+    };
+  }
+
+  // 2. Reuse an existing Coolify app that already serves this domain.
   try {
-    const apps = await coolifyFetch<CoolifyApplication[]>("/applications");
-    if (Array.isArray(apps)) {
-      const match = apps.find((a) =>
-        a.domains ? a.domains.includes(input.domain) : false
-      );
-      if (match?.uuid) {
-        return { applicationUuid: match.uuid, created: false };
-      }
+    const apps = await listCoolifyApplications();
+    const match = apps.find((a) =>
+      a.domains
+        ? a.domains
+            .split(",")
+            .map((d) => d.trim())
+            .includes(input.domain)
+        : false
+    );
+    if (match?.uuid) {
+      return { applicationUuid: match.uuid, created: false, reused: true };
     }
   } catch {
     // fall through to create
   }
 
-  // 2. Create a new application in the DEV environment (never production).
+  // 3. Create a new app in the DEV environment (never production).
   const cfg = getCoolifyConfig();
   const body: Record<string, unknown> = {
     project_uuid: cfg.projectUuid ?? undefined,
@@ -85,10 +120,11 @@ export async function createOrReusePreviewApplication(input: {
     environment_name: cfg.environmentName,
     github_repository: input.repositoryFullName,
     git_branch: input.branchName,
-    build_pack: "nixpacks",
-    ports_exposes: "3000",
+    build_pack: cfg.buildPack,
+    ports_exposes: cfg.defaultPort,
     domains: input.domain,
     instant_deploy: false,
+    name: buildPreviewAppName(input.taskId),
   };
 
   const created = await coolifyFetch<{ uuid?: string }>("/applications", {
@@ -98,34 +134,203 @@ export async function createOrReusePreviewApplication(input: {
   if (!created?.uuid) {
     throw new Error("Coolify did not return an application UUID");
   }
-  return { applicationUuid: created.uuid, created: true };
+  return { applicationUuid: created.uuid, created: true, reused: false };
 }
 
-export async function triggerPreviewDeployment(
-  applicationUuid: string
-): Promise<{ deploymentUuid: string | null; status: string | null }> {
+/**
+ * Triggers a deployment for a preview's Coolify application and records it on
+ * the PreviewDeployment row. Returns the updated preview.
+ */
+export async function triggerPreviewDeployment(previewDeploymentId: string) {
+  const preview = await prisma.previewDeployment.findUnique({
+    where: { id: previewDeploymentId },
+  });
+  if (!preview) throw new Error("Preview deployment not found");
+  if (!preview.coolifyApplicationUuid) {
+    throw new Error("Preview has no Coolify application UUID");
+  }
+  if (!isCoolifyConfigured()) {
+    throw new Error("Coolify API token is not configured");
+  }
+
   const data = await coolifyFetch<{
     deployments?: { uuid?: string; status?: string }[];
     deployment_uuid?: string;
     status?: string;
-  }>(`/applications/${encodeURIComponent(applicationUuid)}/deploy`, {
+  }>(`/applications/${encodeURIComponent(preview.coolifyApplicationUuid)}/deploy`, {
     method: "POST",
   });
 
   const deployment = data?.deployments?.[0];
-  return {
-    deploymentUuid: deployment?.uuid ?? data?.deployment_uuid ?? null,
-    status: deployment?.status ?? data?.status ?? null,
-  };
+  const deploymentUuid = deployment?.uuid ?? data?.deployment_uuid ?? null;
+  const rawStatus = deployment?.status ?? data?.status ?? "triggered";
+
+  const updated = await prisma.previewDeployment.update({
+    where: { id: preview.id },
+    data: {
+      status: "deploying",
+      coolifyDeploymentUuid: deploymentUuid,
+      lastDeploymentStatus: rawStatus,
+      lastCheckedAt: new Date(),
+      error: null,
+    },
+  });
+
+  await logActivity({
+    projectId: preview.projectId,
+    type: "preview.deployment_started",
+    message: "DEV Preview deployment started on Coolify.",
+    metadata: {
+      previewDeploymentId: preview.id,
+      workSessionId: preview.workSessionId ?? undefined,
+      taskId: preview.taskId ?? undefined,
+      provider: "coolify",
+      status: "deploying",
+      previewUrl: preview.previewUrl ?? undefined,
+      domain: preview.domain ?? undefined,
+      branchName: preview.branchName ?? undefined,
+      deploymentUuid,
+    },
+  });
+
+  return updated;
 }
 
-export async function getPreviewDeploymentStatus(
-  deploymentUuid: string
-): Promise<{ status: string | null; logUrl: string | null }> {
-  const data = await coolifyFetch<{ status?: string; log_url?: string }>(
-    `/deployments/${encodeURIComponent(deploymentUuid)}`
-  );
-  return { status: data?.status ?? null, logUrl: data?.log_url ?? null };
+/**
+ * Maps a Coolify deployment status string to our PreviewStatus.
+ */
+function mapCoolifyStatus(raw: string | null | undefined): PreviewStatus {
+  const s = (raw ?? "").toLowerCase();
+  if (!s) return "deploying";
+  if (
+    s.includes("finished") ||
+    s.includes("success") ||
+    s.includes("completed") ||
+    s === "ready"
+  ) {
+    return "ready";
+  }
+  if (
+    s.includes("failed") ||
+    s.includes("error") ||
+    s.includes("cancelled") ||
+    s.includes("canceled")
+  ) {
+    return s.includes("cancelled") || s.includes("canceled") ? "stopped" : "failed";
+  }
+  if (s.includes("queued")) return "queued";
+  if (s.includes("progress") || s.includes("running") || s.includes("deploy")) {
+    return "deploying";
+  }
+  return "deploying";
+}
+
+/**
+ * Queries the live deployment status from Coolify and updates the
+ * PreviewDeployment row. Returns the updated preview.
+ */
+export async function getPreviewDeploymentStatus(previewDeploymentId: string) {
+  const preview = await prisma.previewDeployment.findUnique({
+    where: { id: previewDeploymentId },
+  });
+  if (!preview) throw new Error("Preview deployment not found");
+
+  if (preview.provider !== "coolify" || !preview.coolifyDeploymentUuid) {
+    return prisma.previewDeployment.update({
+      where: { id: preview.id },
+      data: { lastCheckedAt: new Date() },
+    });
+  }
+
+  if (!isCoolifyConfigured()) {
+    return prisma.previewDeployment.update({
+      where: { id: preview.id },
+      data: {
+        lastCheckedAt: new Date(),
+        error: "Coolify API token is not configured",
+      },
+    });
+  }
+
+  try {
+    const data = await coolifyFetch<{ status?: string; log_url?: string }>(
+      `/deployments/${encodeURIComponent(preview.coolifyDeploymentUuid)}`
+    );
+
+    const rawStatus = data?.status ?? null;
+    const mapped = mapCoolifyStatus(rawStatus);
+    const now = new Date();
+
+    const updated = await prisma.previewDeployment.update({
+      where: { id: preview.id },
+      data: {
+        status: mapped,
+        lastDeploymentStatus: rawStatus,
+        lastDeploymentLogUrl: data?.log_url ?? preview.lastDeploymentLogUrl,
+        deployedAt: mapped === "ready" ? (preview.deployedAt ?? now) : preview.deployedAt,
+        lastCheckedAt: now,
+        error: mapped === "failed" ? "Preview deployment failed" : preview.error,
+      },
+    });
+
+    await logActivity({
+      projectId: preview.projectId,
+      type: "preview.refreshed",
+      message: `DEV Preview refreshed (${mapped}).`,
+      metadata: {
+        previewDeploymentId: preview.id,
+        workSessionId: preview.workSessionId ?? undefined,
+        taskId: preview.taskId ?? undefined,
+        provider: "coolify",
+        status: mapped,
+        previewUrl: preview.previewUrl ?? undefined,
+        domain: preview.domain ?? undefined,
+        lastDeploymentStatus: rawStatus ?? undefined,
+      },
+    });
+
+    if (mapped === "ready") {
+      await logActivity({
+        projectId: preview.projectId,
+        type: "preview.ready",
+        message: "DEV Preview is ready.",
+        metadata: {
+          previewDeploymentId: preview.id,
+          workSessionId: preview.workSessionId ?? undefined,
+          taskId: preview.taskId ?? undefined,
+          provider: "coolify",
+          status: "ready",
+          previewUrl: preview.previewUrl ?? undefined,
+          domain: preview.domain ?? undefined,
+        },
+      });
+    } else if (mapped === "failed") {
+      await logActivity({
+        projectId: preview.projectId,
+        type: "preview.failed",
+        message: "DEV Preview deployment failed.",
+        metadata: {
+          previewDeploymentId: preview.id,
+          workSessionId: preview.workSessionId ?? undefined,
+          taskId: preview.taskId ?? undefined,
+          provider: "coolify",
+          status: "failed",
+          previewUrl: preview.previewUrl ?? undefined,
+          lastDeploymentStatus: rawStatus ?? undefined,
+        },
+      });
+    }
+
+    return updated;
+  } catch (error) {
+    return prisma.previewDeployment.update({
+      where: { id: preview.id },
+      data: {
+        lastCheckedAt: new Date(),
+        error: error instanceof Error ? error.message : "Could not refresh preview",
+      },
+    });
+  }
 }
 
 // ── Orchestration ────────────────────────────────────────────────────────────
@@ -148,9 +353,11 @@ export async function prepareDevPreview(
 ): Promise<PreparedPreview> {
   const mode = getPreviewRunnerMode();
   const cfg = getCoolifyConfig();
-  const { projectId, taskId, workSessionId, repositoryFullName, branchName, pullRequestNumber, commitSha } = input;
+  const { projectId, taskId, workSessionId, repositoryFullName, branchName, pullRequestNumber, commitSha } =
+    input;
 
-  // Reuse an existing preview for this session if there is one.
+  const requestedAt = new Date();
+
   const existing = workSessionId
     ? await prisma.previewDeployment.findFirst({
         where: { workSessionId, projectId },
@@ -158,9 +365,7 @@ export async function prepareDevPreview(
       })
     : null;
 
-  const requestedAt = new Date();
-
-  const upsertData = {
+  const base = {
     projectId,
     taskId: taskId ?? null,
     workSessionId,
@@ -174,210 +379,209 @@ export async function prepareDevPreview(
   // ── disabled ──
   if (mode === "disabled") {
     const error = "DEV Preview runner is not configured (PREVIEW_RUNNER_MODE=disabled).";
-    if (existing) {
-      await prisma.previewDeployment.update({
-        where: { id: existing.id },
-        data: {
-          status: "not_configured",
-          provider: existing.provider || "coolify",
-          error,
-          requestedAt,
-        },
-      });
-      return { id: existing.id, status: "not_configured", provider: existing.provider || "coolify", previewUrl: existing.previewUrl, error };
-    }
-    const created = await prisma.previewDeployment.create({
-      data: { ...upsertData, provider: "coolify", status: "not_configured", error },
-    });
-    return { id: created.id, status: "not_configured", provider: "coolify", previewUrl: null, error };
+    const row = existing
+      ? await prisma.previewDeployment.update({
+          where: { id: existing.id },
+          data: { status: "not_configured", provider: existing.provider || "coolify", error, requestedAt },
+        })
+      : await prisma.previewDeployment.create({
+          data: { ...base, provider: "coolify", status: "not_configured", error },
+        });
+    return { id: row.id, status: "not_configured", provider: row.provider, previewUrl: row.previewUrl, error };
   }
 
   // ── manual ──
   if (mode === "manual") {
     const error = "Register a manual preview URL using the manual endpoint.";
-    if (existing) {
-      await prisma.previewDeployment.update({
-        where: { id: existing.id },
-        data: { status: "not_configured", provider: "manual", error, requestedAt },
-      });
-      return { id: existing.id, status: "not_configured", provider: "manual", previewUrl: existing.previewUrl, error };
-    }
-    const created = await prisma.previewDeployment.create({
-      data: { ...upsertData, provider: "manual", status: "not_configured", error },
-    });
-    return { id: created.id, status: "not_configured", provider: "manual", previewUrl: null, error };
+    const row = existing
+      ? await prisma.previewDeployment.update({
+          where: { id: existing.id },
+          data: { status: "not_configured", provider: "manual", error, requestedAt },
+        })
+      : await prisma.previewDeployment.create({
+          data: { ...base, provider: "manual", status: "not_configured", error },
+        });
+    return { id: row.id, status: "not_configured", provider: "manual", previewUrl: row.previewUrl, error };
   }
 
   // ── coolify_api ──
   if (!isCoolifyConfigured()) {
-    const error = "Coolify API token is not configured.";
-    if (existing) {
-      await prisma.previewDeployment.update({
-        where: { id: existing.id },
-        data: { status: "not_configured", provider: "coolify", error, requestedAt },
-      });
-      return { id: existing.id, status: "not_configured", provider: "coolify", previewUrl: existing.previewUrl, error };
-    }
-    const created = await prisma.previewDeployment.create({
-      data: { ...upsertData, provider: "coolify", status: "not_configured", error },
-    });
-    return { id: created.id, status: "not_configured", provider: "coolify", previewUrl: null, error };
+    const error = "Coolify API token is not configured (COOLIFY_API_TOKEN).";
+    const row = existing
+      ? await prisma.previewDeployment.update({
+          where: { id: existing.id },
+          data: { status: "not_configured", provider: "coolify", error, requestedAt },
+        })
+      : await prisma.previewDeployment.create({
+          data: { ...base, provider: "coolify", status: "not_configured", error },
+        });
+    return { id: row.id, status: "not_configured", provider: "coolify", previewUrl: row.previewUrl, error };
   }
 
   const connection = await checkCoolifyConnection();
   if (!connection.ok) {
     const error = `Could not reach Coolify API: ${connection.error ?? "unknown error"}`;
-    if (existing) {
-      await prisma.previewDeployment.update({
-        where: { id: existing.id },
-        data: { status: "failed", provider: "coolify", error, requestedAt },
-      });
-      return { id: existing.id, status: "failed", provider: "coolify", previewUrl: existing.previewUrl, error };
-    }
-    const created = await prisma.previewDeployment.create({
-      data: { ...upsertData, provider: "coolify", status: "failed", error },
-    });
-    return { id: created.id, status: "failed", provider: "coolify", previewUrl: null, error };
+    const row = existing
+      ? await prisma.previewDeployment.update({
+          where: { id: existing.id },
+          data: { status: "failed", provider: "coolify", error, requestedAt },
+        })
+      : await prisma.previewDeployment.create({
+          data: { ...base, provider: "coolify", status: "failed", error },
+        });
+    return { id: row.id, status: "failed", provider: "coolify", previewUrl: row.previewUrl, error };
   }
 
   if (!repositoryFullName || !branchName) {
     const error = "Task has no repository/branch to preview.";
-    if (existing) {
-      await prisma.previewDeployment.update({
-        where: { id: existing.id },
-        data: { status: "failed", provider: "coolify", error, requestedAt },
-      });
-      return { id: existing.id, status: "failed", provider: "coolify", previewUrl: existing.previewUrl, error };
-    }
-    const created = await prisma.previewDeployment.create({
-      data: { ...upsertData, provider: "coolify", status: "failed", error },
-    });
-    return { id: created.id, status: "failed", provider: "coolify", previewUrl: null, error };
-  }
-
-  const domain = buildPreviewDomain(taskId ?? "task", workSessionId);
-
-  try {
-    const { applicationUuid, created } = await createOrReusePreviewApplication({
-      domain,
-      repositoryFullName,
-      branchName,
-    });
-
     const row = existing
       ? await prisma.previewDeployment.update({
           where: { id: existing.id },
-          data: {
-            ...upsertData,
-            provider: "coolify",
-            status: "deploying",
-            domain,
-            previewUrl: `https://${domain}`,
-            coolifyApplicationUuid: applicationUuid,
-            coolifyProjectUuid: cfg.projectUuid,
-            coolifyServerUuid: cfg.serverUuid,
-            error: null,
-            lastDeploymentStatus: null,
-            requestedAt,
-          },
+          data: { status: "failed", provider: "coolify", error, requestedAt },
         })
       : await prisma.previewDeployment.create({
-          data: {
-            ...upsertData,
-            provider: "coolify",
-            status: "deploying",
-            domain,
-            previewUrl: `https://${domain}`,
-            coolifyApplicationUuid: applicationUuid,
-            coolifyProjectUuid: cfg.projectUuid,
-            coolifyServerUuid: cfg.serverUuid,
-          },
+          data: { ...base, provider: "coolify", status: "failed", error },
         });
+    return { id: row.id, status: "failed", provider: "coolify", previewUrl: row.previewUrl, error };
+  }
 
-    const deployment = await triggerPreviewDeployment(applicationUuid);
+  const domain = existing?.domain ?? buildPreviewDomain(taskId ?? "task", workSessionId);
 
-    const updated = await prisma.previewDeployment.update({
+  // Create (or reuse) the Forge PreviewDeployment row first.
+  const row = existing
+    ? await prisma.previewDeployment.update({
+        where: { id: existing.id },
+        data: {
+          ...base,
+          provider: "coolify",
+          status: "creating",
+          domain,
+          previewUrl: `https://${domain}`,
+          coolifyProjectUuid: cfg.projectUuid,
+          coolifyServerUuid: cfg.serverUuid,
+          error: null,
+        },
+      })
+    : await prisma.previewDeployment.create({
+        data: {
+          ...base,
+          provider: "coolify",
+          status: "creating",
+          domain,
+          previewUrl: `https://${domain}`,
+          coolifyProjectUuid: cfg.projectUuid,
+          coolifyServerUuid: cfg.serverUuid,
+        },
+      });
+
+  await logActivity({
+    projectId: row.projectId,
+    type: "preview.created",
+    message: "DEV Preview record created.",
+    metadata: {
+      previewDeploymentId: row.id,
+      workSessionId: row.workSessionId ?? undefined,
+      taskId: row.taskId ?? undefined,
+      provider: "coolify",
+      status: "creating",
+      previewUrl: row.previewUrl ?? undefined,
+      domain: row.domain ?? undefined,
+      branchName: row.branchName ?? undefined,
+    },
+  });
+
+  try {
+    const { applicationUuid, created, reused } = await createOrReusePreviewApplication({
+      projectId: row.projectId,
+      taskId: taskId ?? "task",
+      workSessionId,
+      repositoryFullName,
+      branchName,
+      domain,
+      commitSha: commitSha ?? null,
+    });
+
+    await prisma.previewDeployment.update({
       where: { id: row.id },
-      data: {
-        coolifyDeploymentUuid: deployment.deploymentUuid,
-        lastDeploymentStatus: deployment.status,
-        status: "deploying",
+      data: { coolifyApplicationUuid: applicationUuid },
+    });
+
+    await logActivity({
+      projectId: row.projectId,
+      type: created ? "preview.application_created" : "preview.application_reused",
+      message: created
+        ? "Coolify preview application created."
+        : "Coolify preview application reused.",
+      metadata: {
+        previewDeploymentId: row.id,
+        workSessionId: row.workSessionId ?? undefined,
+        taskId: row.taskId ?? undefined,
+        provider: "coolify",
+        status: "creating",
+        previewUrl: row.previewUrl ?? undefined,
+        domain: row.domain ?? undefined,
+        branchName: row.branchName ?? undefined,
       },
     });
 
+    // Trigger the deployment.
+    await triggerPreviewDeployment(row.id);
+
+    const updated = await prisma.previewDeployment.findUnique({ where: { id: row.id } });
     return {
-      id: updated.id,
-      status: "deploying",
+      id: row.id,
+      status: (updated?.status as PreviewStatus) ?? "deploying",
       provider: "coolify",
-      previewUrl: updated.previewUrl,
+      previewUrl: updated?.previewUrl ?? null,
       error: null,
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown preview error";
-    if (existing) {
-      await prisma.previewDeployment.update({
-        where: { id: existing.id },
-        data: { status: "failed", provider: "coolify", error: message, requestedAt },
-      });
-      return { id: existing.id, status: "failed", provider: "coolify", previewUrl: existing.previewUrl, error: message };
-    }
-    const created = await prisma.previewDeployment.create({
-      data: { ...upsertData, provider: "coolify", status: "failed", error: message },
+    const message = error instanceof Error ? error.message : "Unknown preview error";
+    await prisma.previewDeployment.update({
+      where: { id: row.id },
+      data: { status: "failed", provider: "coolify", error: message },
     });
-    return { id: created.id, status: "failed", provider: "coolify", previewUrl: null, error: message };
+    await logActivity({
+      projectId: row.projectId,
+      type: "preview.failed",
+      message: `DEV Preview failed: ${message}`,
+      metadata: {
+        previewDeploymentId: row.id,
+        workSessionId: row.workSessionId ?? undefined,
+        taskId: row.taskId ?? undefined,
+        provider: "coolify",
+        status: "failed",
+        previewUrl: row.previewUrl ?? undefined,
+        domain: row.domain ?? undefined,
+      },
+    });
+    return {
+      id: row.id,
+      status: "failed",
+      provider: "coolify",
+      previewUrl: row.previewUrl,
+      error: message,
+    };
   }
 }
 
 /**
- * Refreshes a preview deployment. For provider "coolify" it queries the
+ * Refreshes a preview deployment. For provider "coolify" it queries the live
  * deployment status from Coolify; for "manual" it only bumps lastCheckedAt.
  */
-export async function refreshPreviewDeployment(
-  previewDeploymentId: string
-) {
+export async function refreshPreviewDeployment(previewDeploymentId: string) {
   const preview = await prisma.previewDeployment.findUnique({
     where: { id: previewDeploymentId },
   });
   if (!preview) throw new Error("Preview deployment not found");
 
-  const now = new Date();
-
-  if (preview.provider === "coolify" && preview.coolifyDeploymentUuid && isCoolifyConfigured()) {
-    try {
-      const status = await getPreviewDeploymentStatus(preview.coolifyDeploymentUuid);
-      let newStatus: PreviewStatus = preview.status as PreviewStatus;
-      if (status.status === "finished" || status.status === "success") {
-        newStatus = "ready";
-      } else if (status.status === "failed" || status.status === "error" || status.status === "cancelled") {
-        newStatus = "failed";
-      } else if (status.status === "in_progress" || status.status === "queued" || status.status === "running") {
-        newStatus = "deploying";
-      }
-      return prisma.previewDeployment.update({
-        where: { id: preview.id },
-        data: {
-          status: newStatus,
-          lastDeploymentStatus: status.status,
-          lastDeploymentLogUrl: status.logUrl,
-          lastCheckedAt: now,
-          deployedAt: newStatus === "ready" ? (preview.deployedAt ?? now) : preview.deployedAt,
-          error: newStatus === "failed" ? "Preview deployment failed" : preview.error,
-        },
-      });
-    } catch (error) {
-      return prisma.previewDeployment.update({
-        where: { id: preview.id },
-        data: {
-          lastCheckedAt: now,
-          error: error instanceof Error ? error.message : "Could not refresh preview",
-        },
-      });
-    }
+  if (preview.provider === "coolify" && preview.coolifyDeploymentUuid) {
+    return getPreviewDeploymentStatus(preview.id);
   }
 
+  // Manual (or coolify without a deployment uuid yet): just touch lastCheckedAt.
   return prisma.previewDeployment.update({
     where: { id: preview.id },
-    data: { lastCheckedAt: now },
+    data: { lastCheckedAt: new Date() },
   });
 }

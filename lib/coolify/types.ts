@@ -25,6 +25,10 @@ export interface PreviewRunnerConfig {
   projectUuid: string | null;
   environmentName: string;
   domainSuffix: string;
+  defaultPort: string;
+  buildPack: string;
+  appNamePrefix: string;
+  deployTimeoutMs: number;
 }
 
 export interface CoolifyConnectionStatus {

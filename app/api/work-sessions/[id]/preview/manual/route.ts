@@ -108,6 +108,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     data: {
       result: {
         ...currentResult,
+        previewId: preview.id,
         previewUrl,
         previewStatus: "ready",
       },

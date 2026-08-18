@@ -13,6 +13,7 @@ import {
   getPreviewRunnerConfig,
 } from "@/lib/coolify/preview";
 import { getCoolifyConfig, isCoolifyConfigured } from "@/lib/coolify/client";
+import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
 export const dynamic = "force-dynamic";
 
@@ -221,6 +222,82 @@ export default async function SettingsPage() {
               </div>
             ))}
           </dl>
+        </div>
+
+        <div className="mt-8 rounded-xl border border-border bg-surface p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+            Coolify Preview Runner
+          </h2>
+          <p className="mt-1 text-xs text-text-dim">
+            DEV Preview runner over the Coolify API. The token is never shown.
+          </p>
+          <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Runner mode
+              </dt>
+              <dd className="mt-0.5 text-neutral-100">{previewMode}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Base URL
+              </dt>
+              <dd className="mt-0.5 break-all text-neutral-100">
+                {previewCfg.baseUrl}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Token
+              </dt>
+              <dd className="mt-0.5 text-neutral-100">
+                {previewCfg.hasToken ? "Hidden (set)" : "Not set"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Server UUID
+              </dt>
+              <dd className="mt-0.5 text-neutral-100">
+                {previewCfg.serverUuid ? "set" : "missing"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Project UUID
+              </dt>
+              <dd className="mt-0.5 text-neutral-100">
+                {previewCfg.projectUuid ? "set" : "missing"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Environment / domain suffix
+              </dt>
+              <dd className="mt-0.5 text-neutral-100">
+                {previewCfg.environmentName} · {previewCfg.domainSuffix}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Port / build pack / app prefix
+              </dt>
+              <dd className="mt-0.5 text-neutral-100">
+                {previewCfg.defaultPort} / {previewCfg.buildPack} / {previewCfg.appNamePrefix}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Deploy timeout
+              </dt>
+              <dd className="mt-0.5 text-neutral-100">
+                {Math.round(previewCfg.deployTimeoutMs / 1000)}s
+              </dd>
+            </div>
+          </dl>
+          <div className="mt-4">
+            <CoolifyDiagnostics />
+          </div>
         </div>
       </div>
     </AppShell>

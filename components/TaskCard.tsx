@@ -59,6 +59,7 @@ export type LatestWorkSessionSummary = {
     prUrl?: string | null;
     builderCommitUrl?: string | null;
     checks?: { status?: string; summary?: string | null } | null;
+    previewId?: string | null;
     previewUrl?: string | null;
     previewStatus?: string | null;
   } | null;
@@ -146,6 +147,7 @@ export function TaskCard({
           ) : null}
           <TaskDevPreview
             workSessionId={workSession.id}
+            previewId={workSession.result?.previewId ?? null}
             status={workSession.result?.previewStatus ?? null}
             previewUrl={workSession.result?.previewUrl ?? null}
           />

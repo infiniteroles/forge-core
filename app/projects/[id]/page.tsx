@@ -67,6 +67,7 @@ export default async function ProjectDetailPage({ params }: Props) {
             prUrl?: string | null;
             builderCommitUrl?: string | null;
             checks?: { status?: string; summary?: string | null } | null;
+            previewId?: string | null;
             previewUrl?: string | null;
             previewStatus?: string | null;
           })
@@ -81,6 +82,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         checks: result?.checks
           ? { status: result.checks.status ?? "skipped", summary: result.checks.summary ?? null }
           : null,
+        previewId: result?.previewId ?? null,
         previewUrl: result?.previewUrl ?? null,
         previewStatus: result?.previewStatus ?? null,
       },

@@ -153,6 +153,7 @@ On Coolify:
 - `POST /api/work-sessions/[id]/preview/prepare` — prepare a DEV preview for a work session (disabled → `not_configured`, manual → pending, coolify_api → create/reuse + deploy).
 - `POST /api/preview-deployments/[id]/refresh` — refresh a preview deployment status (coolify API or manual).
 - `POST /api/work-sessions/[id]/preview/manual` — register a manual preview URL (`{ "previewUrl": "https://..." }`).
+- `GET /api/settings/coolify/diagnostics` — Coolify/preview runner diagnostics (never returns the token).
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -991,11 +992,12 @@ error: "DEV Preview runner is not configured" }` (HTTP 200).
 
 ### ActivityLog
 
-`preview.prepare_requested`, `preview.created`, `preview.deployment_started`,
-`preview.ready`, `preview.failed`, `preview.not_configured`, `preview.refreshed`,
+`preview.prepare_requested`, `preview.created`, `preview.application_reused`,
+`preview.application_created`, `preview.deployment_started`, `preview.ready`,
+`preview.failed`, `preview.not_configured`, `preview.refreshed`,
 `preview.manual_registered`. Metadata includes `previewDeploymentId`,
-`workSessionId`, `taskId`, `previewUrl`, `status`, `provider` — never tokens or
-secrets.
+`workSessionId`, `taskId`, `provider`, `status`, `previewUrl`, `domain`,
+`branchName` — never tokens or secrets.
 
 ### Guardrails
 
@@ -1015,6 +1017,99 @@ never printed.
 ### Next steps
 
 Enable `coolify_api` with a real token, add preview cleanup, optional automatic
+preview after sessions, and a "Stop preview" action.
+
+## Coolify API Preview Runner
+
+This phase completes the real `coolify_api` mode: Forge talks to the Coolify
+REST API to create/reuse a preview application for the task branch, assigns a
+`*.dev.core01.io` domain, launches a deployment and tracks its status.
+
+### Creating a Coolify API token
+
+1. Log into Coolify (`https://forge.core01.io`) → **Keys & Tokens** →
+   **API tokens** → **Create new token**.
+2. Copy the generated token and add it to the app environment variables on
+   Coolify as `COOLIFY_API_TOKEN` (encrypted). Never commit it to the repo and
+   never paste it into Forge — Forge never prints it.
+3. Set `PREVIEW_RUNNER_MODE=coolify_api`.
+
+### Required variables
+
+```
+COOLIFY_BASE_URL="https://forge.core01.io"
+COOLIFY_API_TOKEN=""                # real token (Coolify Keys & Tokens)
+COOLIFY_SERVER_UUID=""              # optional: auto-discovered if empty
+COOLIFY_PROJECT_UUID=""             # optional: auto-discovered if empty
+COOLIFY_ENVIRONMENT_NAME="dev"
+PREVIEW_DOMAIN_SUFFIX=".dev.core01.io"
+PREVIEW_RUNNER_MODE="coolify_api"
+PREVIEW_DEFAULT_PORT="3000"
+PREVIEW_BUILD_PACK="dockerfile"
+PREVIEW_APP_NAME_PREFIX="forge-preview"
+PREVIEW_DEPLOY_TIMEOUT_MS="300000"
+```
+
+### Getting the server / project UUID
+
+`GET /api/settings/coolify/diagnostics` (or the **Check Coolify connection**
+button in `/settings`) lists the configured state and, when the env vars are
+empty, best-effort discovers the first Coolify server and project. If the UUIDs
+are missing the diagnostics report says `serverUuidSource: missing` /
+`projectUuidSource: missing` and you should set them explicitly in Coolify env
+vars.
+
+### Prepare DEV Preview flow (coolify_api)
+
+```
+validate session/task/project
+→ check branch + repo
+→ compute domain (preview-<taskShortId>.dev.core01.io)
+→ create/reuse PreviewDeployment (status creating)
+→ create/reuse Coolify app (forge-preview-<taskShortId>)
+→ trigger deployment (status deploying, coolifyDeploymentUuid saved)
+→ refresh maps Coolify status → queued/deploying/ready/failed/stopped
+→ Open DEV Preview
+```
+
+Never deploys to production, never merges, never touches `main`.
+
+### Diagnostics endpoint
+
+```
+GET /api/settings/coolify/diagnostics
+```
+
+Authenticated. Returns `{ configured, baseUrl, hasToken, runnerMode,
+connection, serverUuid, projectUuid, environmentName, … }`. Never returns the
+token. When `COOLIFY_API_TOKEN` is missing it returns
+`{ ok: false, configured: false, error: "COOLIFY_API_TOKEN is not configured" }`.
+
+### Troubleshooting
+
+- **401 Unauthorized** → token missing/incorrect or insufficient permissions.
+  Re-check `COOLIFY_API_TOKEN` in Coolify Keys & Tokens.
+- **404 endpoint** → the installed Coolify version/API differs; check the
+  client in `lib/coolify/client.ts` (base path `/api/v1`) and the actual
+  endpoints exposed by the instance.
+- **No server UUID** → set `COOLIFY_SERVER_UUID` (or let diagnostics discover it).
+- **No project UUID** → set `COOLIFY_PROJECT_UUID` (or let diagnostics discover it).
+- **Domain not reachable** → verify the DNS wildcard `*.dev.core01.io` points to
+  the VPS (`169.58.177.100`) and that the Coolify proxy picks up the new domain.
+- **Deploy failed** → check the deployment logs in Coolify (the preview stores
+  `lastDeploymentLogUrl`).
+
+### Current limitations
+
+- `coolify_api` is implemented but requires a real token; until then previews
+  stay `not_configured`/`failed` with a clear message and `manual` mode keeps
+  working.
+- No preview auto-trigger at the end of a session, no cleanup/stop, no
+  multi-environment management, no background queues.
+
+### Next steps
+
+Enable `coolify_api` with a real token, preview cleanup, optional automatic
 preview after sessions, and a "Stop preview" action.
 
 ### Current limitations

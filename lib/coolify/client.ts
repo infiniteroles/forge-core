@@ -10,6 +10,10 @@ export interface CoolifyConfig {
   projectUuid: string | null;
   environmentName: string;
   domainSuffix: string;
+  defaultPort: string;
+  buildPack: string;
+  appNamePrefix: string;
+  deployTimeoutMs: number;
 }
 
 /**
@@ -24,6 +28,10 @@ export function getCoolifyConfig(): CoolifyConfig {
   const projectUuid = process.env.COOLIFY_PROJECT_UUID ?? "";
   const environmentName = process.env.COOLIFY_ENVIRONMENT_NAME ?? "dev";
   const domainSuffix = process.env.PREVIEW_DOMAIN_SUFFIX ?? ".dev.core01.io";
+  const defaultPort = process.env.PREVIEW_DEFAULT_PORT ?? "3000";
+  const buildPack = process.env.PREVIEW_BUILD_PACK ?? "dockerfile";
+  const appNamePrefix = process.env.PREVIEW_APP_NAME_PREFIX ?? "forge-preview";
+  const deployTimeoutRaw = Number(process.env.PREVIEW_DEPLOY_TIMEOUT_MS ?? "");
 
   return {
     baseUrl,
@@ -33,6 +41,13 @@ export function getCoolifyConfig(): CoolifyConfig {
     projectUuid: projectUuid.trim() || null,
     environmentName,
     domainSuffix,
+    defaultPort,
+    buildPack,
+    appNamePrefix,
+    deployTimeoutMs:
+      Number.isFinite(deployTimeoutRaw) && deployTimeoutRaw > 0
+        ? deployTimeoutRaw
+        : 300_000,
   };
 }
 
@@ -141,4 +156,80 @@ export async function checkCoolifyConnection(): Promise<CoolifyConnectionStatus>
       error: error instanceof Error ? error.message : "Unknown Coolify API error",
     };
   }
+}
+
+// ── Discovery helpers ────────────────────────────────────────────────────────
+
+export interface CoolifyServerInfo {
+  uuid: string | null;
+  name: string | null;
+  ip: string | null;
+}
+
+export interface CoolifyProjectInfo {
+  uuid: string | null;
+  name: string | null;
+  environments: string[];
+}
+
+export interface CoolifyApplicationInfo {
+  uuid: string | null;
+  name: string | null;
+  domains: string | null;
+  gitBranch: string | null;
+  status: string | null;
+}
+
+function toServerInfo(raw: Record<string, unknown>): CoolifyServerInfo {
+  return {
+    uuid: typeof raw.uuid === "string" ? raw.uuid : null,
+    name: typeof raw.name === "string" ? raw.name : null,
+    ip: typeof raw.ip === "string" ? raw.ip : null,
+  };
+}
+
+function toProjectInfo(raw: Record<string, unknown>): CoolifyProjectInfo {
+  let environments: string[] = [];
+  if (Array.isArray(raw.environments)) {
+    environments = raw.environments
+      .map((e) =>
+        e && typeof e === "object"
+          ? (e as { name?: string }).name ?? ""
+          : ""
+      )
+      .filter(Boolean);
+  }
+  return {
+    uuid: typeof raw.uuid === "string" ? raw.uuid : null,
+    name: typeof raw.name === "string" ? raw.name : null,
+    environments,
+  };
+}
+
+function toApplicationInfo(raw: Record<string, unknown>): CoolifyApplicationInfo {
+  return {
+    uuid: typeof raw.uuid === "string" ? raw.uuid : null,
+    name: typeof raw.name === "string" ? raw.name : null,
+    domains: typeof raw.domains === "string" ? raw.domains : null,
+    gitBranch: typeof raw.git_branch === "string" ? raw.git_branch : null,
+    status: typeof raw.status === "string" ? raw.status : null,
+  };
+}
+
+export async function listCoolifyServers(): Promise<CoolifyServerInfo[]> {
+  const data = await coolifyFetch<unknown[]>("/servers");
+  if (!Array.isArray(data)) return [];
+  return data.map((d) => toServerInfo((d ?? {}) as Record<string, unknown>));
+}
+
+export async function listCoolifyProjects(): Promise<CoolifyProjectInfo[]> {
+  const data = await coolifyFetch<unknown[]>("/projects");
+  if (!Array.isArray(data)) return [];
+  return data.map((d) => toProjectInfo((d ?? {}) as Record<string, unknown>));
+}
+
+export async function listCoolifyApplications(): Promise<CoolifyApplicationInfo[]> {
+  const data = await coolifyFetch<unknown[]>("/applications");
+  if (!Array.isArray(data)) return [];
+  return data.map((d) => toApplicationInfo((d ?? {}) as Record<string, unknown>));
 }

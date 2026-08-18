@@ -3,25 +3,30 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-interface PreviewData {
+export interface DevPreviewData {
   id: string;
   status: string;
   provider: string | null;
   previewUrl: string | null;
+  domain: string | null;
+  branchName: string | null;
+  commitSha: string | null;
+  lastDeploymentStatus: string | null;
+  lastCheckedAt: string | null;
   error: string | null;
 }
 
 /**
  * DEV Preview panel for a work session. Handles all states:
- * no preview / not_configured / deploying / ready / failed, plus the manual
- * URL registration form. Never deploys to production, never merges.
+ * not_configured / creating / queued / deploying / ready / failed / stopped,
+ * plus the manual URL registration form. Never deploys to production.
  */
 export function DevPreviewPanel({
   workSessionId,
   preview,
 }: {
   workSessionId: string;
-  preview?: PreviewData | null;
+  preview?: DevPreviewData | null;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -41,8 +46,6 @@ export function DevPreviewPanel({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        // Always refresh so the server re-renders the created/updated preview
-        // record (even when ok:false with status not_configured/failed).
         router.refresh();
         if (data.error) setError(data.error);
       } else {
@@ -83,7 +86,11 @@ export function DevPreviewPanel({
         ? "bg-sky-500/10 text-sky-300"
         : status === "failed"
           ? "bg-red-500/10 text-red-300"
-          : "bg-neutral-700/40 text-neutral-300";
+          : status === "stopped"
+            ? "bg-neutral-700/40 text-neutral-300"
+            : "bg-neutral-700/40 text-neutral-400";
+
+  const active = status === "deploying" || status === "queued" || status === "creating";
 
   return (
     <div className="rounded-xl border border-border bg-surface p-6">
@@ -99,18 +106,18 @@ export function DevPreviewPanel({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {!status || status === "not_configured" || status === "failed" ? (
+        {!status || status === "not_configured" || status === "failed" || status === "stopped" ? (
           <button
             type="button"
             onClick={prepare}
             disabled={loading}
             className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
           >
-            {loading ? "Preparing…" : "Prepare DEV Preview"}
+            {loading ? "Preparing…" : status === "failed" ? "Retry" : "Prepare DEV Preview"}
           </button>
         ) : null}
 
-        {status === "deploying" || status === "queued" || status === "creating" ? (
+        {active ? (
           <button
             type="button"
             onClick={refreshStatus}
@@ -157,7 +164,7 @@ export function DevPreviewPanel({
         </p>
       ) : null}
 
-      {status === "deploying" || status === "queued" || status === "creating" ? (
+      {active ? (
         <p className="mt-2 text-xs text-neutral-300">
           Deploying preview… You can refresh the status in a moment.
         </p>
@@ -167,6 +174,38 @@ export function DevPreviewPanel({
         <p className="mt-2 text-xs text-red-300">
           Preview failed{preview?.error ? `: ${preview.error}` : "."}
         </p>
+      ) : null}
+
+      {status === "stopped" ? (
+        <p className="mt-2 text-xs text-neutral-300">Preview stopped/cancelled.</p>
+      ) : null}
+
+      {preview &&
+      (preview.domain ||
+        preview.branchName ||
+        preview.commitSha ||
+        preview.lastDeploymentStatus) ? (
+        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+          {preview.domain ? <Detail label="Domain" value={preview.domain} /> : null}
+          {preview.previewUrl ? (
+            <Detail label="URL" value={preview.previewUrl} mono breakAll />
+          ) : null}
+          {preview.branchName ? (
+            <Detail label="Branch" value={preview.branchName} mono />
+          ) : null}
+          {preview.commitSha ? (
+            <Detail label="Commit" value={preview.commitSha.slice(0, 12)} mono />
+          ) : null}
+          {preview.lastDeploymentStatus ? (
+            <Detail label="Deployment status" value={preview.lastDeploymentStatus} mono />
+          ) : null}
+          {preview.lastCheckedAt ? (
+            <Detail
+              label="Last checked"
+              value={new Date(preview.lastCheckedAt).toLocaleString()}
+            />
+          ) : null}
+        </dl>
       ) : null}
 
       {manualOpen ? (
@@ -202,6 +241,27 @@ export function DevPreviewPanel({
       ) : null}
 
       {error ? <p className="mt-2 text-xs text-red-300">{error}</p> : null}
+    </div>
+  );
+}
+
+function Detail({
+  label,
+  value,
+  mono,
+  breakAll,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  breakAll?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-text-dim">{label}</dt>
+      <dd className={`text-neutral-200 ${mono ? "font-mono" : ""} ${breakAll ? "break-all" : ""}`}>
+        {value}
+      </dd>
     </div>
   );
 }

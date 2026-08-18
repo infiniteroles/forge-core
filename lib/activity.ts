@@ -69,11 +69,13 @@ export const ACTIVITY_TYPES = [
   "work_session.checks.skipped",
   "preview.prepare_requested",
   "preview.created",
+  "preview.application_reused",
+  "preview.application_created",
   "preview.deployment_started",
   "preview.ready",
   "preview.failed",
-  "preview.not_configured",
   "preview.refreshed",
+  "preview.not_configured",
   "preview.manual_registered",
 ] as const;
 

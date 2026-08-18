@@ -113,6 +113,13 @@ export default async function WorkSessionPage({ params }: Props) {
                   status: session.previewDeployments[0].status,
                   provider: session.previewDeployments[0].provider,
                   previewUrl: session.previewDeployments[0].previewUrl,
+                  domain: session.previewDeployments[0].domain,
+                  branchName: session.previewDeployments[0].branchName,
+                  commitSha: session.previewDeployments[0].commitSha,
+                  lastDeploymentStatus: session.previewDeployments[0].lastDeploymentStatus,
+                  lastCheckedAt: session.previewDeployments[0].lastCheckedAt
+                    ? session.previewDeployments[0].lastCheckedAt.toISOString()
+                    : null,
                   error: session.previewDeployments[0].error,
                 }
               : null
