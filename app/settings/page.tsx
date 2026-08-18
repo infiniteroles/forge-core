@@ -13,6 +13,11 @@ import {
   getPreviewRunnerConfig,
 } from "@/lib/coolify/preview";
 import { getCoolifyConfig, isCoolifyConfigured } from "@/lib/coolify/client";
+import {
+  getPreviewEnvConfig,
+  isPreviewEnvKeyForbidden,
+  PREVIEW_ENV_DEFAULT_ALLOWED_KEYS,
+} from "@/lib/coolify/preview-env-policy";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +41,20 @@ export default async function SettingsPage() {
   const previewCfg = getPreviewRunnerConfig();
   const coolifyCfg = getCoolifyConfig();
   const coolifyConfigured = isCoolifyConfigured();
+  const previewEnv = getPreviewEnvConfig();
+
+  const previewEnvAvailability = PREVIEW_ENV_DEFAULT_ALLOWED_KEYS.map((key) => {
+    if (key === "APP_URL" || key === "NEXT_PUBLIC_APP_URL") {
+      return { key, status: "generated from preview domain" };
+    }
+    if (key === "NODE_ENV") {
+      return { key, status: previewEnv.nodeEnv };
+    }
+    const present = Boolean(
+      process.env[key] && String(process.env[key]).trim().length > 0
+    );
+    return { key, status: present ? "available" : "missing" };
+  });
 
   const rows: { label: string; value: string }[] = [
     { label: "App name", value: "Forge Core01" },
@@ -297,6 +316,81 @@ export default async function SettingsPage() {
           </dl>
           <div className="mt-4">
             <CoolifyDiagnostics />
+          </div>
+        </div>
+
+        <div className="mt-8 rounded-xl border border-border bg-surface p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+            Preview Runtime Environment
+          </h2>
+          <p className="mt-1 text-xs text-text-dim">
+            Env vars injected into preview applications so they can boot. Values
+            are never shown; sensitive keys are always blocked.
+          </p>
+          <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Mode
+              </dt>
+              <dd className="mt-0.5 font-mono text-neutral-100">{previewEnv.mode}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Allowed keys
+              </dt>
+              <dd className="mt-0.5 break-all font-mono text-neutral-100">
+                {previewEnv.allowedKeys.join(", ") || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                App URL template
+              </dt>
+              <dd className="mt-0.5 break-all font-mono text-neutral-100">
+                {previewEnv.appUrlTemplate}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                NODE_ENV
+              </dt>
+              <dd className="mt-0.5 font-mono text-neutral-100">{previewEnv.nodeEnv}</dd>
+            </div>
+          </dl>
+
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+              Key availability
+            </h3>
+            <ul className="mt-2 grid grid-cols-1 gap-x-8 gap-y-1 text-xs sm:grid-cols-2">
+              {previewEnvAvailability.map(({ key, status }) => (
+                <li key={key} className="flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-neutral-200">{key}</span>
+                  <span
+                    className={
+                      status === "available"
+                        ? "text-emerald-300"
+                        : status === "missing"
+                          ? "text-red-300"
+                          : "text-neutral-300"
+                    }
+                  >
+                    {status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+              Forbidden sensitive patterns
+            </h3>
+            <p className="mt-1 break-all font-mono text-xs text-neutral-400">
+              {"COOLIFY_API_TOKEN, GITHUB_TOKEN, DEEPSEEK_API_KEY, OPENAI_API_KEY, " +
+                "ANTHROPIC_API_KEY, LLM_API_KEY, LLM_REQUEST_TIMEOUT_MS, PRIVATE_KEY, " +
+                "SSH_KEY, *_TOKEN, *_PASSWORD, *_SECRET, *.credentials"}
+            </p>
           </div>
         </div>
       </div>

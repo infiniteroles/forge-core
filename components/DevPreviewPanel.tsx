@@ -14,6 +14,14 @@ export interface DevPreviewData {
   lastDeploymentStatus: string | null;
   lastCheckedAt: string | null;
   error: string | null;
+  env?: {
+    mode: string | null;
+    configured: boolean | null;
+    keys: string[];
+    skipped: string[];
+    unavailable: string[];
+    error: string | null;
+  } | null;
 }
 
 /**
@@ -208,6 +216,8 @@ export function DevPreviewPanel({
         </dl>
       ) : null}
 
+      {preview?.env ? <RuntimeEnvBlock env={preview.env} /> : null}
+
       {manualOpen ? (
         <div className="mt-3 rounded-lg border border-border bg-background p-3">
           <label className="text-xs font-semibold text-neutral-200">
@@ -262,6 +272,76 @@ function Detail({
       <dd className={`text-neutral-200 ${mono ? "font-mono" : ""} ${breakAll ? "break-all" : ""}`}>
         {value}
       </dd>
+    </div>
+  );
+}
+
+/**
+ * Read-only summary of the preview runtime environment. Only key names are
+ * ever shown — never values.
+ */
+function RuntimeEnvBlock({
+  env,
+}: {
+  env: NonNullable<DevPreviewData["env"]>;
+}) {
+  const envStatus = env.error
+    ? "failed"
+    : env.mode === "disabled"
+      ? "disabled"
+      : env.configured
+        ? "configured"
+        : "skipped";
+  const envTone =
+    envStatus === "configured"
+      ? "bg-emerald-500/10 text-emerald-300"
+      : envStatus === "failed"
+        ? "bg-red-500/10 text-red-300"
+        : envStatus === "disabled"
+          ? "bg-neutral-700/40 text-neutral-400"
+          : "bg-amber-500/10 text-amber-300";
+
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-background p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+          Runtime environment
+        </h3>
+        <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${envTone}`}>
+          {envStatus}
+        </span>
+      </div>
+      <dl className="mt-2 space-y-1 text-xs">
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-text-dim">Mode</dt>
+          <dd className="font-mono text-neutral-200">{env.mode ?? "—"}</dd>
+        </div>
+        {env.keys.length > 0 ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="text-text-dim">Keys configured</dt>
+            <dd className="break-all text-right font-mono text-neutral-200">
+              {env.keys.join(", ")}
+            </dd>
+          </div>
+        ) : null}
+        {env.skipped.length > 0 ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="text-text-dim">Skipped sensitive keys</dt>
+            <dd className="break-all text-right font-mono text-neutral-200">
+              {env.skipped.join(", ")}
+            </dd>
+          </div>
+        ) : null}
+        {env.unavailable.length > 0 ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="text-text-dim">Unavailable</dt>
+            <dd className="break-all text-right font-mono text-neutral-200">
+              {env.unavailable.join(", ")}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+      {env.error ? <p className="mt-2 text-xs text-red-300">{env.error}</p> : null}
     </div>
   );
 }

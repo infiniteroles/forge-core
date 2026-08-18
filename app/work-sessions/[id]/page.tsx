@@ -6,7 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { IterationActions } from "@/components/IterationActions";
 import { RunSessionChecksButton } from "@/components/RunSessionChecksButton";
-import { DevPreviewPanel } from "@/components/DevPreviewPanel";
+import { DevPreviewPanel, type DevPreviewData } from "@/components/DevPreviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,28 @@ const STATUS_TONE: Record<string, string> = {
   failed: "bg-red-500/15 text-red-300",
   cancelled: "bg-neutral-700/40 text-neutral-400",
 };
+
+/**
+ * Extracts the safe runtime-env summary from a PreviewDeployment's metadata.
+ * Only key names are surfaced — never values.
+ */
+function previewEnvFromMetadata(metadata: unknown): DevPreviewData["env"] {
+  if (!metadata || typeof metadata !== "object") return null;
+  const meta = metadata as Record<string, unknown>;
+  const env = meta.env;
+  if (!env || typeof env !== "object") return null;
+  const e = env as Record<string, unknown>;
+  const asStringArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  return {
+    mode: typeof e.mode === "string" ? e.mode : null,
+    configured: typeof e.configured === "boolean" ? e.configured : null,
+    keys: asStringArray(e.keys),
+    skipped: asStringArray(e.skipped),
+    unavailable: asStringArray(e.unavailable),
+    error: typeof e.error === "string" ? e.error : null,
+  };
+}
 
 export default async function WorkSessionPage({ params }: Props) {
   if (!(await getSession())) redirect("/login");
@@ -121,6 +143,7 @@ export default async function WorkSessionPage({ params }: Props) {
                     ? session.previewDeployments[0].lastCheckedAt.toISOString()
                     : null,
                   error: session.previewDeployments[0].error,
+                  env: previewEnvFromMetadata(session.previewDeployments[0].metadata),
                 }
               : null
           }

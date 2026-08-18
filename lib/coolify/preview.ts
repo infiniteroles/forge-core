@@ -8,6 +8,7 @@ import {
   listCoolifyApplications,
 } from "./client";
 import { buildPreviewAppName, buildPreviewDomain } from "./preview-domain";
+import { setPreviewApplicationEnvironment } from "./environment";
 import {
   PreviewRunnerConfig,
   PreviewRunnerMode,
@@ -528,6 +529,73 @@ export async function prepareDevPreview(
         branchName: row.branchName ?? undefined,
       },
     });
+
+    // Configure the preview runtime environment BEFORE triggering the deploy so
+    // the container boots with the required runtime vars. Never copies secrets
+    // (denylist enforced in preview-env-policy). On a real API failure this
+    // throws and the outer catch marks the preview as failed with a clear error
+    // (manual fallback is documented). Intentionally skipped modes (disabled /
+    // no variables) do not throw and do not block the deploy.
+    const envResult = await setPreviewApplicationEnvironment({
+      applicationUuid,
+      domain: row.domain ?? domain,
+    });
+
+    const existingMeta =
+      row.metadata && typeof row.metadata === "object"
+        ? (row.metadata as Record<string, unknown>)
+        : {};
+    const envMeta = {
+      mode: envResult.mode,
+      configured: envResult.configured,
+      keys: envResult.keys,
+      skipped: [...envResult.skipped, ...envResult.unavailable],
+      error: envResult.error ?? null,
+      configuredAt: envResult.configuredAt ?? null,
+    };
+    await prisma.previewDeployment.update({
+      where: { id: row.id },
+      data: { metadata: { ...existingMeta, env: envMeta } },
+    });
+
+    const envActivityMeta = {
+      previewDeploymentId: row.id,
+      workSessionId: row.workSessionId ?? undefined,
+      taskId: row.taskId ?? undefined,
+      mode: envResult.mode,
+      keys: envResult.keys,
+      skipped: [...envResult.skipped, ...envResult.unavailable],
+    };
+
+    if (envResult.error) {
+      await logActivity({
+        projectId: row.projectId,
+        type: "preview.env_failed",
+        message: `Preview runtime environment failed: ${envResult.error}`,
+        metadata: envActivityMeta,
+      });
+    } else if (envResult.mode === "disabled") {
+      await logActivity({
+        projectId: row.projectId,
+        type: "preview.env_skipped",
+        message: "Preview runtime environment injection is disabled (PREVIEW_ENV_MODE=disabled).",
+        metadata: envActivityMeta,
+      });
+    } else if (envResult.configured) {
+      await logActivity({
+        projectId: row.projectId,
+        type: "preview.env_configured",
+        message: "Preview runtime environment configured.",
+        metadata: envActivityMeta,
+      });
+    } else {
+      await logActivity({
+        projectId: row.projectId,
+        type: "preview.env_skipped",
+        message: "Preview runtime environment skipped (no variables to set).",
+        metadata: envActivityMeta,
+      });
+    }
 
     // Trigger the deployment.
     await triggerPreviewDeployment(row.id);

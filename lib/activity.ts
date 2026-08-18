@@ -77,6 +77,9 @@ export const ACTIVITY_TYPES = [
   "preview.refreshed",
   "preview.not_configured",
   "preview.manual_registered",
+  "preview.env_configured",
+  "preview.env_skipped",
+  "preview.env_failed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
