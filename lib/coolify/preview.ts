@@ -125,7 +125,7 @@ export async function createOrReusePreviewApplication(input: {
     git_branch: input.branchName,
     build_pack: cfg.buildPack,
     ports_exposes: cfg.defaultPort,
-    domains: input.domain,
+    domains: `https://${input.domain}`,
     instant_deploy: false,
     name: buildPreviewAppName(input.taskId),
   };
