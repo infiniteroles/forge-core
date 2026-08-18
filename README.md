@@ -20,6 +20,7 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **PR Review Gate**: analyze a task's draft PR, summarize the diff, flag risks and recommend ready-for-review (never merges, deploys or auto-approves).
 - **Autonomous DEV Work Session**: a single "Work on this" action that runs issue → branch → plan → draft PR → Builder Proposal → Builder Commit → PR review automatically and prepares a PR for human review.
 - **Iteration Loop (Continue / Ask for changes)**: iterate on an existing task reusing the same branch and PR — a new Builder Proposal, a new commit on the same branch, a fresh PR analysis and an updated human summary.
+- **Session Checks Lite**: a lightweight internal validation stage that runs a closed allowlist of commands (`npm run lint`, `npm run build`, `npx prisma validate`) after a Builder Commit and shows a short, human summary. Never a full CI pipeline.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
@@ -147,6 +148,7 @@ On Coolify:
 - `POST /api/projects/[id]/ideas/work-session/start` — create a task from an idea and run a DEV work session.
 - `POST /api/tasks/[id]/work-session/iterate` — start an iteration (mode `iteration`) for a task with a new instruction (`{ "instruction": "..." }`), reusing task/branch/PR.
 - `POST /api/work-sessions/[id]/continue` — continue a work session; optional `{ "instruction": "..." }` (no instruction → default "continue with the next safe step").
+- `POST /api/work-sessions/[id]/checks/run` — (re)run the lightweight session checks for a work session.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -780,6 +782,112 @@ No merge, no deploy, no direct `main` writes, no automatic issue closing, no
 file deletion, no `.env`/secrets, no keys/certificates, no firewall/SSH/VPS, no
 workflow/Docker/infra edits, and the safe-file policy is never relaxed. If the
 Builder sets `safe_to_commit=false`, Forge does not force the write.
+
+## Session Checks Lite
+
+A lightweight, automatic validation stage inside Work Sessions. After Forge
+applies a Builder Commit it runs a small, closed allowlist of checks and reports
+a short result — it is **not** a CI pipeline, not a test runner and not a place
+for model-suggested commands.
+
+### When they run
+
+- In DEV sessions: `run_builder_commit → run_session_checks → analyze_pr → summarize_result`.
+- In iteration sessions: the same stage is inserted after the iteration Builder Commit.
+- If there was no new Builder Commit (or the commit was blocked with
+  `completed_with_warnings` without writing), the checks are recorded as
+  `skipped`.
+
+### Allowlist (closed, hardcoded)
+
+```
+npm run lint
+npm run build
+npx prisma validate
+```
+
+No commands come from user input or from the model. `npm test` is not run in
+this phase.
+
+### Runner modes
+
+- `SESSION_CHECKS_RUNNER=local` — enables the real runner: clone the task
+  branch into a temp dir, `npm ci`, run the allowlist commands via `spawn`
+  (no shell), bounded per-command and globally, and delete the temp dir.
+- default (or any other value) — **disabled**: every allowlist command is
+  recorded as `skipped` with the message *"Check runner not configured yet"* and
+  the session continues normally.
+
+In this deployment the runner is **disabled** by default because the app
+container does not keep the task branch or a full `node_modules`; enabling it
+would clone + `npm ci` on every session, which is slow and risky in production.
+
+### Safety limits
+
+- Per-command timeout: 120 s (`SESSION_CHECKS_TIMEOUT_MS`), global bounded.
+- Log tails capped at 8 KB each (`SESSION_CHECKS_MAX_TAIL`) — never full logs.
+- Commands run with `spawn` and `shell: false` — no shell, no arbitrary scripts.
+- Cloning uses the public `https://github.com/<owner>/<repo>.git` URL only —
+  tokens are never placed in the URL or printed.
+- Temp directory per session, removed when done.
+- Failing checks never revert, never block the session, never deploy — the
+  session is marked `completed_with_warnings` and the summary explains it.
+
+### Model
+
+`SessionCheck` (new): `workSessionId`, `projectId`, `taskId?`, `name`,
+`command`, `status` (`queued|running|passed|failed|skipped|cancelled|timeout`),
+`exitCode?`, `summary?`, `stdoutTail?`, `stderrTail?`, `startedAt`, `finishedAt?`,
+`durationMs?`, timestamps. Relations to `WorkSession` (cascade), `Project`
+(cascade) and `Task` (set-null). Migration: `20260823000000_add_session_checks`.
+
+### Orchestrator stage
+
+`lib/work-sessions/checks.ts` exports `runSessionChecks(workSessionId)` (creates
+`SessionCheck` rows + returns a short summary), the `SESSION_CHECK_ALLOWLIST`,
+`getSessionCheckRunnerConfig()` and `isSessionCheckRunnerEnabled()`.
+`stageRunSessionChecks` in `lib/work-sessions/stages.ts` runs it inside both
+pipelines and stores the compact result on the session (`result.checks`).
+
+### Manual endpoint
+
+```
+POST /api/work-sessions/[id]/checks/run
+```
+
+Authenticated. Re-runs the checks for an existing session and returns
+`{ ok, summary, checks }`. Useful to retry or backfill a session.
+
+### UI
+
+- `/work-sessions/[id]` shows a **Checks** section: name, command, status,
+  exit code, duration, summary and capped stdout/stderr tails, plus a small
+  **Run checks** button (manual re-run).
+- Task cards show a compact `Checks: passed | failed | skipped` chip on the
+  latest work session block.
+- The human summary includes a `Comprobaciones:` line (build/lint/prisma OK,
+  failed, or skipped because the runner is not configured).
+
+### ActivityLog
+
+`work_session.checks.started`, `work_session.checks.completed`,
+`work_session.checks.completed_with_warnings`, `work_session.checks.failed`,
+`work_session.checks.skipped`. Metadata includes `workSessionId`, `taskId`,
+`status` and a short `checks` array — never secrets, env vars or tokens.
+
+### Current limitations
+
+- Runner disabled by default; real local runner is behind
+  `SESSION_CHECKS_RUNNER=local` and not exercised in production yet.
+- No `npm test`, no model-suggested commands, no distributed runner, no CI.
+- Checks are advisory — failing checks mark the session
+  `completed_with_warnings` but never revert or block the PR.
+
+### Next steps
+
+Optional enablement of the local runner in a controlled environment, PR
+comments with the check summary, and (a later phase) a real build-validation
+sandbox.
 
 ### Current limitations
 

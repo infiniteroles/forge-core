@@ -50,6 +50,7 @@ model Project {
   environments         Environment[]
   tasks                Task[]
   workSessions         WorkSession[]
+  sessionChecks        SessionCheck[]
 }
 
 model WorkSession {
@@ -75,6 +76,7 @@ model WorkSession {
   parentWorkSession    WorkSession?   @relation("WorkSessionIterations", fields: [parentWorkSessionId], references: [id], onDelete: SetNull)
   childrenWorkSessions WorkSession[]  @relation("WorkSessionIterations")
   agentRuns            AgentRun[]
+  sessionChecks        SessionCheck[]
 }
 
 model Instruction {
@@ -200,4 +202,27 @@ model Task {
   sourceAgentRun   AgentRun? @relation("SourceAgentRuns", fields: [sourceAgentRunId], references: [id], onDelete: SetNull)
   agentRuns        AgentRun[] @relation("TaskRuns")
   workSessions     WorkSession[]
+  sessionChecks    SessionCheck[]
+}
+
+model SessionCheck {
+  id            String     @id @default(cuid())
+  workSessionId String
+  projectId     String
+  taskId        String?
+  name          String
+  command       String
+  status        String     @default("queued")
+  exitCode      Int?
+  summary       String?
+  stdoutTail    String?
+  stderrTail    String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  durationMs    Int?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  workSession   WorkSession @relation(fields: [workSessionId], references: [id], onDelete: Cascade)
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task          Task?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
 }

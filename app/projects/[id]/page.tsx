@@ -62,13 +62,23 @@ export default async function ProjectDetailPage({ params }: Props) {
     if (latestWorkSessionByTask.has(ws.taskId)) continue;
     const result =
       typeof ws.result === "object" && ws.result !== null
-        ? (ws.result as { prUrl?: string | null; builderCommitUrl?: string | null })
+        ? (ws.result as {
+            prUrl?: string | null;
+            builderCommitUrl?: string | null;
+            checks?: { status?: string; summary?: string | null } | null;
+          })
         : null;
     latestWorkSessionByTask.set(ws.taskId, {
       id: ws.id,
       status: ws.status,
       summary: ws.summary,
-      result: { prUrl: result?.prUrl ?? null, builderCommitUrl: result?.builderCommitUrl ?? null },
+      result: {
+        prUrl: result?.prUrl ?? null,
+        builderCommitUrl: result?.builderCommitUrl ?? null,
+        checks: result?.checks
+          ? { status: result.checks.status ?? "skipped", summary: result.checks.summary ?? null }
+          : null,
+      },
     });
   }
 

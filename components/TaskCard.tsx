@@ -57,6 +57,7 @@ export type LatestWorkSessionSummary = {
   result: {
     prUrl?: string | null;
     builderCommitUrl?: string | null;
+    checks?: { status?: string; summary?: string | null } | null;
   } | null;
 };
 
@@ -126,6 +127,19 @@ export function TaskCard({
             >
               Open PR
             </a>
+          ) : null}
+          {workSession.result?.checks?.status ? (
+            <span
+              className={`rounded px-1.5 py-0.5 font-mono ${
+                workSession.result.checks.status === "passed"
+                  ? "bg-emerald-500/10 text-emerald-300"
+                  : workSession.result.checks.status === "failed"
+                    ? "bg-red-500/10 text-red-300"
+                    : "bg-neutral-700/40 text-neutral-400"
+              }`}
+            >
+              Checks: {workSession.result.checks.status}
+            </span>
           ) : null}
         </div>
       ) : null}

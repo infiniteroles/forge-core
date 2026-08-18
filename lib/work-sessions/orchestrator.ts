@@ -9,6 +9,7 @@ import {
   stageEnsureDraftPr,
   stageEnsureBuilderProposal,
   stageRunBuilderCommit,
+  stageRunSessionChecks,
   stageAnalyzePr,
   stageRefreshContext,
   stageEnsureExistingTask,
@@ -35,6 +36,7 @@ const DEV_STAGES: StageFn[] = [
   { key: "ensure_draft_pr", label: "Ensure draft pull request", fn: stageEnsureDraftPr },
   { key: "ensure_builder_proposal", label: "Run Builder Proposal", fn: stageEnsureBuilderProposal },
   { key: "run_builder_commit", label: "Run Builder Commit", fn: stageRunBuilderCommit },
+  { key: "run_session_checks", label: "Run lightweight session checks", fn: stageRunSessionChecks },
   { key: "analyze_pr", label: "Analyze pull request", fn: stageAnalyzePr },
 ];
 
@@ -46,6 +48,7 @@ const ITERATION_STAGES: StageFn[] = [
   { key: "ensure_draft_pr", label: "Ensure draft pull request", fn: stageEnsureDraftPr },
   { key: "run_iteration_builder_proposal", label: "Run Builder Proposal", fn: stageRunIterationBuilderProposal },
   { key: "run_builder_commit", label: "Run Builder Commit", fn: stageRunBuilderCommit },
+  { key: "run_session_checks", label: "Run lightweight session checks", fn: stageRunSessionChecks },
   { key: "analyze_pr", label: "Analyze pull request", fn: stageAnalyzePr },
 ];
 
@@ -239,6 +242,15 @@ async function runSession(
 
   if (finalStatus === "running") {
     finalStatus = "completed";
+    finalSummary = isIteration
+      ? buildIterationSummary(result, ws.requestedChanges)
+      : buildHumanSummary(result);
+  }
+
+  // A session with failing checks is not a clean "completed" — mark it with
+  // warnings (never revert, never block, never deploy).
+  if (finalStatus === "completed" && result.checks?.status === "failed") {
+    finalStatus = "completed_with_warnings";
     finalSummary = isIteration
       ? buildIterationSummary(result, ws.requestedChanges)
       : buildHumanSummary(result);

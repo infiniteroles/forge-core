@@ -27,6 +27,7 @@ export const WORK_SESSION_STAGES = [
   "ensure_draft_pr",
   "ensure_builder_proposal",
   "run_builder_commit",
+  "run_session_checks",
   "analyze_pr",
   "summarize_result",
   "refresh_context",
@@ -50,6 +51,11 @@ export interface WorkSessionResult {
   isIteration?: boolean;
   requestedChanges?: string | null;
   iterationNumber?: number;
+  checks?: {
+    status: "passed" | "failed" | "skipped";
+    summary?: string | null;
+    count?: number;
+  } | null;
 }
 
 export type StageOutcome =

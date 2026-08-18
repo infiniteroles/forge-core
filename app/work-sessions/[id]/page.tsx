@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { IterationActions } from "@/components/IterationActions";
+import { RunSessionChecksButton } from "@/components/RunSessionChecksButton";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function WorkSessionPage({ params }: Props) {
       task: true,
       project: true,
       agentRuns: { orderBy: { createdAt: "desc" } },
+      sessionChecks: { orderBy: { createdAt: "asc" } },
       parentWorkSession: { select: { id: true, status: true, mode: true, iterationNumber: true, objective: true } },
       childrenWorkSessions: {
         orderBy: { createdAt: "desc" },
@@ -270,6 +272,65 @@ export default async function WorkSessionPage({ params }: Props) {
             </div>
           </div>
         </div>
+
+        {session.sessionChecks.length > 0 ? (
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+                Checks
+              </h2>
+              <RunSessionChecksButton workSessionId={session.id} />
+            </div>
+            <div className="mt-4 flex flex-col gap-3">
+              {session.sessionChecks.map((check) => (
+                <div key={check.id} className="rounded-lg border border-border bg-background p-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium text-neutral-200">{check.name}</span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+                        check.status === "passed"
+                          ? "bg-emerald-500/10 text-emerald-300"
+                          : check.status === "failed" || check.status === "timeout"
+                            ? "bg-red-500/10 text-red-300"
+                            : check.status === "running"
+                              ? "bg-sky-500/10 text-sky-300"
+                              : "bg-neutral-700/40 text-neutral-300"
+                      }`}
+                    >
+                      {check.status}
+                    </span>
+                    <code className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-dim">
+                      {check.command}
+                    </code>
+                    {typeof check.exitCode === "number" ? (
+                      <span className="font-mono text-[11px] text-text-dim">
+                        exit {check.exitCode}
+                      </span>
+                    ) : null}
+                    {typeof check.durationMs === "number" && check.durationMs > 0 ? (
+                      <span className="text-[11px] text-text-dim">
+                        {check.durationMs} ms
+                      </span>
+                    ) : null}
+                  </div>
+                  {check.summary ? (
+                    <p className="mt-1.5 text-xs text-neutral-300">{check.summary}</p>
+                  ) : null}
+                  {check.stdoutTail ? (
+                    <pre className="mt-2 max-h-28 overflow-auto rounded bg-background p-2 text-[11px] text-neutral-400">
+                      {check.stdoutTail}
+                    </pre>
+                  ) : null}
+                  {check.stderrTail ? (
+                    <pre className="mt-1 max-h-28 overflow-auto rounded bg-red-500/5 p-2 text-[11px] text-red-300/80">
+                      {check.stderrTail}
+                    </pre>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-xl border border-border bg-surface p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">

@@ -25,6 +25,7 @@ import { runBuilderProposalAgent } from "@/lib/llm/builder-proposal";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import { generateBuilderCommitChanges } from "@/lib/llm/builder-commit";
 import { runPrReviewAgent } from "@/lib/llm/pr-review";
+import { runSessionChecks } from "./checks";
 import type { Prisma } from "@prisma/client";
 import type { StageOutcome, WorkSessionResult } from "./types";
 
@@ -681,6 +682,70 @@ export async function stageAnalyzePr(ctx: StageContext): Promise<StageOutcome> {
   return { type: "continue" };
 }
 
+// ── run_session_checks ───────────────────────────────────────────────────────
+
+export async function stageRunSessionChecks(ctx: StageContext): Promise<StageOutcome> {
+  await logActivity({
+    projectId: ctx.task.projectId,
+    type: "work_session.checks.started",
+    message: `Session checks started for task "${ctx.task.title}"`,
+    metadata: { workSessionId: ctx.workSessionId, taskId: ctx.taskId, status: "running" },
+  });
+
+  let summary;
+  try {
+    summary = await runSessionChecks(ctx.workSessionId);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown session checks error";
+    ctx.result.checks = { status: "skipped", summary: `Session checks could not run: ${message}`, count: 0 };
+    ctx.result.warnings?.push(`Session checks could not run: ${message}`);
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "work_session.checks.skipped",
+      message: `Session checks skipped for task "${ctx.task.title}": ${message}`,
+      metadata: { workSessionId: ctx.workSessionId, taskId: ctx.taskId, status: "skipped" },
+    });
+    return { type: "continue" };
+  }
+
+  ctx.result.checks = {
+    status: summary.status,
+    summary: summary.summary,
+    count: summary.checks.length,
+  };
+
+  const details = summary.checks.map((c) => ({ name: c.name, status: c.status }));
+
+  if (summary.status === "failed") {
+    ctx.result.warnings?.push(summary.summary);
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "work_session.checks.completed_with_warnings",
+      message: `Session checks completed with failures for task "${ctx.task.title}"`,
+      metadata: { workSessionId: ctx.workSessionId, taskId: ctx.taskId, status: "failed", checks: details },
+    });
+  } else if (summary.status === "skipped") {
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "work_session.checks.skipped",
+      message: `Session checks skipped for task "${ctx.task.title}"`,
+      metadata: { workSessionId: ctx.workSessionId, taskId: ctx.taskId, status: "skipped", checks: details },
+    });
+  } else {
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "work_session.checks.completed",
+      message: `Session checks completed for task "${ctx.task.title}"`,
+      metadata: { workSessionId: ctx.workSessionId, taskId: ctx.taskId, status: "passed", checks: details },
+    });
+  }
+
+  // Never revert, never block the whole session — continue to analyze_pr even
+  // when a check failed. The orchestrator marks the session completed_with_warnings.
+  return { type: "continue" };
+}
+
 // ── iteration stages ─────────────────────────────────────────────────────────
 
 /**
@@ -743,6 +808,17 @@ export function buildHumanSummary(result: WorkSessionResult): string {
     lines.push(`- Archivos modificados: ${result.filesChanged.join(", ")}`);
   }
   lines.push("- Revisión de PR generada");
+  if (result.checks) {
+    lines.push("");
+    lines.push("Comprobaciones:");
+    if (result.checks.status === "passed") {
+      lines.push("- Checks: build OK, lint OK, prisma validate OK.");
+    } else if (result.checks.status === "failed") {
+      lines.push(`- Checks: fallaron. ${result.checks.summary ?? ""}`.trim());
+    } else {
+      lines.push("- Checks: omitidos (runner no configurado).");
+    }
+  }
   lines.push("");
   lines.push("Estado:");
   if (result.prReviewRecommendation === "ready_for_review") {
@@ -751,6 +827,8 @@ export function buildHumanSummary(result: WorkSessionResult): string {
     lines.push("- Necesita decisión humana");
   } else if (result.prReviewRecommendation) {
     lines.push(`- Revisión: ${result.prReviewRecommendation}`);
+  } else if (result.checks?.status === "failed") {
+    lines.push("- Necesita revisión antes de continuar");
   } else {
     lines.push("- En progreso");
   }
@@ -791,6 +869,17 @@ export function buildIterationSummary(
       lines.push("- La revisión automática considera el cambio de bajo riesgo.");
     } else {
       lines.push(`- La revisión automática recomienda: ${result.prReviewRecommendation}.`);
+    }
+  }
+  if (result.checks) {
+    lines.push("");
+    lines.push("Comprobaciones:");
+    if (result.checks.status === "passed") {
+      lines.push("- Checks: build OK, lint OK, prisma validate OK.");
+    } else if (result.checks.status === "failed") {
+      lines.push(`- Checks: fallaron. ${result.checks.summary ?? ""}`.trim());
+    } else {
+      lines.push("- Checks: omitidos porque el runner todavía no está configurado.");
     }
   }
   lines.push("");

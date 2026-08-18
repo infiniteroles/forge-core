@@ -3,6 +3,11 @@ import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { getLLMConfig, isLLMConfigured } from "@/lib/llm/client";
 import { getGithubConfig, isGithubConfigured } from "@/lib/github/client";
+import {
+  getSessionCheckRunnerConfig,
+  isSessionCheckRunnerEnabled,
+  SESSION_CHECK_ALLOWLIST,
+} from "@/lib/work-sessions/checks";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,9 @@ export default async function SettingsPage() {
 
   const githubConfigured = isGithubConfigured();
   const githubConfig = getGithubConfig();
+
+  const checksConfig = getSessionCheckRunnerConfig();
+  const checksEnabled = isSessionCheckRunnerEnabled();
 
   const rows: { label: string; value: string }[] = [
     { label: "App name", value: "Forge Core01" },
@@ -122,6 +130,26 @@ export default async function SettingsPage() {
       label: "Iteration Loop (Continue / Ask for changes)",
       value:
         llmConfigured && githubConfigured ? "Available" : "Not configured",
+    },
+    {
+      label: "Session Checks",
+      value: checksEnabled ? "Available" : "Not configured (runner disabled)",
+    },
+    {
+      label: "Runner mode",
+      value: checksConfig.mode === "local" ? "local" : "disabled",
+    },
+    {
+      label: "Allowed commands",
+      value: SESSION_CHECK_ALLOWLIST.map((c) => c.command).join(", "),
+    },
+    {
+      label: "Timeout per command",
+      value: `${Math.round(checksConfig.timeoutMs / 1000)}s`,
+    },
+    {
+      label: "Max log tail",
+      value: `${Math.round(checksConfig.maxTail / 1024)} KB`,
     },
     { label: "Telegram bot", value: "Not configured" },
     { label: "Coolify API", value: "Not configured" },
