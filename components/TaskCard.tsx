@@ -18,6 +18,7 @@ import { BuilderCommitActions } from "./BuilderCommitActions";
 import { PrReviewGateActions } from "./PrReviewGateActions";
 import { WorkSessionButton } from "./WorkSessionButton";
 import { IterationActions } from "./IterationActions";
+import { TaskDevPreview } from "./TaskDevPreview";
 
 type TaskProps = {
   id: string;
@@ -58,6 +59,8 @@ export type LatestWorkSessionSummary = {
     prUrl?: string | null;
     builderCommitUrl?: string | null;
     checks?: { status?: string; summary?: string | null } | null;
+    previewUrl?: string | null;
+    previewStatus?: string | null;
   } | null;
 };
 
@@ -141,6 +144,11 @@ export function TaskCard({
               Checks: {workSession.result.checks.status}
             </span>
           ) : null}
+          <TaskDevPreview
+            workSessionId={workSession.id}
+            status={workSession.result?.previewStatus ?? null}
+            previewUrl={workSession.result?.previewUrl ?? null}
+          />
         </div>
       ) : null}
 

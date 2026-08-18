@@ -51,6 +51,7 @@ model Project {
   tasks                Task[]
   workSessions         WorkSession[]
   sessionChecks        SessionCheck[]
+  previewDeployments   PreviewDeployment[]
 }
 
 model WorkSession {
@@ -77,6 +78,7 @@ model WorkSession {
   childrenWorkSessions WorkSession[]  @relation("WorkSessionIterations")
   agentRuns            AgentRun[]
   sessionChecks        SessionCheck[]
+  previewDeployments   PreviewDeployment[]
 }
 
 model Instruction {
@@ -203,6 +205,39 @@ model Task {
   agentRuns        AgentRun[] @relation("TaskRuns")
   workSessions     WorkSession[]
   sessionChecks    SessionCheck[]
+  previewDeployments PreviewDeployment[]
+}
+
+model PreviewDeployment {
+  id                     String    @id @default(cuid())
+  projectId              String
+  taskId                 String?
+  workSessionId          String?
+  provider               String    @default("coolify")
+  status                 String    @default("not_configured")
+  previewUrl             String?
+  domain                 String?
+  branchName             String?
+  repositoryFullName     String?
+  pullRequestNumber      Int?
+  coolifyApplicationUuid String?
+  coolifyDeploymentUuid  String?
+  coolifyProjectUuid     String?
+  coolifyServerUuid      String?
+  commitSha              String?
+  lastDeploymentStatus   String?
+  lastDeploymentLogUrl   String?
+  error                  String?
+  metadata               Json?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  requestedAt            DateTime?
+  deployedAt             DateTime?
+  lastCheckedAt          DateTime?
+  stoppedAt              DateTime?
+  project                Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                   Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  workSession            WorkSession?  @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
 }
 
 model SessionCheck {

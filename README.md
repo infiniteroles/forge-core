@@ -21,10 +21,11 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **Autonomous DEV Work Session**: a single "Work on this" action that runs issue → branch → plan → draft PR → Builder Proposal → Builder Commit → PR review automatically and prepares a PR for human review.
 - **Iteration Loop (Continue / Ask for changes)**: iterate on an existing task reusing the same branch and PR — a new Builder Proposal, a new commit on the same branch, a fresh PR analysis and an updated human summary.
 - **Session Checks Lite**: a lightweight internal validation stage that runs a closed allowlist of commands (`npm run lint`, `npm run build`, `npx prisma validate`) after a Builder Commit and shows a short, human summary. Never a full CI pipeline.
+- **DEV Preview from Work Session**: prepare a navigable preview URL for a task branch/PR without merging or touching `main`/production. Three modes (`disabled`/`manual`/`coolify_api`); default `disabled`.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
-Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, Coolify API, LiteLLM, Ollama, real test runner, merge/deploy automation.
+Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, LiteLLM, Ollama, real test runner, automatic merge/deploy, automatic preview cleanup, preview auto-trigger at end of session.
 
 ## Stack
 
@@ -149,6 +150,9 @@ On Coolify:
 - `POST /api/tasks/[id]/work-session/iterate` — start an iteration (mode `iteration`) for a task with a new instruction (`{ "instruction": "..." }`), reusing task/branch/PR.
 - `POST /api/work-sessions/[id]/continue` — continue a work session; optional `{ "instruction": "..." }` (no instruction → default "continue with the next safe step").
 - `POST /api/work-sessions/[id]/checks/run` — (re)run the lightweight session checks for a work session.
+- `POST /api/work-sessions/[id]/preview/prepare` — prepare a DEV preview for a work session (disabled → `not_configured`, manual → pending, coolify_api → create/reuse + deploy).
+- `POST /api/preview-deployments/[id]/refresh` — refresh a preview deployment status (coolify API or manual).
+- `POST /api/work-sessions/[id]/preview/manual` — register a manual preview URL (`{ "previewUrl": "https://..." }`).
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -888,6 +892,130 @@ Authenticated. Re-runs the checks for an existing session and returns
 Optional enablement of the local runner in a controlled environment, PR
 comments with the check summary, and (a later phase) a real build-validation
 sandbox.
+
+## DEV Preview from Work Session
+
+After a Work Session (or a Forge-generated PR) you can prepare a **navigable DEV
+preview URL** to review the result in the browser — without merging, without
+touching `main` and without touching production.
+
+```
+WorkSession with Task + Branch + PR
+→ Prepare DEV Preview
+→ Forge creates/reuses a DEV deployment for the branch
+→ Forge saves URL + status
+→ "Open DEV Preview"
+→ review in the browser
+```
+
+### Environment variables
+
+```
+COOLIFY_BASE_URL="https://forge.core01.io"
+COOLIFY_API_TOKEN=""
+COOLIFY_SERVER_UUID=""
+COOLIFY_PROJECT_UUID=""
+COOLIFY_ENVIRONMENT_NAME="dev"
+PREVIEW_DOMAIN_SUFFIX=".dev.core01.io"
+PREVIEW_RUNNER_MODE="disabled"    # disabled | manual | coolify_api
+```
+
+Rules: never commit a real token; the token is never shown in the UI, logs or
+ActivityLog; if `COOLIFY_API_TOKEN` is missing Forge keeps working and shows
+`DEV Preview: Not configured`; `PREVIEW_RUNNER_MODE` defaults to `disabled`.
+
+### Runner modes
+
+- **disabled** (default) — Forge never tries to create a preview; it records a
+  `PreviewDeployment` with status `not_configured` and the message *"DEV Preview
+  runner is not configured"*. The session is not affected.
+- **manual** — Forge records a pending manual preview; you register a URL via
+  the manual endpoint/UI and it becomes `ready`.
+- **coolify_api** — Forge creates/reuses a Coolify application for the task
+  branch (domain `preview-<taskShortId>.dev.core01.io` or
+  `ws-<workSessionShortId>.dev.core01.io`), launches a deploy in the DEV
+  environment (never production) and tracks its status.
+
+In this deployment the runner is **disabled** because no `COOLIFY_API_TOKEN` is
+configured. The Coolify API is reachable (`/api/v1` responds, 401 without a
+token) — enabling `coolify_api` requires generating a token in Coolify
+(*Keys & Tokens*) and adding it to the app environment.
+
+### Model
+
+`PreviewDeployment` (new): `projectId`, `taskId?`, `workSessionId?`, `provider`
+(`manual|coolify`), `status` (`not_configured|queued|creating|deploying|ready|
+failed|stopped|skipped`), `previewUrl?`, `domain?`, `branchName?`,
+`repositoryFullName?`, `pullRequestNumber?`, `coolifyApplicationUuid?`,
+`coolifyDeploymentUuid?`, `coolifyProjectUuid?`, `coolifyServerUuid?`,
+`commitSha?`, `lastDeploymentStatus?`, `lastDeploymentLogUrl?`, `error?`,
+`metadata?`, timestamps (`requestedAt`, `deployedAt`, `lastCheckedAt`,
+`stoppedAt`). Relations to `Project` (cascade), `Task` and `WorkSession`
+(set-null). Migration: `20260824000000_add_preview_deployments`.
+
+The preview URL/status is also stored on `WorkSession.result`
+(`previewUrl`/`previewStatus`) so cards can show it without an extra query.
+
+### Client
+
+`lib/coolify/` contains `types.ts`, `client.ts` (config + authenticated fetch
+with timeout; the token is never logged) and `preview.ts`
+(`prepareDevPreview`, `refreshPreviewDeployment`, `buildPreviewDomain`, plus
+`createOrReusePreviewApplication` / `triggerPreviewDeployment` /
+`getPreviewDeploymentStatus` for the `coolify_api` path). If Coolify is not
+configured or unreachable, previews degrade to `not_configured`/`failed` with a
+clear message and never break the app.
+
+### Endpoints
+
+```
+POST /api/work-sessions/[id]/preview/prepare   — prepare (create/reuse) a DEV preview
+POST /api/preview-deployments/[id]/refresh     — refresh deployment status
+POST /api/work-sessions/[id]/preview/manual    — body { "previewUrl": "https://..." }
+```
+
+When not configured, `prepare` returns `{ ok: false, status: "not_configured",
+error: "DEV Preview runner is not configured" }` (HTTP 200).
+
+### UI
+
+- `/work-sessions/[id]` shows a **DEV Preview** panel: Prepare, Deploying +
+  Refresh status, **Open DEV Preview** + Refresh, Preview failed (+ error, retry)
+  and a small "Register manual preview URL" form.
+- Task cards show a compact `DEV Preview: ready/deploying/failed/not configured`
+  chip in the latest work-session block, with **Open Preview** / **Prepare
+  Preview** actions (not the protagonist).
+- The project Backlog adds `DEV previews: X · Ready previews: Y`.
+- `/settings` shows DEV Preview status, runner mode, Coolify base URL, token
+  (Hidden/Not set), domain suffix and default provider.
+
+### ActivityLog
+
+`preview.prepare_requested`, `preview.created`, `preview.deployment_started`,
+`preview.ready`, `preview.failed`, `preview.not_configured`, `preview.refreshed`,
+`preview.manual_registered`. Metadata includes `previewDeploymentId`,
+`workSessionId`, `taskId`, `previewUrl`, `status`, `provider` — never tokens or
+secrets.
+
+### Guardrails
+
+No production, no merge, no direct `main` writes, no automatic issue closing,
+no deleting resources without approval, no `.env`/secrets, no keys/certificates,
+no firewall/SSH/VPS changes, no workflow/Docker/infra edits, and the token is
+never printed.
+
+### Current limitations
+
+- Runner disabled by default; `coolify_api` requires a `COOLIFY_API_TOKEN` +
+  a server/project UUID and is not exercised in production yet.
+- No automatic preview at the end of a session (manual "Prepare DEV Preview").
+- No cleanup/stop of previews, no multi-environment system, no background
+  queues/WebSockets.
+
+### Next steps
+
+Enable `coolify_api` with a real token, add preview cleanup, optional automatic
+preview after sessions, and a "Stop preview" action.
 
 ### Current limitations
 

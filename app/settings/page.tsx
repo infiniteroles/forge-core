@@ -8,6 +8,11 @@ import {
   isSessionCheckRunnerEnabled,
   SESSION_CHECK_ALLOWLIST,
 } from "@/lib/work-sessions/checks";
+import {
+  getPreviewRunnerMode,
+  getPreviewRunnerConfig,
+} from "@/lib/coolify/preview";
+import { getCoolifyConfig, isCoolifyConfigured } from "@/lib/coolify/client";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +30,11 @@ export default async function SettingsPage() {
 
   const checksConfig = getSessionCheckRunnerConfig();
   const checksEnabled = isSessionCheckRunnerEnabled();
+
+  const previewMode = getPreviewRunnerMode();
+  const previewCfg = getPreviewRunnerConfig();
+  const coolifyCfg = getCoolifyConfig();
+  const coolifyConfigured = isCoolifyConfigured();
 
   const rows: { label: string; value: string }[] = [
     { label: "App name", value: "Forge Core01" },
@@ -151,8 +161,42 @@ export default async function SettingsPage() {
       label: "Max log tail",
       value: `${Math.round(checksConfig.maxTail / 1024)} KB`,
     },
+    {
+      label: "DEV Preview",
+      value:
+        previewMode === "disabled"
+          ? "Disabled"
+          : previewMode === "manual"
+            ? "Available (manual)"
+            : coolifyConfigured
+              ? "Available"
+              : "Not configured",
+    },
+    {
+      label: "Preview runner mode",
+      value: previewMode,
+    },
+    {
+      label: "Coolify base URL",
+      value: coolifyCfg.baseUrl,
+    },
+    {
+      label: "Coolify API token",
+      value: coolifyCfg.hasToken ? "Hidden" : "Not set",
+    },
+    {
+      label: "Coolify API",
+      value: coolifyConfigured ? "Configured" : "Not configured",
+    },
+    {
+      label: "Preview domain suffix",
+      value: coolifyCfg.domainSuffix,
+    },
+    {
+      label: "Default preview provider",
+      value: previewMode === "manual" ? "manual" : "coolify",
+    },
     { label: "Telegram bot", value: "Not configured" },
-    { label: "Coolify API", value: "Not configured" },
   ];
 
   return (

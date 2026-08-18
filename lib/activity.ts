@@ -67,6 +67,14 @@ export const ACTIVITY_TYPES = [
   "work_session.checks.completed_with_warnings",
   "work_session.checks.failed",
   "work_session.checks.skipped",
+  "preview.prepare_requested",
+  "preview.created",
+  "preview.deployment_started",
+  "preview.ready",
+  "preview.failed",
+  "preview.not_configured",
+  "preview.refreshed",
+  "preview.manual_registered",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

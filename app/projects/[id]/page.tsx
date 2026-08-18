@@ -35,6 +35,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         include: { _count: { select: { tasks: true } } },
       },
       activityLogs: { orderBy: { createdAt: "desc" }, take: 50 },
+      previewDeployments: { select: { id: true, status: true, previewUrl: true } },
       tasks: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         include: {
@@ -66,6 +67,8 @@ export default async function ProjectDetailPage({ params }: Props) {
             prUrl?: string | null;
             builderCommitUrl?: string | null;
             checks?: { status?: string; summary?: string | null } | null;
+            previewUrl?: string | null;
+            previewStatus?: string | null;
           })
         : null;
     latestWorkSessionByTask.set(ws.taskId, {
@@ -78,6 +81,8 @@ export default async function ProjectDetailPage({ params }: Props) {
         checks: result?.checks
           ? { status: result.checks.status ?? "skipped", summary: result.checks.summary ?? null }
           : null,
+        previewUrl: result?.previewUrl ?? null,
+        previewStatus: result?.previewStatus ?? null,
       },
     });
   }
@@ -116,6 +121,11 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   const prMarkedReadyCount = project.tasks.filter(
     (task) => task.githubPrMarkedReadyAt != null
+  ).length;
+
+  const devPreviewCount = project.previewDeployments.length;
+  const readyPreviewCount = project.previewDeployments.filter(
+    (p) => p.status === "ready"
   ).length;
 
   function builderSummary(
@@ -400,6 +410,9 @@ export default async function ProjectDetailPage({ params }: Props) {
               </p>              <p className="mt-1 text-xs text-text-dim">
                 PRs marked ready: {prMarkedReadyCount} / {project.tasks.length}{" "}
                 tasks
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                DEV previews: {devPreviewCount} · Ready previews:{" "}
+                {readyPreviewCount}
               </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (
                   <TaskCard

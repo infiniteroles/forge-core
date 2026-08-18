@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { IterationActions } from "@/components/IterationActions";
 import { RunSessionChecksButton } from "@/components/RunSessionChecksButton";
+import { DevPreviewPanel } from "@/components/DevPreviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export default async function WorkSessionPage({ params }: Props) {
       project: true,
       agentRuns: { orderBy: { createdAt: "desc" } },
       sessionChecks: { orderBy: { createdAt: "asc" } },
+      previewDeployments: { orderBy: { createdAt: "desc" } },
       parentWorkSession: { select: { id: true, status: true, mode: true, iterationNumber: true, objective: true } },
       childrenWorkSessions: {
         orderBy: { createdAt: "desc" },
@@ -101,6 +103,21 @@ export default async function WorkSessionPage({ params }: Props) {
             </div>
           </div>
         ) : null}
+
+        <DevPreviewPanel
+          workSessionId={session.id}
+          preview={
+            session.previewDeployments[0]
+              ? {
+                  id: session.previewDeployments[0].id,
+                  status: session.previewDeployments[0].status,
+                  provider: session.previewDeployments[0].provider,
+                  previewUrl: session.previewDeployments[0].previewUrl,
+                  error: session.previewDeployments[0].error,
+                }
+              : null
+          }
+        />
 
         {session.requestedChanges || session.iterationNumber > 1 ? (
           <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
