@@ -31,6 +31,11 @@ import type { StageOutcome, WorkSessionResult } from "./types";
 export interface StageContext {
   workSessionId: string;
   taskId: string;
+  mode: string;
+  requestedChanges: string | null;
+  iterationNumber: number;
+  parentWorkSessionId: string | null;
+  isIteration: boolean;
   task: {
     id: string;
     projectId: string;
@@ -348,21 +353,25 @@ export async function stageEnsureDraftPr(ctx: StageContext): Promise<StageOutcom
 export async function stageEnsureBuilderProposal(
   ctx: StageContext
 ): Promise<StageOutcome> {
-  const existing = await prisma.agentRun.findFirst({
-    where: { taskId: ctx.task.id, agentName: "builder-proposal", status: "completed" },
-    orderBy: { createdAt: "desc" },
-  });
+  // In iteration mode the user gave a NEW instruction, so a previously
+  // completed proposal is stale — always produce a fresh one.
+  if (!ctx.isIteration) {
+    const existing = await prisma.agentRun.findFirst({
+      where: { taskId: ctx.task.id, agentName: "builder-proposal", status: "completed" },
+      orderBy: { createdAt: "desc" },
+    });
 
-  if (existing) {
-    const parsed = parseBuilderProposalOutput(existing.output);
-    if (parsed?.safe_to_attempt_next === true) {
-      return { type: "continue" };
+    if (existing) {
+      const parsed = parseBuilderProposalOutput(existing.output);
+      if (parsed?.safe_to_attempt_next === true) {
+        return { type: "continue" };
+      }
+      return {
+        type: "waiting_for_user",
+        reason:
+          "The Builder Proposal says this is not safe to attempt yet. Review it before continuing.",
+      };
     }
-    return {
-      type: "waiting_for_user",
-      reason:
-        "The Builder Proposal says this is not safe to attempt yet. Review it before continuing.",
-    };
   }
 
   const run = await prisma.agentRun.create({
@@ -384,7 +393,11 @@ export async function stageEnsureBuilderProposal(
     metadata: { taskId: ctx.task.id, agentRunId: run.id, workSessionId: ctx.workSessionId },
   });
 
-  const result = await runBuilderProposalAgent(ctx.task.id);
+  const result = await runBuilderProposalAgent(ctx.task.id, {
+    requestedChanges: ctx.requestedChanges,
+    iterationNumber: ctx.iterationNumber,
+    workSessionId: ctx.workSessionId,
+  });
 
   const output =
     result.status === "completed"
@@ -436,11 +449,14 @@ export async function stageRunBuilderCommit(ctx: StageContext): Promise<StageOut
     return { type: "continue" };
   }
 
-  // Already committed in a previous run.
-  const committed = await prisma.task.findUnique({ where: { id: ctx.task.id } });
-  if (committed?.githubBuilderCommitSha) {
-    ctx.result.builderCommitUrl = committed.githubBuilderCommitUrl;
-    return { type: "continue" };
+  // Already committed in a previous run — except in iteration mode, where the
+  // user's new instruction requires a NEW commit on the same branch.
+  if (!ctx.isIteration) {
+    const committed = await prisma.task.findUnique({ where: { id: ctx.task.id } });
+    if (committed?.githubBuilderCommitSha) {
+      ctx.result.builderCommitUrl = committed.githubBuilderCommitUrl;
+      return { type: "continue" };
+    }
   }
 
   const run = await prisma.agentRun.create({
@@ -462,7 +478,11 @@ export async function stageRunBuilderCommit(ctx: StageContext): Promise<StageOut
     metadata: { taskId: ctx.task.id, agentRunId: run.id, workSessionId: ctx.workSessionId },
   });
 
-  const result = await generateBuilderCommitChanges(ctx.task.id);
+  const result = await generateBuilderCommitChanges(ctx.task.id, {
+    requestedChanges: ctx.requestedChanges,
+    iterationNumber: ctx.iterationNumber,
+    workSessionId: ctx.workSessionId,
+  });
 
   if (result.status === "completed_with_warnings") {
     await prisma.agentRun.update({
@@ -661,6 +681,56 @@ export async function stageAnalyzePr(ctx: StageContext): Promise<StageOutcome> {
   return { type: "continue" };
 }
 
+// ── iteration stages ─────────────────────────────────────────────────────────
+
+/**
+ * reload_context: the orchestrator reloads the Task from the DB before this
+ * runs, so this stage only confirms the task still exists. Logs the iteration
+ * context so the Activity timeline reflects what was requested.
+ */
+export async function stageRefreshContext(ctx: StageContext): Promise<StageOutcome> {
+  const task = await prisma.task.findUnique({ where: { id: ctx.taskId } });
+  if (!task) {
+    return { type: "failed", error: "The task no longer exists." };
+  }
+  if (ctx.requestedChanges) {
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "work_session.iteration_requested",
+      message: `Iteration requested for task "${ctx.task.title}"`,
+      metadata: {
+        workSessionId: ctx.workSessionId,
+        parentWorkSessionId: ctx.parentWorkSessionId,
+        taskId: ctx.taskId,
+        iterationNumber: ctx.iterationNumber,
+        instruction: ctx.requestedChanges.slice(0, 200),
+      },
+    });
+  }
+  return { type: "continue" };
+}
+
+/**
+ * ensure_existing_task: iteration never creates a new task — it must reuse the
+ * existing one (and therefore its issue/branch/PR).
+ */
+export async function stageEnsureExistingTask(ctx: StageContext): Promise<StageOutcome> {
+  if (!ctx.taskId) {
+    return { type: "failed", error: "Iteration requires an existing task." };
+  }
+  return { type: "continue" };
+}
+
+/**
+ * run_iteration_builder_proposal: same as the normal proposal stage, but with
+ * the iteration context (fresh proposal driven by the new instruction).
+ */
+export async function stageRunIterationBuilderProposal(
+  ctx: StageContext
+): Promise<StageOutcome> {
+  return stageEnsureBuilderProposal(ctx);
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 export function buildHumanSummary(result: WorkSessionResult): string {
@@ -684,6 +754,48 @@ export function buildHumanSummary(result: WorkSessionResult): string {
   } else {
     lines.push("- En progreso");
   }
+  if (result.warnings && result.warnings.length > 0) {
+    lines.push("");
+    lines.push("Avisos:");
+    result.warnings.forEach((w) => lines.push(`- ${w}`));
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Human summary for an iteration session. Clear, non-technical, focused on the
+ * change the user requested and what Forge actually did with it.
+ */
+export function buildIterationSummary(
+  result: WorkSessionResult,
+  requestedChanges: string | null
+): string {
+  const lines: string[] = ["Forge ha aplicado una iteración sobre la tarea.", ""];
+  lines.push("Cambio pedido:");
+  lines.push(requestedChanges?.trim() || "Continuar desde el estado actual de la tarea.");
+  lines.push("");
+  lines.push("Resultado:");
+  if (result.filesChanged && result.filesChanged.length > 0) {
+    lines.push(`- Se actualizó ${result.filesChanged.join(", ")}.`);
+  } else if (result.builderCommitUrl) {
+    lines.push("- Se creó un nuevo commit en la misma rama.");
+  } else {
+    lines.push("- Sin cambios funcionales nuevos.");
+  }
+  lines.push("- Se creó un nuevo commit en la misma rama.");
+  if (result.prUrl) lines.push("- La PR existente se actualizó.");
+  if (result.prReviewRecommendation) {
+    if (result.prReviewRecommendation === "ready_for_review") {
+      lines.push("- La revisión automática lo considera listo para revisión.");
+    } else if (result.prReviewRecommendation === "low" || result.prReviewRecommendation === "keep_draft") {
+      lines.push("- La revisión automática considera el cambio de bajo riesgo.");
+    } else {
+      lines.push(`- La revisión automática recomienda: ${result.prReviewRecommendation}.`);
+    }
+  }
+  lines.push("");
+  lines.push("Estado:");
+  lines.push("Listo para que lo revises.");
   if (result.warnings && result.warnings.length > 0) {
     lines.push("");
     lines.push("Avisos:");

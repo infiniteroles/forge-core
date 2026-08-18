@@ -29,6 +29,9 @@ export const WORK_SESSION_STAGES = [
   "run_builder_commit",
   "analyze_pr",
   "summarize_result",
+  "refresh_context",
+  "ensure_existing_task",
+  "run_iteration_builder_proposal",
 ] as const;
 
 export type WorkSessionStage = (typeof WORK_SESSION_STAGES)[number];
@@ -44,6 +47,9 @@ export interface WorkSessionResult {
   filesChanged?: string[];
   summary?: string | null;
   warnings?: string[];
+  isIteration?: boolean;
+  requestedChanges?: string | null;
+  iterationNumber?: number;
 }
 
 export type StageOutcome =

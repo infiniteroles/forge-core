@@ -19,10 +19,11 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **Builder Commit Agent**: generate concrete, validated functional changes for a task and commit them **only** on the task branch (guarded by proposal, safe-file policy and strict limits).
 - **PR Review Gate**: analyze a task's draft PR, summarize the diff, flag risks and recommend ready-for-review (never merges, deploys or auto-approves).
 - **Autonomous DEV Work Session**: a single "Work on this" action that runs issue → branch → plan → draft PR → Builder Proposal → Builder Commit → PR review automatically and prepares a PR for human review.
+- **Iteration Loop (Continue / Ask for changes)**: iterate on an existing task reusing the same branch and PR — a new Builder Proposal, a new commit on the same branch, a fresh PR analysis and an updated human summary.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
-Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, Coolify API, LiteLLM, Ollama, Builder Agent commits/PR updates, real code-writing agents.
+Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, Coolify API, LiteLLM, Ollama, real test runner, merge/deploy automation.
 
 ## Stack
 
@@ -144,6 +145,8 @@ On Coolify:
 - `POST /api/tasks/[id]/github/pr/ready` — convert a draft PR to ready for review (no merge).
 - `POST /api/tasks/[id]/work-session/start` — run an autonomous DEV work session for a task.
 - `POST /api/projects/[id]/ideas/work-session/start` — create a task from an idea and run a DEV work session.
+- `POST /api/tasks/[id]/work-session/iterate` — start an iteration (mode `iteration`) for a task with a new instruction (`{ "instruction": "..." }`), reusing task/branch/PR.
+- `POST /api/work-sessions/[id]/continue` — continue a work session; optional `{ "instruction": "..." }` (no instruction → default "continue with the next safe step").
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -681,12 +684,14 @@ Body for the idea endpoint: `{ "idea": "..." }`.
 
 - Task cards show a primary **Work on this** button; after the session, the card
   shows the session status, a human-readable summary, **View session** and
-  **Open PR**, plus `Continue` / `Ask for changes` / `Discard` /
-  `Prepare production` (the last three are coming soon).
+  **Open PR**, plus **Continue** and **Ask for changes** (real, see Iteration
+  Loop below) and `Discard` / `Prepare production` (coming soon).
 - The project detail page has a **New idea** box with **Start DEV Work Session**.
 - `/work-sessions/[id]` shows the objective, status, current stage, summary,
   artifacts (issue/branch/plan/PR/commit links), files changed, warnings,
-  agent runs and the activity timeline.
+  agent runs, the activity timeline, and — for iterations — parent/child
+  sessions, iteration number and requested changes, plus **Continue**,
+  **Ask for changes** and **Open PR** actions.
 
 Events logged: `work_session.started`, `work_session.stage_started`,
 `work_session.stage_completed`, `work_session.waiting_for_user`,
@@ -696,8 +701,85 @@ Events logged: `work_session.started`, `work_session.stage_started`,
 ### Orchestrator
 
 `lib/work-sessions/` contains `types.ts`, `stages.ts` (reusable ensure-stage
-functions) and `orchestrator.ts` (`runDevWorkSession`). It reuses the existing
-GitHub/LLM primitives and never duplicates work if a stage is already done.
+functions) and `orchestrator.ts` (`runDevWorkSession` + `runIterationWorkSession`).
+It reuses the existing GitHub/LLM primitives and never duplicates work if a stage
+is already done.
+
+## Iteration Loop: Continue / Ask for changes
+
+Forge does not stop at the first attempt. You can iterate on a task the way you
+work for real: ask Forge to change something and it reuses the same task, branch
+and pull request — it never starts a new task or a new PR unnecessarily.
+
+```
+Óscar: "bien, pero cambia esto…"
+→ Continue / Ask for changes
+→ same task, same branch, same PR
+→ fresh analysis (if needed)
+→ new Builder Proposal driven by the new instruction
+→ new Builder Commit on the SAME branch
+→ existing PR updates automatically
+→ PR re-analyzed
+→ updated human summary
+```
+
+### Two high-level actions
+
+- **Continue** — `POST /api/work-sessions/[id]/continue` (or the task-level
+  iterate endpoint without a session): ask Forge to keep working from the current
+  state. Without an instruction it uses a safe default: *"continue from the
+  current state of this task and apply the next safe, useful development step."*
+- **Ask for changes** — `POST /api/tasks/[id]/work-session/iterate` with
+  `{ "instruction": "Add a timestamp field…" }`: a concrete adjustment. The new
+  instruction takes priority over the original plan (as long as it does not
+  violate the guardrails).
+
+### How reuse works
+
+- The new `WorkSession` is created with `mode = "iteration"`,
+  `parentWorkSessionId` pointing to the previous session and a computed
+  `iterationNumber`.
+- The iteration pipeline is `refresh_context → ensure_existing_task →
+  ensure_issue → ensure_branch → ensure_draft_pr → run_iteration_builder_proposal
+  → run_builder_commit → analyze_pr → summarize_result`.
+- It never creates a new task, issue, branch or plan commit if they already
+  exist, and never opens a second PR for the same branch.
+- Builder Proposal and Builder Commit receive the iteration context: the user's
+  new instruction, previous work-session summaries, the last Builder Commit
+  summary, the last PR review summary and the current file contents from the
+  branch — so the Builder modifies the existing file instead of rewriting it.
+
+### Model fields (new in this phase)
+
+`WorkSession.parentWorkSessionId`, `WorkSession.requestedChanges` and
+`WorkSession.iterationNumber` (default `1`), plus the self-relation
+`parentWorkSession` / `childrenWorkSessions`.
+
+### Endpoints
+
+```
+POST /api/tasks/[id]/work-session/iterate   body: { "instruction": "..." }
+POST /api/work-sessions/[id]/continue       body: { "instruction"?: "..." }
+```
+
+Both create a NEW linked `WorkSession` (never overwrite the previous one) and
+return `{ ok, workSession }`.
+
+### ActivityLog
+
+`work_session.iteration_started`, `work_session.iteration_requested`,
+`work_session.iteration_completed`, `work_session.iteration_completed_with_warnings`,
+`work_session.iteration_failed`, `work_session.continued` (plus the shared
+`work_session.stage_started` / `work_session.stage_completed`). Metadata includes
+`workSessionId`, `parentWorkSessionId`, `taskId`, `iterationNumber`, a short
+`instruction`, `prUrl` and `commitUrl` — never tokens or secrets.
+
+### Guardrails (unchanged and mandatory)
+
+No merge, no deploy, no direct `main` writes, no automatic issue closing, no
+file deletion, no `.env`/secrets, no keys/certificates, no firewall/SSH/VPS, no
+workflow/Docker/infra edits, and the safe-file policy is never relaxed. If the
+Builder sets `safe_to_commit=false`, Forge does not force the write.
 
 ### Current limitations
 

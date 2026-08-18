@@ -3,6 +3,7 @@ import { chatCompletion, getLLMConfig, isLLMConfigured } from "./client";
 import { LLMError } from "./types";
 import {
   BuilderProposalContext,
+  BuilderContextOptions,
   buildBuilderProposalContext,
 } from "./builder-context";
 
@@ -174,6 +175,43 @@ function formatContext(ctx: BuilderProposalContext): string {
   }
 
   lines.push("");
+  lines.push("## Iteration request");
+  if (ctx.isIteration) {
+    lines.push(
+      `This is an ITERATION (iteration #${ctx.iterationNumber}) on an existing task.`
+    );
+    lines.push(
+      `The user's NEW instruction takes priority over the original task and any previous plan:`
+    );
+    lines.push(ctx.requestedChanges?.trim() || "(no explicit instruction)");
+    lines.push("");
+    lines.push(
+      "IMPORTANT: Reuse the existing task, branch and pull request. Do NOT propose creating a new task, new branch or new PR. Propose the minimal delta from the current state."
+    );
+  } else {
+    lines.push("This is the initial proposal for this task (not an iteration).");
+  }
+  if (ctx.previousWorkSessions.length > 0) {
+    lines.push("");
+    lines.push("Previous work sessions on this task:");
+    ctx.previousWorkSessions.forEach((s) => {
+      lines.push(
+        `- #${s.iterationNumber} ${s.mode} [${s.status}] (${s.createdAt.toISOString()}): ${
+          s.summary ? s.summary.replace(/\n/g, " ").slice(0, 180) : "no summary"
+        }`
+      );
+    });
+  }
+  if (ctx.lastBuilderCommitSummary) {
+    lines.push("");
+    lines.push(`Last Builder Commit summary: ${ctx.lastBuilderCommitSummary.slice(0, 300)}`);
+  }
+  if (ctx.lastReviewSummary) {
+    lines.push("");
+    lines.push(`Last PR review summary: ${ctx.lastReviewSummary.slice(0, 300)}`);
+  }
+
+  lines.push("");
   lines.push("## Recent activity");
   lines.push(
     ctx.activityLogs.length > 0
@@ -222,13 +260,14 @@ function extractJson(text: string): string {
 // ── Agent ───────────────────────────────────────────────────────────────────
 
 export async function runBuilderProposalAgent(
-  taskId: string
+  taskId: string,
+  options?: BuilderContextOptions
 ): Promise<BuilderProposalRunResult> {
   if (!isLLMConfigured()) {
     throw new LLMError("LLM provider is not configured", "not_configured");
   }
 
-  const context = await buildBuilderProposalContext(taskId);
+  const context = await buildBuilderProposalContext(taskId, options);
   const config = getLLMConfig();
 
   const result = await chatCompletion({

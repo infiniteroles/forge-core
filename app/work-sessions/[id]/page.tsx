@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
+import { IterationActions } from "@/components/IterationActions";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,11 @@ export default async function WorkSessionPage({ params }: Props) {
       task: true,
       project: true,
       agentRuns: { orderBy: { createdAt: "desc" } },
+      parentWorkSession: { select: { id: true, status: true, mode: true, iterationNumber: true, objective: true } },
+      childrenWorkSessions: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, status: true, mode: true, iterationNumber: true, objective: true, requestedChanges: true },
+      },
     },
   });
   if (!session) notFound();
@@ -78,6 +84,72 @@ export default async function WorkSessionPage({ params }: Props) {
             ← Back to project
           </Link>
         </div>
+
+        {session.task ? (
+          <div className="rounded-lg border border-border bg-surface px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+                Actions
+              </span>
+              <IterationActions
+                taskId={session.task.id}
+                workSessionId={session.id}
+                compact
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {session.requestedChanges || session.iterationNumber > 1 ? (
+          <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <span className="text-text-dim">
+                Iteration{" "}
+                <span className="font-mono text-neutral-200">
+                  #{session.iterationNumber}
+                </span>
+                {session.mode ? (
+                  <span className="ml-1 rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-text-dim">
+                    {session.mode}
+                  </span>
+                ) : null}
+              </span>
+              {session.parentWorkSession ? (
+                <span className="text-text-dim">
+                  Parent:{" "}
+                  <Link
+                    href={`/work-sessions/${session.parentWorkSession.id}`}
+                    className="text-accent transition hover:underline"
+                  >
+                    #{session.parentWorkSession.iterationNumber} ({session.parentWorkSession.status})
+                  </Link>
+                </span>
+              ) : null}
+              {session.childrenWorkSessions.length > 0 ? (
+                <span className="text-text-dim">
+                  Children:{" "}
+                  {session.childrenWorkSessions.map((c, i) => (
+                    <span key={c.id}>
+                      {i > 0 ? ", " : ""}
+                      <Link
+                        href={`/work-sessions/${c.id}`}
+                        className="text-accent transition hover:underline"
+                      >
+                        #{c.iterationNumber} ({c.status})
+                      </Link>
+                    </span>
+                  ))}
+                </span>
+              ) : null}
+            </div>
+            {session.requestedChanges ? (
+              <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-200">
+                <span className="font-semibold text-neutral-100">Requested changes: </span>
+                {session.requestedChanges}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {session.currentStage ? (
           <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-text-dim">

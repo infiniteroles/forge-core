@@ -17,6 +17,7 @@ import {
 import { BuilderCommitActions } from "./BuilderCommitActions";
 import { PrReviewGateActions } from "./PrReviewGateActions";
 import { WorkSessionButton } from "./WorkSessionButton";
+import { IterationActions } from "./IterationActions";
 
 type TaskProps = {
   id: string;
@@ -127,6 +128,10 @@ export function TaskCard({
             </a>
           ) : null}
         </div>
+      ) : null}
+
+      {workSession ? (
+        <IterationActions taskId={task.id} workSessionId={workSession.id} compact />
       ) : null}
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-text-dim">

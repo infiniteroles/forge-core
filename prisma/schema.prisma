@@ -53,23 +53,28 @@ model Project {
 }
 
 model WorkSession {
-  id           String    @id @default(cuid())
-  projectId    String
-  taskId       String?
-  status       String    @default("queued")
-  mode         String    @default("dev")
-  objective    String
-  summary      String?
-  currentStage String?
-  result       Json?
-  error        String?
-  startedAt    DateTime?
-  finishedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task         Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  agentRuns    AgentRun[]
+  id                   String         @id @default(cuid())
+  projectId            String
+  taskId               String?
+  parentWorkSessionId  String?
+  requestedChanges     String?
+  iterationNumber      Int            @default(1)
+  status               String         @default("queued")
+  mode                 String         @default("dev")
+  objective            String
+  summary              String?
+  currentStage         String?
+  result               Json?
+  error                String?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  project              Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                 Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  parentWorkSession    WorkSession?   @relation("WorkSessionIterations", fields: [parentWorkSessionId], references: [id], onDelete: SetNull)
+  childrenWorkSessions WorkSession[]  @relation("WorkSessionIterations")
+  agentRuns            AgentRun[]
 }
 
 model Instruction {

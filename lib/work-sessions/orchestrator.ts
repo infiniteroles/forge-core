@@ -10,7 +10,11 @@ import {
   stageEnsureBuilderProposal,
   stageRunBuilderCommit,
   stageAnalyzePr,
+  stageRefreshContext,
+  stageEnsureExistingTask,
+  stageRunIterationBuilderProposal,
   buildHumanSummary,
+  buildIterationSummary,
   PrismaJsonValue,
 } from "./stages";
 
@@ -24,7 +28,7 @@ interface StageFn {
   fn: (ctx: StageContext) => Promise<StageOutcome>;
 }
 
-const STAGES: StageFn[] = [
+const DEV_STAGES: StageFn[] = [
   { key: "ensure_issue", label: "Ensure GitHub issue", fn: stageEnsureIssue },
   { key: "ensure_branch", label: "Ensure GitHub branch", fn: stageEnsureBranch },
   { key: "ensure_plan_commit", label: "Ensure plan commit", fn: stageEnsurePlanCommit },
@@ -34,12 +38,26 @@ const STAGES: StageFn[] = [
   { key: "analyze_pr", label: "Analyze pull request", fn: stageAnalyzePr },
 ];
 
+const ITERATION_STAGES: StageFn[] = [
+  { key: "refresh_context", label: "Refresh task context", fn: stageRefreshContext },
+  { key: "ensure_existing_task", label: "Ensure existing task", fn: stageEnsureExistingTask },
+  { key: "ensure_issue", label: "Ensure GitHub issue", fn: stageEnsureIssue },
+  { key: "ensure_branch", label: "Ensure GitHub branch", fn: stageEnsureBranch },
+  { key: "ensure_draft_pr", label: "Ensure draft pull request", fn: stageEnsureDraftPr },
+  { key: "run_iteration_builder_proposal", label: "Run Builder Proposal", fn: stageRunIterationBuilderProposal },
+  { key: "run_builder_commit", label: "Run Builder Commit", fn: stageRunBuilderCommit },
+  { key: "analyze_pr", label: "Analyze pull request", fn: stageAnalyzePr },
+];
+
 /**
- * Executes the autonomous DEV work session stages in order, reusing the
- * existing GitHub/LLM primitives. Never merges, never deploys, never touches
- * main directly.
+ * Executes the shared work-session stage pipeline (dev or iteration) and
+ * persists the final state. Never merges, never deploys, never touches main.
  */
-export async function runDevWorkSession(workSessionId: string) {
+async function runSession(
+  workSessionId: string,
+  stages: StageFn[],
+  isIteration: boolean
+) {
   const ws = await prisma.workSession.findUnique({
     where: { id: workSessionId },
     include: { task: true, project: true },
@@ -59,11 +77,19 @@ export async function runDevWorkSession(workSessionId: string) {
     prUrl: ws.task.githubPrUrl,
     builderCommitUrl: ws.task.githubBuilderCommitUrl,
     warnings: [],
+    isIteration,
+    requestedChanges: ws.requestedChanges,
+    iterationNumber: ws.iterationNumber,
   };
 
   const ctx: StageContext = {
     workSessionId: ws.id,
     taskId: ws.taskId,
+    mode: ws.mode,
+    requestedChanges: ws.requestedChanges,
+    iterationNumber: ws.iterationNumber,
+    parentWorkSessionId: ws.parentWorkSessionId,
+    isIteration,
     task: {
       id: ws.task.id,
       projectId: ws.task.projectId,
@@ -91,7 +117,7 @@ export async function runDevWorkSession(workSessionId: string) {
 
   await prisma.workSession.update({
     where: { id: ws.id },
-    data: { status: "running", startedAt: new Date(), currentStage: "ensure_task", error: null },
+    data: { status: "running", startedAt: new Date(), currentStage: stages[0].key, error: null },
   });
 
   async function refreshTaskContext() {
@@ -116,12 +142,15 @@ export async function runDevWorkSession(workSessionId: string) {
     }
   }
 
+  // Refresh once up-front so iteration starts from the freshest task state.
+  await refreshTaskContext();
+
   let finalStatus = "running";
   let finalSummary: string | null = null;
   let finalError: string | null = null;
-  let lastStage: string = "ensure_task";
+  let lastStage: string = stages[0].key;
 
-  for (const stage of STAGES) {
+  for (const stage of stages) {
     lastStage = stage.key;
     await prisma.workSession.update({
       where: { id: ws.id },
@@ -132,7 +161,14 @@ export async function runDevWorkSession(workSessionId: string) {
       projectId: ws.task.projectId,
       type: "work_session.stage_started",
       message: `${stage.label} started`,
-      metadata: { workSessionId: ws.id, taskId: ws.taskId, stage: stage.key, status: "running" },
+      metadata: {
+        workSessionId: ws.id,
+        taskId: ws.taskId,
+        stage: stage.key,
+        status: "running",
+        iterationNumber: ws.iterationNumber,
+        parentWorkSessionId: ws.parentWorkSessionId ?? undefined,
+      },
     });
 
     let outcome: StageOutcome;
@@ -180,7 +216,9 @@ export async function runDevWorkSession(workSessionId: string) {
 
     if (outcome.type === "completed_with_warnings") {
       finalStatus = "completed_with_warnings";
-      finalSummary = buildHumanSummary(result);
+      finalSummary = isIteration
+        ? buildIterationSummary(result, ws.requestedChanges)
+        : buildHumanSummary(result);
       result.warnings?.push(outcome.reason);
       break;
     }
@@ -201,7 +239,9 @@ export async function runDevWorkSession(workSessionId: string) {
 
   if (finalStatus === "running") {
     finalStatus = "completed";
-    finalSummary = buildHumanSummary(result);
+    finalSummary = isIteration
+      ? buildIterationSummary(result, ws.requestedChanges)
+      : buildHumanSummary(result);
   }
 
   result.summary = finalSummary ?? undefined;
@@ -219,25 +259,55 @@ export async function runDevWorkSession(workSessionId: string) {
   });
 
   if (finalStatus === "completed" || finalStatus === "completed_with_warnings") {
+    const completed = finalStatus === "completed";
     await logActivity({
       projectId: ws.task.projectId,
-      type:
-        finalStatus === "completed"
+      type: isIteration
+        ? completed
+          ? "work_session.iteration_completed"
+          : "work_session.iteration_completed_with_warnings"
+        : completed
           ? "work_session.completed"
           : "work_session.completed_with_warnings",
-      message:
-        finalStatus === "completed"
+      message: isIteration
+        ? completed
+          ? "Work session iteration completed"
+          : "Work session iteration completed with warnings"
+        : completed
           ? "Work session completed"
           : "Work session completed with warnings",
       metadata: {
         workSessionId: ws.id,
+        parentWorkSessionId: ws.parentWorkSessionId ?? undefined,
         taskId: ws.taskId,
+        iterationNumber: ws.iterationNumber,
         status: finalStatus,
         prUrl: ctx.result.prUrl ?? undefined,
         commitUrl: ctx.result.builderCommitUrl ?? undefined,
+        instruction: ws.requestedChanges ? ws.requestedChanges.slice(0, 200) : undefined,
       },
     });
   }
 
   return prisma.workSession.findUnique({ where: { id: ws.id } });
+}
+
+/**
+ * Executes the autonomous DEV work session stages in order, reusing the
+ * existing GitHub/LLM primitives. Never merges, never deploys, never touches
+ * main directly.
+ */
+export async function runDevWorkSession(workSessionId: string) {
+  return runSession(workSessionId, DEV_STAGES, false);
+}
+
+/**
+ * Executes an ITERATION work session. Reuses the same task, branch and PR
+ * (never creates a new one), applies the user's new instruction on top of the
+ * current state, produces a new commit on the same branch, re-analyzes the PR
+ * and generates an updated human summary. Never merges, never deploys, never
+ * touches main directly.
+ */
+export async function runIterationWorkSession(workSessionId: string) {
+  return runSession(workSessionId, ITERATION_STAGES, true);
 }

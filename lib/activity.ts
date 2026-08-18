@@ -56,6 +56,12 @@ export const ACTIVITY_TYPES = [
   "work_session.completed",
   "work_session.completed_with_warnings",
   "work_session.failed",
+  "work_session.iteration_started",
+  "work_session.iteration_requested",
+  "work_session.iteration_completed",
+  "work_session.iteration_completed_with_warnings",
+  "work_session.iteration_failed",
+  "work_session.continued",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

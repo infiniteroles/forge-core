@@ -5,6 +5,10 @@ import { LLMError } from "./types";
 import { parseBuilderProposalOutput } from "./builder-proposal";
 import { readRepoFiles, RepoContextFile } from "@/lib/github/context";
 import {
+  buildIterationContext,
+  BuilderContextOptions,
+} from "./builder-context";
+import {
   CommitFileChange,
   validateBuilderCommitChanges,
 } from "@/lib/github/safe-file-policy";
@@ -89,10 +93,25 @@ export interface BuilderCommitContext {
   readWarnings: string[];
   activityLogs: { type: string; message: string; createdAt: Date }[];
   recentAgentRuns: { agentName: string | null; model: string | null; status: string; createdAt: Date }[];
+  isIteration: boolean;
+  requestedChanges: string | null;
+  iterationNumber: number;
+  previousWorkSessions: {
+    id: string;
+    mode: string;
+    status: string;
+    summary: string | null;
+    requestedChanges: string | null;
+    iterationNumber: number;
+    createdAt: Date;
+  }[];
+  lastReviewSummary: string | null;
+  lastBuilderCommitSummary: string | null;
 }
 
 export async function buildBuilderCommitContext(
-  taskId: string
+  taskId: string,
+  options: BuilderContextOptions = {}
 ): Promise<BuilderCommitContext> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -174,6 +193,8 @@ export async function buildBuilderCommitContext(
     );
   }
 
+  const iteration = await buildIterationContext(taskId, options);
+
   return {
     taskId: task.id,
     taskTitle: task.title,
@@ -206,6 +227,7 @@ export async function buildBuilderCommitContext(
       status: run.status,
       createdAt: run.createdAt,
     })),
+    ...iteration,
   };
 }
 
@@ -304,6 +326,43 @@ function formatCommitContext(ctx: BuilderCommitContext): string {
   }
 
   lines.push("");
+  lines.push("## Iteration request");
+  if (ctx.isIteration) {
+    lines.push(
+      `This is an ITERATION (iteration #${ctx.iterationNumber}) on an existing task.`
+    );
+    lines.push(
+      `The user's NEW instruction takes priority over the original task and any previous plan:`
+    );
+    lines.push(ctx.requestedChanges?.trim() || "(no explicit instruction)");
+    lines.push("");
+    lines.push(
+      "IMPORTANT: Reuse the existing task, branch and pull request. Do NOT create a new task, new branch or new PR. Read the CURRENT file content from the branch and apply ONLY the requested delta — keep changes small and scoped. Do not rewrite unrelated parts of the file."
+    );
+  } else {
+    lines.push("This is the initial commit for this task (not an iteration).");
+  }
+  if (ctx.previousWorkSessions.length > 0) {
+    lines.push("");
+    lines.push("Previous work sessions on this task:");
+    ctx.previousWorkSessions.forEach((s) => {
+      lines.push(
+        `- #${s.iterationNumber} ${s.mode} [${s.status}] (${s.createdAt.toISOString()}): ${
+          s.summary ? s.summary.replace(/\n/g, " ").slice(0, 180) : "no summary"
+        }`
+      );
+    });
+  }
+  if (ctx.lastBuilderCommitSummary) {
+    lines.push("");
+    lines.push(`Last Builder Commit summary: ${ctx.lastBuilderCommitSummary.slice(0, 300)}`);
+  }
+  if (ctx.lastReviewSummary) {
+    lines.push("");
+    lines.push(`Last PR review summary: ${ctx.lastReviewSummary.slice(0, 300)}`);
+  }
+
+  lines.push("");
   lines.push("## Selected file contents (from the task branch)");
   if (ctx.readWarnings.length > 0) {
     ctx.readWarnings.forEach((w) => lines.push(`Warning: ${w}`));
@@ -368,13 +427,14 @@ function extractJson(text: string): string {
  * completed proposal are validated by the caller/endpoint).
  */
 export async function generateBuilderCommitChanges(
-  taskId: string
+  taskId: string,
+  options?: BuilderContextOptions
 ): Promise<BuilderCommitRunResult> {
   if (!isLLMConfigured()) {
     throw new LLMError("LLM provider is not configured", "not_configured");
   }
 
-  const context = await buildBuilderCommitContext(taskId);
+  const context = await buildBuilderCommitContext(taskId, options);
   const config = getLLMConfig();
 
   const result = await chatCompletion({

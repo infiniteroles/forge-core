@@ -115,7 +115,13 @@ export default async function SettingsPage() {
     },
     {
       label: "Work Session mode",
-      value: "dev (issue → branch → plan → PR → proposal → commit → review)",
+      value:
+        "dev (issue → branch → plan → PR → proposal → commit → review) · iteration (Continue / Ask for changes, reutiliza branch y PR)",
+    },
+    {
+      label: "Iteration Loop (Continue / Ask for changes)",
+      value:
+        llmConfigured && githubConfigured ? "Available" : "Not configured",
     },
     { label: "Telegram bot", value: "Not configured" },
     { label: "Coolify API", value: "Not configured" },
