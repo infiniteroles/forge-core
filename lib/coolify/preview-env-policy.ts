@@ -199,7 +199,11 @@ export function buildPreviewEnvironmentVariables(input: {
         key,
         value,
         isRuntime: true,
-        isBuildtime: key.startsWith("NEXT_PUBLIC_") || key === "NODE_ENV",
+        // Only NEXT_PUBLIC_* needs to be baked in at build time. NODE_ENV must
+        // stay runtime-only: if NODE_ENV=production is present during the
+        // build, `npm ci` skips devDependencies and the Next.js build fails
+        // (e.g. "Cannot find module 'tailwindcss'").
+        isBuildtime: key.startsWith("NEXT_PUBLIC_"),
       });
       continue;
     }
