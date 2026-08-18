@@ -94,6 +94,28 @@ export async function runDevWorkSession(workSessionId: string) {
     data: { status: "running", startedAt: new Date(), currentStage: "ensure_task", error: null },
   });
 
+  async function refreshTaskContext() {
+    const task = await prisma.task.findUnique({ where: { id: ctx.taskId } });
+    if (task) {
+      ctx.task = {
+        id: task.id,
+        projectId: task.projectId,
+        title: task.title,
+        description: task.description,
+        notes: task.notes,
+        type: task.type,
+        priority: task.priority,
+        status: task.status,
+        githubIssueNumber: task.githubIssueNumber,
+        githubIssueUrl: task.githubIssueUrl,
+        githubBranchName: task.githubBranchName,
+        githubPrNumber: task.githubPrNumber,
+        githubPrUrl: task.githubPrUrl,
+        githubPlanCommitSha: task.githubPlanCommitSha,
+      };
+    }
+  }
+
   let finalStatus = "running";
   let finalSummary: string | null = null;
   let finalError: string | null = null;
@@ -122,6 +144,10 @@ export async function runDevWorkSession(workSessionId: string) {
         error: error instanceof Error ? error.message : "Unknown stage error",
       };
     }
+
+    // Reload the task from the DB so the next stage sees fields created by this
+    // stage (issue/branch/PR/plan), not the stale session snapshot.
+    await refreshTaskContext();
 
     await logActivity({
       projectId: ws.task.projectId,
