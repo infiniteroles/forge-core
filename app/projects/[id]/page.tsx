@@ -11,6 +11,8 @@ import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
 import { RepositoryPanel } from "@/components/RepositoryPanel";
+import { IdeaForm } from "@/components/IdeaForm";
+import type { LatestWorkSessionSummary } from "@/components/TaskCard";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import type { BuilderProposalSummary } from "@/components/BuilderProposalActions";
 
@@ -47,6 +49,28 @@ export default async function ProjectDetailPage({ params }: Props) {
   });
 
   if (!project) notFound();
+
+  const workSessions = await prisma.workSession.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
+  const latestWorkSessionByTask = new Map<string, LatestWorkSessionSummary>();
+  for (const ws of workSessions) {
+    if (!ws.taskId) continue;
+    if (latestWorkSessionByTask.has(ws.taskId)) continue;
+    const result =
+      typeof ws.result === "object" && ws.result !== null
+        ? (ws.result as { prUrl?: string | null; builderCommitUrl?: string | null })
+        : null;
+    latestWorkSessionByTask.set(ws.taskId, {
+      id: ws.id,
+      status: ws.status,
+      summary: ws.summary,
+      result: { prUrl: result?.prUrl ?? null, builderCommitUrl: result?.builderCommitUrl ?? null },
+    });
+  }
 
   const linkedIssueCount = project.tasks.filter(
     (task) => task.githubIssueNumber != null
@@ -298,6 +322,17 @@ export default async function ProjectDetailPage({ params }: Props) {
         </div>
 
         <div className="rounded-xl border border-border bg-surface p-6">
+          <h2 className="text-lg font-semibold tracking-tight">New idea</h2>
+          <p className="mt-1 text-sm text-text-dim">
+            Tell Forge what to build or change. It will work in DEV autonomously
+            and prepare a pull request for you to review.
+          </p>
+          <div className="mt-4">
+            <IdeaForm projectId={project.id} />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-6">
           <h2 className="text-lg font-semibold tracking-tight">Backlog</h2>
           <p className="mt-1 text-sm text-text-dim">
             Tasks derived from Planner runs and manual entries.
@@ -362,6 +397,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                     task={task}
                     repositoryLinked={project.repositoryFullName != null}
                     builderProposal={builderSummary(task.agentRuns[0])}
+                    workSession={latestWorkSessionByTask.get(task.id) ?? null}
                   />
                 ))}
               </div>

@@ -49,6 +49,27 @@ model Project {
   activityLogs         ActivityLog[]
   environments         Environment[]
   tasks                Task[]
+  workSessions         WorkSession[]
+}
+
+model WorkSession {
+  id           String    @id @default(cuid())
+  projectId    String
+  taskId       String?
+  status       String    @default("queued")
+  mode         String    @default("dev")
+  objective    String
+  summary      String?
+  currentStage String?
+  result       Json?
+  error        String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task         Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  agentRuns    AgentRun[]
 }
 
 model Instruction {
@@ -68,6 +89,7 @@ model AgentRun {
   projectId     String
   instructionId String?
   taskId        String?
+  workSessionId String?
   agentName     String?
   model         String?
   status        String       @default("queued")
@@ -80,6 +102,7 @@ model AgentRun {
   project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: SetNull)
   task          Task?        @relation("TaskRuns", fields: [taskId], references: [id], onDelete: SetNull)
+  workSession   WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
   tasks         Task[]       @relation("SourceAgentRuns")
 }
 
@@ -171,4 +194,5 @@ model Task {
   project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sourceAgentRun   AgentRun? @relation("SourceAgentRuns", fields: [sourceAgentRunId], references: [id], onDelete: SetNull)
   agentRuns        AgentRun[] @relation("TaskRuns")
+  workSessions     WorkSession[]
 }

@@ -108,6 +108,15 @@ export default async function SettingsPage() {
       label: "GitHub PR access",
       value: githubConfigured ? "Available" : "Not configured",
     },
+    {
+      label: "Autonomous DEV Work Session",
+      value:
+        llmConfigured && githubConfigured ? "Available" : "Not configured",
+    },
+    {
+      label: "Work Session mode",
+      value: "dev (issue → branch → plan → PR → proposal → commit → review)",
+    },
     { label: "Telegram bot", value: "Not configured" },
     { label: "Coolify API", value: "Not configured" },
   ];

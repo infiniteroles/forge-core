@@ -16,6 +16,7 @@ import {
 } from "./BuilderProposalActions";
 import { BuilderCommitActions } from "./BuilderCommitActions";
 import { PrReviewGateActions } from "./PrReviewGateActions";
+import { WorkSessionButton } from "./WorkSessionButton";
 
 type TaskProps = {
   id: string;
@@ -48,14 +49,26 @@ type TaskProps = {
   githubPrReviewReadyForReview: boolean | null;
 };
 
+export type LatestWorkSessionSummary = {
+  id: string;
+  status: string;
+  summary: string | null;
+  result: {
+    prUrl?: string | null;
+    builderCommitUrl?: string | null;
+  } | null;
+};
+
 export function TaskCard({
   task,
   repositoryLinked,
   builderProposal,
+  workSession,
 }: {
   task: TaskProps;
   repositoryLinked?: boolean;
   builderProposal?: BuilderProposalSummary | null;
+  workSession?: LatestWorkSessionSummary | null;
 }) {
   const tone =
     TASK_STATUS_TONES[task.status] ?? "bg-neutral-700/40 text-neutral-300";
@@ -78,6 +91,43 @@ export function TaskCard({
           {TASK_STATUS_LABELS[task.status] ?? task.status}
         </span>
       </div>
+
+      <WorkSessionButton taskId={task.id} />
+
+      {workSession ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-xs">
+          <span className="font-medium text-neutral-200">Latest work session</span>
+          <span
+            className={`rounded px-1.5 py-0.5 font-mono ${
+              workSession.status === "completed"
+                ? "bg-emerald-500/10 text-emerald-300"
+                : workSession.status === "waiting_for_user"
+                  ? "bg-amber-500/10 text-amber-300"
+                  : workSession.status === "failed"
+                    ? "bg-red-500/10 text-red-300"
+                    : "bg-sky-500/10 text-sky-300"
+            }`}
+          >
+            {workSession.status}
+          </span>
+          <Link
+            href={`/work-sessions/${workSession.id}`}
+            className="text-accent transition hover:underline"
+          >
+            View
+          </Link>
+          {workSession.result?.prUrl ? (
+            <a
+              href={workSession.result.prUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent transition hover:underline"
+            >
+              Open PR
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-text-dim">
         <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">

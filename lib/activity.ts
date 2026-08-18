@@ -49,6 +49,13 @@ export const ACTIVITY_TYPES = [
   "github.pr_review.failed",
   "github.pr.ready_for_review",
   "github.pr.ready_for_review_failed",
+  "work_session.started",
+  "work_session.stage_started",
+  "work_session.stage_completed",
+  "work_session.waiting_for_user",
+  "work_session.completed",
+  "work_session.completed_with_warnings",
+  "work_session.failed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

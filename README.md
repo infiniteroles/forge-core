@@ -18,6 +18,7 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **Builder Proposal Agent**: analyze a single task + limited repository context and propose an implementation strategy via DeepSeek — analysis only, no code/commit/PR/deploy changes.
 - **Builder Commit Agent**: generate concrete, validated functional changes for a task and commit them **only** on the task branch (guarded by proposal, safe-file policy and strict limits).
 - **PR Review Gate**: analyze a task's draft PR, summarize the diff, flag risks and recommend ready-for-review (never merges, deploys or auto-approves).
+- **Autonomous DEV Work Session**: a single "Work on this" action that runs issue → branch → plan → draft PR → Builder Proposal → Builder Commit → PR review automatically and prepares a PR for human review.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
@@ -141,6 +142,8 @@ On Coolify:
 - `POST /api/tasks/[id]/github/pr/review` — analyze a draft PR (structured review).
 - `POST /api/tasks/[id]/github/pr/review/check` — refresh PR + review metadata.
 - `POST /api/tasks/[id]/github/pr/ready` — convert a draft PR to ready for review (no merge).
+- `POST /api/tasks/[id]/work-session/start` — run an autonomous DEV work session for a task.
+- `POST /api/projects/[id]/ideas/work-session/start` — create a task from an idea and run a DEV work session.
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -624,6 +627,83 @@ secrets.
 
 Controlled test runner (build validation in a sandbox), PR comments,
 Coolify DEV deploy button, single atomic multi-file commits via Git Data API.
+
+## Autonomous DEV Work Session
+
+A single high-level action that runs the whole validated pipeline under the hood,
+so you do not have to click every step manually.
+
+Flow:
+
+```
+Idea / Task
+→ Work on this / Start DEV Work Session
+→ ensure issue (skip if exists)
+→ ensure branch (skip if exists)
+→ ensure plan commit (skip if exists)
+→ ensure draft PR (skip if exists)
+→ Builder Proposal (if missing / not safe → waiting_for_user)
+→ Builder Commit (only if safe; safe_to_commit=false → completed_with_warnings, no write)
+→ Analyze PR (structured review)
+→ human summary
+```
+
+### What is automated
+
+Creating the issue, branch, plan commit and draft PR, running the Builder
+Proposal, running the Builder Commit on the task branch, analyzing the PR,
+updating metadata and logging to the ActivityLog.
+
+### What still requires human approval
+
+Merge to `main`, deploy to production, closing issues automatically, deleting
+data, touching secrets, touching sensitive infrastructure, or relaxing the
+safe-file policy.
+
+### Model
+
+`WorkSession` groups a session: `projectId`, `taskId?`, `status`
+(`queued | running | waiting_for_user | completed | completed_with_warnings |
+failed | cancelled`), `mode` (`dev | fix | iteration | exploration`),
+`objective`, `summary`, `currentStage`, `result` (JSON), `error`, timestamps.
+`AgentRun.workSessionId` links runs to the session.
+
+### Endpoints
+
+```
+POST /api/tasks/[id]/work-session/start           — run a DEV session for a task
+POST /api/projects/[id]/ideas/work-session/start  — create a task from an idea, then run the session
+```
+
+Body for the idea endpoint: `{ "idea": "..." }`.
+
+### UI
+
+- Task cards show a primary **Work on this** button; after the session, the card
+  shows the session status, a human-readable summary, **View session** and
+  **Open PR**, plus `Continue` / `Ask for changes` / `Discard` /
+  `Prepare production` (the last three are coming soon).
+- The project detail page has a **New idea** box with **Start DEV Work Session**.
+- `/work-sessions/[id]` shows the objective, status, current stage, summary,
+  artifacts (issue/branch/plan/PR/commit links), files changed, warnings,
+  agent runs and the activity timeline.
+
+Events logged: `work_session.started`, `work_session.stage_started`,
+`work_session.stage_completed`, `work_session.waiting_for_user`,
+`work_session.completed`, `work_session.completed_with_warnings`,
+`work_session.failed`. Metadata never includes tokens or secrets.
+
+### Orchestrator
+
+`lib/work-sessions/` contains `types.ts`, `stages.ts` (reusable ensure-stage
+functions) and `orchestrator.ts` (`runDevWorkSession`). It reuses the existing
+GitHub/LLM primitives and never duplicates work if a stage is already done.
+
+### Current limitations
+
+- Synchronous execution (no background queue / WebSockets yet); a full session
+  can take a few minutes.
+- No automatic merge, deploy, production approval, reviewers, or test runner yet.
 
 ## Backlog (Planner → tasks)
 
