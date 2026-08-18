@@ -113,12 +113,15 @@ export async function createOrReusePreviewApplication(input: {
   }
 
   // 3. Create a new app in the DEV environment (never production).
+  // NOTE: Coolify API exposes creation under /applications/public for public
+  // GitHub repos (there is no bare POST /applications). The repo field is
+  // `git_repository` (full URL), not `github_repository`.
   const cfg = getCoolifyConfig();
   const body: Record<string, unknown> = {
     project_uuid: cfg.projectUuid ?? undefined,
     server_uuid: cfg.serverUuid ?? undefined,
     environment_name: cfg.environmentName,
-    github_repository: input.repositoryFullName,
+    git_repository: `https://github.com/${input.repositoryFullName}`,
     git_branch: input.branchName,
     build_pack: cfg.buildPack,
     ports_exposes: cfg.defaultPort,
@@ -127,7 +130,7 @@ export async function createOrReusePreviewApplication(input: {
     name: buildPreviewAppName(input.taskId),
   };
 
-  const created = await coolifyFetch<{ uuid?: string }>("/applications", {
+  const created = await coolifyFetch<{ uuid?: string }>("/applications/public", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -153,11 +156,13 @@ export async function triggerPreviewDeployment(previewDeploymentId: string) {
     throw new Error("Coolify API token is not configured");
   }
 
+  // Coolify API triggers a deployment via POST /applications/{uuid}/start
+  // (action_deploy). There is no /applications/{uuid}/deploy endpoint.
   const data = await coolifyFetch<{
     deployments?: { uuid?: string; status?: string }[];
     deployment_uuid?: string;
     status?: string;
-  }>(`/applications/${encodeURIComponent(preview.coolifyApplicationUuid)}/deploy`, {
+  }>(`/applications/${encodeURIComponent(preview.coolifyApplicationUuid)}/start`, {
     method: "POST",
   });
 
