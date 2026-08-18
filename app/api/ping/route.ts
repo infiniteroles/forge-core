@@ -5,5 +5,6 @@ export async function GET() {
     ok: true,
     service: "forge-core",
     timestamp: new Date().toISOString(),
+    checked: true,
   });
 }
