@@ -40,8 +40,11 @@ export function DevPreviewPanel({
         body: JSON.stringify(body ?? {}),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
+      if (res.ok) {
+        // Always refresh so the server re-renders the created/updated preview
+        // record (even when ok:false with status not_configured/failed).
         router.refresh();
+        if (data.error) setError(data.error);
       } else {
         setError(data.error || data.message || "DEV Preview request failed.");
       }
