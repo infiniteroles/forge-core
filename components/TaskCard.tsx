@@ -23,6 +23,10 @@ import {
   TaskProductionReadiness,
   type TaskProductionReadinessData,
 } from "./TaskProductionReadiness";
+import {
+  TaskProductionPromotion,
+  type TaskPromotionData,
+} from "./TaskProductionPromotion";
 
 type TaskProps = {
   id: string;
@@ -75,12 +79,14 @@ export function TaskCard({
   builderProposal,
   workSession,
   production,
+  promotion,
 }: {
   task: TaskProps;
   repositoryLinked?: boolean;
   builderProposal?: BuilderProposalSummary | null;
   workSession?: LatestWorkSessionSummary | null;
   production?: TaskProductionReadinessData | null;
+  promotion?: TaskPromotionData | null;
 }) {
   const tone =
     TASK_STATUS_TONES[task.status] ?? "bg-neutral-700/40 text-neutral-300";
@@ -158,6 +164,7 @@ export function TaskCard({
             previewUrl={workSession.result?.previewUrl ?? null}
           />
           <TaskProductionReadiness data={production ?? null} />
+          <TaskProductionPromotion data={promotion ?? null} />
         </div>
       ) : null}
 

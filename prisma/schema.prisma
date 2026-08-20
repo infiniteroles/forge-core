@@ -53,6 +53,7 @@ model Project {
   sessionChecks        SessionCheck[]
   previewDeployments   PreviewDeployment[]
   productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
 }
 
 model WorkSession {
@@ -81,6 +82,7 @@ model WorkSession {
   sessionChecks        SessionCheck[]
   previewDeployments   PreviewDeployment[]
   productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
 }
 
 model Instruction {
@@ -209,6 +211,7 @@ model Task {
   sessionChecks    SessionCheck[]
   previewDeployments PreviewDeployment[]
   productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
 }
 
 model PreviewDeployment {
@@ -242,6 +245,7 @@ model PreviewDeployment {
   task                   Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
   workSession            WorkSession?  @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
   productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
 }
 
 model SessionCheck {
@@ -292,4 +296,41 @@ model ProductionReadinessReview {
   task                Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
   workSession         WorkSession?       @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
   previewDeployment   PreviewDeployment? @relation(fields: [previewDeploymentId], references: [id], onDelete: SetNull)
+  productionPromotions ProductionPromotion[]
+}
+
+model ProductionPromotion {
+  id                          String    @id @default(cuid())
+  projectId                   String
+  taskId                      String?
+  workSessionId               String?
+  productionReadinessReviewId String?
+  previewDeploymentId         String?
+  status                      String    @default("draft")
+  strategy                    String    @default("github_pr_merge")
+  summary                     String?
+  error                       String?
+  prNumber                    Int?
+  prUrl                       String?
+  branchName                  String?
+  baseBranch                  String?
+  mergeCommitSha              String?
+  mergeMethod                 String?
+  preflightSummary            Json?
+  deploymentSummary           Json?
+  verificationSummary         Json?
+  metadata                    Json?
+  requestedBy                 String?
+  requestedAt                 DateTime?
+  startedAt                   DateTime?
+  completedAt                 DateTime?
+  failedAt                    DateTime?
+  cancelledAt                 DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  project                     Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                        Task?                      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  workSession                 WorkSession?               @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  productionReadinessReview   ProductionReadinessReview? @relation(fields: [productionReadinessReviewId], references: [id], onDelete: SetNull)
+  previewDeployment           PreviewDeployment?         @relation(fields: [previewDeploymentId], references: [id], onDelete: SetNull)
 }

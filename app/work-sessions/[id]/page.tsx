@@ -11,6 +11,10 @@ import {
   ProductionReadinessPanel,
   type ProductionReadinessData,
 } from "@/components/ProductionReadinessPanel";
+import {
+  ProductionPromotionPanel,
+  type ProductionPromotionData,
+} from "@/components/ProductionPromotionPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -142,6 +146,73 @@ function productionReadinessData(review: {
   };
 }
 
+function productionPromotionData(promotion: {
+  id: string;
+  status: string;
+  strategy: string;
+  summary: string | null;
+  error: string | null;
+  prNumber: number | null;
+  prUrl: string | null;
+  branchName: string | null;
+  baseBranch: string | null;
+  mergeCommitSha: string | null;
+  mergeMethod: string | null;
+  preflightSummary: unknown;
+  verificationSummary: unknown;
+  requestedBy: string | null;
+  requestedAt: Date | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  failedAt: Date | null;
+  createdAt: Date;
+}): ProductionPromotionData {
+  const pre = promotion.preflightSummary as Record<string, unknown> | null;
+  const ver = promotion.verificationSummary as Record<string, unknown> | null;
+  return {
+    id: promotion.id,
+    status: promotion.status,
+    strategy: promotion.strategy,
+    summary: promotion.summary,
+    error: promotion.error,
+    prNumber: promotion.prNumber,
+    prUrl: promotion.prUrl,
+    branchName: promotion.branchName,
+    baseBranch: promotion.baseBranch,
+    mergeCommitSha: promotion.mergeCommitSha,
+    mergeMethod: promotion.mergeMethod,
+    preflightSummary: pre
+      ? {
+          ok: Boolean(pre.ok),
+          checks: Array.isArray(pre.checks) ? (pre.checks as never[]) : [],
+          blockingReasons: Array.isArray(pre.blockingReasons)
+            ? (pre.blockingReasons as string[])
+            : [],
+          warnings: Array.isArray(pre.warnings) ? (pre.warnings as string[]) : [],
+        }
+      : null,
+    verificationSummary: ver
+      ? {
+          ok: Boolean(ver.ok),
+          prMerged: typeof ver.prMerged === "boolean" ? (ver.prMerged as boolean) : undefined,
+          health: (ver.health ?? undefined) as
+            | { url: string; status: number; ok: boolean }
+            | undefined,
+          expectedEndpoint: (ver.expectedEndpoint ?? null) as
+            | { url: string; status: number; ok: boolean }
+            | null
+            | undefined,
+        }
+      : null,
+    requestedBy: promotion.requestedBy,
+    requestedAt: promotion.requestedAt ? promotion.requestedAt.toISOString() : null,
+    startedAt: promotion.startedAt ? promotion.startedAt.toISOString() : null,
+    completedAt: promotion.completedAt ? promotion.completedAt.toISOString() : null,
+    failedAt: promotion.failedAt ? promotion.failedAt.toISOString() : null,
+    createdAt: promotion.createdAt.toISOString(),
+  };
+}
+
 export default async function WorkSessionPage({ params }: Props) {
   if (!(await getSession())) redirect("/login");
 
@@ -156,6 +227,7 @@ export default async function WorkSessionPage({ params }: Props) {
       sessionChecks: { orderBy: { createdAt: "asc" } },
       previewDeployments: { orderBy: { createdAt: "desc" } },
       productionReadinessReviews: { orderBy: { createdAt: "desc" } },
+      productionPromotions: { orderBy: { createdAt: "desc" } },
       parentWorkSession: { select: { id: true, status: true, mode: true, iterationNumber: true, objective: true } },
       childrenWorkSessions: {
         orderBy: { createdAt: "desc" },
@@ -254,6 +326,20 @@ export default async function WorkSessionPage({ params }: Props) {
           review={
             session.productionReadinessReviews[0]
               ? productionReadinessData(session.productionReadinessReviews[0])
+              : null
+          }
+        />
+
+        <ProductionPromotionPanel
+          workSessionId={session.id}
+          review={
+            session.productionReadinessReviews[0]
+              ? productionReadinessData(session.productionReadinessReviews[0])
+              : null
+          }
+          promotion={
+            session.productionPromotions[0]
+              ? productionPromotionData(session.productionPromotions[0])
               : null
           }
         />

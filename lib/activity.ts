@@ -88,6 +88,19 @@ export const ACTIVITY_TYPES = [
   "production.approved",
   "production.rejected",
   "production.refreshed",
+  "promotion.prepare_requested",
+  "promotion.preflight_passed",
+  "promotion.preflight_failed",
+  "promotion.ready",
+  "promotion.execute_requested",
+  "promotion.merge_started",
+  "promotion.merged",
+  "promotion.deploy_wait_started",
+  "promotion.verification_started",
+  "promotion.completed",
+  "promotion.failed",
+  "promotion.refreshed",
+  "promotion.cancelled",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

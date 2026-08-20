@@ -14,6 +14,7 @@ import { RepositoryPanel } from "@/components/RepositoryPanel";
 import { IdeaForm } from "@/components/IdeaForm";
 import type { LatestWorkSessionSummary } from "@/components/TaskCard";
 import type { TaskProductionReadinessData } from "@/components/TaskProductionReadiness";
+import type { TaskPromotionData } from "@/components/TaskProductionPromotion";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import type { BuilderProposalSummary } from "@/components/BuilderProposalActions";
 
@@ -47,6 +48,19 @@ export default async function ProjectDetailPage({ params }: Props) {
           recommendation: true,
           blockingReasons: true,
           diagnostics: true,
+        },
+      },
+      productionPromotions: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          taskId: true,
+          workSessionId: true,
+          status: true,
+          prNumber: true,
+          mergeCommitSha: true,
+          summary: true,
+          error: true,
         },
       },
       tasks: {
@@ -196,6 +210,36 @@ export default async function ProjectDetailPage({ params }: Props) {
   ).length;
   const productionBlockedCount = project.productionReadinessReviews.filter(
     (r) => r.status === "blocked" || r.status === "needs_changes"
+  ).length;
+
+  // Production promotion: latest promotion per task.
+  const promotionByTask = new Map<string, TaskPromotionData>();
+  for (const p of project.productionPromotions) {
+    if (!p.taskId) continue;
+    if (promotionByTask.has(p.taskId)) continue;
+    const readiness = productionByTask.get(p.taskId);
+    promotionByTask.set(p.taskId, {
+      promotionId: p.id,
+      status: p.status,
+      prNumber: p.prNumber,
+      mergeCommitSha: p.mergeCommitSha,
+      summary: p.summary,
+      error: p.error,
+      reviewId: readiness?.reviewId ?? null,
+      workSessionId: readiness?.workSessionId ?? p.workSessionId ?? null,
+      readinessApproved:
+        readiness?.status === "approved" &&
+        readiness?.recommendation === "ready_for_production",
+    });
+  }
+  const promotionsReadyCount = project.productionPromotions.filter(
+    (p) => p.status === "ready_to_promote"
+  ).length;
+  const promotionsCompletedCount = project.productionPromotions.filter(
+    (p) => p.status === "completed"
+  ).length;
+  const promotionsFailedCount = project.productionPromotions.filter(
+    (p) => p.status === "failed" || p.status === "preflight_failed"
   ).length;
 
   function builderSummary(
@@ -486,6 +530,9 @@ export default async function ProjectDetailPage({ params }: Props) {
               </p>              <p className="mt-1 text-xs text-text-dim">
                 Production ready: {productionReadyCount} · Approved:{" "}
                 {productionApprovedCount} · Blocked: {productionBlockedCount}
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                Promotions ready: {promotionsReadyCount} · Promotions completed:{" "}
+                {promotionsCompletedCount} · Promotions failed: {promotionsFailedCount}
               </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (
                   <TaskCard
@@ -495,6 +542,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                     builderProposal={builderSummary(task.agentRuns[0])}
                     workSession={latestWorkSessionByTask.get(task.id) ?? null}
                     production={productionByTask.get(task.id) ?? null}
+                    promotion={promotionByTask.get(task.id) ?? null}
                   />
                 ))}
               </div>

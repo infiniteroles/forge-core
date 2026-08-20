@@ -1312,6 +1312,119 @@ default).
 `Approve readiness` **no hace merge ni deploy**; la PR sigue abierta y `main`
 permanece intacto (`/api/ping` 404 hasta que un humano haga merge).
 
+## Fase 3.9 — Controlled Production Promotion
+
+Añade el paso final: **promover a producción** un cambio ya aprobado. A
+diferencia de todo lo anterior, esto **sí puede mergear a `main`**, pero solo
+bajo condiciones estrictas y una confirmación humana explícita.
+
+> **Resumen:** `Prepare promotion` solo hace preflight (nunca mergea).
+> `Execute promotion` requiere escribir literalmente **`PROMOTE`**, re-ejecuta
+> el preflight, mergea la PR vía GitHub API, espera al despliegue y verifica
+> `/api/health` + el endpoint esperado en producción.
+
+### Condiciones para promover (preflight)
+
+`runProductionPromotionPreflight()` re-valida **en el momento de la promoción**:
+
+1. `readiness.approved` — existe una revisión `approved` con recomendación
+   `ready_for_production`.
+2. `pr.ready` — la PR existe, está abierta, **no es draft**, **no está
+   mergeada** y su base es `main`.
+3. `pr.review` — la última PR Review recomienda `ready_for_review`.
+4. `preview.ready` — hay una preview DEV lista con URL verificada.
+5. `files.safe` — el diff de la PR no toca rutas bloqueadas por safe-file-policy.
+6. `checks.no_critical_fails` — no hay fallos críticos en los checks del trabajo.
+
+Si algo falla → `preflight_failed` con la lista de `blockingReasons`. **No se
+mergea nada.**
+
+### Modelo `ProductionPromotion`
+
+Campos: `projectId`, `taskId?`, `workSessionId?`, `productionReadinessReviewId?`,
+`previewDeploymentId?`, `status` (`draft|preflight_failed|ready_to_promote|
+promoting|merged|deploying|verifying|completed|failed|cancelled`), `strategy`
+(`github_pr_merge`), `mergeMethod` (`squash`), `prNumber?`, `prUrl?`,
+`branchName?`, `baseBranch?`, `mergeCommitSha?`, `preflightSummary Json?`,
+`deploymentSummary Json?`, `verificationSummary Json?`, `metadata Json?`,
+`requestedBy?`, `requestedAt?`, `startedAt?`, `completedAt?`, `failedAt?`,
+`cancelledAt?`.
+
+### Flujo
+
+1. `POST /api/production-readiness/[id]/promotion/prepare` — preflight →
+   crea la `ProductionPromotion` en `ready_to_promote` (o `preflight_failed`).
+   **Nunca mergea.**
+2. `POST /api/production-promotions/[id]/execute` — requiere `{ confirm:
+   "PROMOTE" }` (si no, HTTP 400). Re-ejecuta el preflight → `promoting` →
+   `mergePullRequest()` (GitHub REST `PUT /pulls/{n}/merge`, método `squash`,
+   título `Promote task <taskId>: <title>`) → `merged` (guarda `mergeCommitSha`)
+   → `deploying` (espera el despliegue: `PRODUCTION_DEPLOY_WAIT_MS`=180s,
+   poll `PRODUCTION_DEPLOY_POLL_INTERVAL_MS`=10s, modo `wait_for_existing_deploy`)
+   → `verifying` → `completed`|`failed` con `verificationSummary`
+   (`{ health, expectedEndpoint, prMerged, mergeCommitSha }`).
+3. `POST /api/production-promotions/[id]/refresh` — re-lee el estado del merge y
+   vuelve a sondear salud + endpoint. **Nunca re-mergea.**
+
+`mergePullRequest()` (en `lib/github/pull-requests.ts`) **no borra la rama** y
+**no cierra la issue** asociada. La verificación usa `PRODUCTION_BASE_URL`
+(por defecto `https://forge-app.dev.core01.io`): `/api/health` y el endpoint
+esperado derivado del diff (`app/api/ping/route.ts` → `/api/ping`).
+
+### Actividad
+
+Nuevos eventos `promotion.*`: `prepare_requested`, `preflight_passed`,
+`preflight_failed`, `ready`, `execute_requested`, `merge_started`, `merged`,
+`deploy_wait_started`, `verification_started`, `completed`, `failed`,
+`refreshed`, `cancelled`. Metadata segura (ids, `prNumber`, `status`,
+`mergeCommitSha`, `healthStatus` — nunca tokens).
+
+### UI
+
+- Work Session: panel **Production promotion** bajo Production readiness.
+  Estados: No preparada / Preflight fallido / Listo para promover / Promoviendo
+  / Mergeado / Desplegando / Verificando / Completado / Fallido / Cancelado.
+  Acciones: `Prepare promotion` (solo si readiness aprobada), `Execute
+  promotion` (solo si `ready_to_promote`, modal con input **PROMOTE**),
+  `Refresh promotion`. Textos de advertencia: "Esto sí mergea la PR en main" y
+  "Esto puede lanzar el despliegue de producción".
+- Task card: chip compacto `Promotion: not prepared / ready / completed /
+  failed` + `Prepare promotion` (solo si readiness aprobada) + `View promotion`.
+- Proyecto: contador `Promotions ready: X · Promotions completed: Y ·
+  Promotions failed: Z`.
+- Settings: fila `Production promotion` (estrategia, método de merge, base URL,
+  ventana de espera).
+
+### Qué NO hace la promoción
+
+- No fuerza `ready_for_production`: si la readiness no está aprobada, el
+  preflight falla.
+- No mergea sin `PROMOTE`: la confirmación es obligatoria (HTTP 400 si no).
+- No hace auto-rollback: si la verificación falla tras el merge, queda
+  `failed` con un error claro; un humano decide qué hacer.
+- No borra la rama de la PR ni cierra la issue.
+- No imprime tokens ni secretos.
+
+### Variables de entorno
+
+```bash
+PRODUCTION_BASE_URL="https://forge-app.dev.core01.io"
+PRODUCTION_PROMOTION_MODE="github_merge"
+PRODUCTION_DEPLOY_WAIT_MS="180000"
+PRODUCTION_DEPLOY_POLL_INTERVAL_MS="10000"
+```
+
+### Troubleshooting
+
+- **Preflight fallido**: mira `blockingReasons` en el panel. Típicamente falta
+  `Approve readiness` (y que la PR Review diga `ready_for_review`).
+- **Ejecutar devuelve 400**: el cuerpo no contenía `"PROMOTE"`.
+- **El PR se mergea pero el endpoint sigue 404**: Coolify puede no auto-desplegar
+  al hacer merge. Lanza el deploy manualmente (Actions → Deploy) y pulsa
+  `Refresh promotion` para completar la verificación.
+- **Verificación fallida tras merge**: revisa `verificationSummary`
+  (`health.status`, `expectedEndpoint.status`). No hay rollback automático.
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.
