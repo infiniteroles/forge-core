@@ -813,5 +813,44 @@ export async function refreshProductionPromotion(
     },
   });
 
+  // When refresh transitions the promotion to a terminal state, also record the
+  // terminal event (covers the case where the execute request was interrupted
+  // by a proxy timeout during the deploy wait).
+  const wasTerminal =
+    promotion.status === "completed" || promotion.status === "failed";
+  if (status === "completed" && !wasTerminal) {
+    await logActivity({
+      projectId: promotion.projectId,
+      type: "promotion.completed",
+      message: `Promoción a producción completada: ${promotion.prNumber ? `PR #${promotion.prNumber}` : "PR"} en main y verificación OK.`,
+      metadata: {
+        productionPromotionId: promotion.id,
+        productionReadinessReviewId: promotion.productionReadinessReviewId ?? undefined,
+        workSessionId: promotion.workSessionId ?? undefined,
+        taskId: promotion.taskId ?? undefined,
+        prNumber: promotion.prNumber ?? undefined,
+        mergeCommitSha: updated.mergeCommitSha ?? undefined,
+        healthStatus: "ok",
+        status: "completed",
+      },
+    });
+  } else if (status === "failed" && !wasTerminal) {
+    await logActivity({
+      projectId: promotion.projectId,
+      type: "promotion.failed",
+      message: `La promoción a producción no pudo completarse: ${promotion.prNumber ? `PR #${promotion.prNumber}` : "PR"} mergeado pero la verificación no pasó.`,
+      metadata: {
+        productionPromotionId: promotion.id,
+        productionReadinessReviewId: promotion.productionReadinessReviewId ?? undefined,
+        workSessionId: promotion.workSessionId ?? undefined,
+        taskId: promotion.taskId ?? undefined,
+        prNumber: promotion.prNumber ?? undefined,
+        mergeCommitSha: updated.mergeCommitSha ?? undefined,
+        healthStatus: verification.health?.ok ? "ok" : "error",
+        status: "failed",
+      },
+    });
+  }
+
   return { ...updated, summary };
 }

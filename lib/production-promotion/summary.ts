@@ -22,7 +22,7 @@ export function buildProductionPromotionSummary(
     return lines.join(" ");
   }
 
-  if (data.completed) {
+  if (data.completed || data.status === "completed") {
     lines.push(`Promoción a producción completada (${pr}).`);
     if (data.mergeCommitSha) {
       lines.push(`Merge commit: ${data.mergeCommitSha.slice(0, 12)}.`);
@@ -49,7 +49,7 @@ export function buildProductionPromotionSummary(
     return lines.join(" ");
   }
 
-  if (data.failed) {
+  if (data.failed || data.status === "failed") {
     lines.push(`La promoción a producción ha fallado (${pr}).`);
     if (data.mergeCommitSha) {
       lines.push(`Merge commit: ${data.mergeCommitSha.slice(0, 12)}.`);
