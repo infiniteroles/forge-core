@@ -229,14 +229,14 @@ export function ProductionReadinessPanel({
         </p>
       ) : null}
 
-      {review?.approvedAt ? (
+      {status === "approved" && review?.approvedAt ? (
         <p className="mt-2 text-xs text-emerald-300">
           Aprobado por {review.approvedBy ?? "humano"} el{" "}
           {new Date(review.approvedAt).toLocaleString()}.
         </p>
       ) : null}
 
-      {review?.rejectedAt ? (
+      {status === "rejected" && review?.rejectedAt ? (
         <p className="mt-2 text-xs text-red-300">
           Rechazado el {new Date(review.rejectedAt).toLocaleString()}.
         </p>
