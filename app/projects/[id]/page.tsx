@@ -160,8 +160,9 @@ export default async function ProjectDetailPage({ params }: Props) {
         preview: "preview",
         checks: "checks",
         files: "files",
-        pr: "PR",
+        pr: "PR draft",
         builder: "builder",
+        tests: "tests",
       };
       return source ? (map[source] ?? source) : null;
     }

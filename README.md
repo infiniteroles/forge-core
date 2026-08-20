@@ -1248,6 +1248,70 @@ preview after sessions, and a "Stop preview" action.
   can take a few minutes.
 - No automatic merge, deploy, production approval, reviewers, or test runner yet.
 
+## Fase 3.8C — Approval Happy Path: Ready PR + Preview inheritance + Minimal Tests
+
+Closes the real approval happy path by satisfying the conditions Forge itself
+requires — without relaxing guardrails. Still never merges, never deploys to
+production and never touches `main`; `Approve readiness` only records human
+approval.
+
+### Preview inheritance (`lib/production-readiness/preview-resolver.ts`)
+
+`resolveReadyPreviewForTask()` finds the best ready DEV preview even when the
+current work session (e.g. an iteration child) has none, by priority:
+
+1. PreviewDeployment of the current work session (ready).
+2. PreviewDeployment of the same task (ready).
+3. PreviewDeployment with the same `branchName` (ready).
+4. PreviewDeployment with the same `pullRequestNumber` (ready).
+5. Most recent ready preview for the project.
+
+Avoids false positives: never uses `failed`/`stopped` previews, never a preview
+of another repository, and prefers an exact ready preview. Diagnostics show
+`Preview heredado de WorkSession <id> (branch|task|pr)` as a positive signal and
+`Preview source` in the panel.
+
+### Minimal tests (Vitest)
+
+`vitest` is a devDependency with `"test": "vitest run --passWithNoTests"` and a
+root `vitest.config.ts`. The real test for `/api/ping` (`tests/api/ping.test.ts`
+or co-located) lives on the feature branch (the route only exists there, since
+`main` keeps `/api/ping` 404). It checks the endpoint returns
+`{ ok: true, service: "forge-core" }` and does not assume `timestamp`/`checked`.
+`npm test` on `main` passes with no tests (`--passWithNoTests`). The test is
+added to the PR via the **Fix readiness issues** corrective iteration (same
+task, branch and PR — no duplicated artifacts). Session Checks allowlist now
+includes `npm test` (hardcoded, safe, short timeout; runner still disabled by
+default).
+
+### PR ready for review + approval happy path
+
+1. Add minimal tests to the PR (corrective iteration).
+2. `Re-run PR review` → `POST /api/tasks/[id]/github/pr/review` (new `pr-review`
+   AgentRun). It should return `ready_for_review` with risk `low`/`medium`.
+3. `Mark PR ready for review` → `POST /api/tasks/[id]/github/pr/ready`
+   (GraphQL `markPullRequestReadyForReview`, no merge; requires the last review
+   to recommend ready).
+4. `Refresh readiness` → re-evaluates PR (not draft), tests present, preview
+   inherited/ready, files allowed, checks passed/skipped.
+5. `Approve readiness` → only when `recommendation = ready_for_production`;
+   records `approvedBy`/`approvedAt` + `production.approved`. **Never merges or
+   deploys.**
+
+### UI
+
+- Work Session panel: `Preview source`, `Preview URL`, `Tests` (yes/no),
+  `PR draft` (yes/no) + actions `Re-run PR review`, `Mark PR ready for review`
+  (solo si draft), `Refresh readiness`, `Fix readiness issues`,
+  `Approve readiness` (solo si `ready_for_production`), `Reject`.
+- Task card: `Production: needs changes — PR review` / `— PR draft` / `— tests`
+  + `View readiness` + `Re-run review`.
+
+### Guardrails (unchanged)
+
+`Approve readiness` **no hace merge ni deploy**; la PR sigue abierta y `main`
+permanece intacto (`/api/ping` 404 hasta que un humano haga merge).
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.

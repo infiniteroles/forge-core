@@ -37,6 +37,7 @@ export interface ProductionEvaluationInput {
   prReviewLastCheckedAt: Date | null;
   prMarkedReadyAt: Date | null;
   builderCommitSha: string | null;
+  testsPresent: boolean;
   checks: ProductionChecksSummary | null;
   preview: ProductionPreviewSummary | null;
   files: ProductionFilesSummary | null;

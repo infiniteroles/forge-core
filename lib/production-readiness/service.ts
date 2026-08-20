@@ -12,6 +12,11 @@ import { logActivity } from "@/lib/activity";
 import { assessPrPaths } from "@/lib/github/safe-file-policy";
 import { evaluateProductionReadiness, type ProductionEvaluationInput } from "./evaluator";
 import { buildProductionReadinessSummary } from "./summary";
+import {
+  findCurrentSessionPreview,
+  resolveReadyPreviewForTask,
+  type ResolvedPreview,
+} from "./preview-resolver";
 import type { ProductionEvaluationResult, ProductionRecommendation } from "./types";
 
 /** Maps a possibly-null value to a Prisma Json input (SQL NULL when absent). */
@@ -56,7 +61,23 @@ async function loadSessionContext(sessionId: string) {
   return session;
 }
 
-function buildEvaluationInput(ctx: NonNullable<Awaited<ReturnType<typeof loadSessionContext>>>): ProductionEvaluationInput {
+function previewToSummary(preview: ResolvedPreview | null) {
+  if (!preview) return null;
+  return {
+    status: preview.status,
+    previewUrl: preview.previewUrl,
+    domain: preview.domain,
+    branchName: preview.branchName,
+    commitSha: null,
+    lastDeploymentStatus: preview.lastDeploymentStatus,
+    error: preview.error,
+    envConfigured: preview.envConfigured,
+    source: preview.source,
+    sourceWorkSessionId: preview.sourceWorkSessionId,
+  };
+}
+
+async function buildEvaluationInput(ctx: NonNullable<Awaited<ReturnType<typeof loadSessionContext>>>): Promise<ProductionEvaluationInput> {
   const task = ctx.task;
   const result =
     typeof ctx.result === "object" && ctx.result !== null
@@ -83,25 +104,7 @@ function buildEvaluationInput(ctx: NonNullable<Awaited<ReturnType<typeof loadSes
         }
       : null;
 
-  // ── preview ───────────────────────────────────────────────────────────────
-  const previewDeployment = ctx.previewDeployments[0] ?? null;
-  const preview = previewDeployment
-    ? {
-        status: previewDeployment.status,
-        previewUrl: previewDeployment.previewUrl,
-        domain: previewDeployment.domain,
-        branchName: previewDeployment.branchName,
-        commitSha: previewDeployment.commitSha,
-        lastDeploymentStatus: previewDeployment.lastDeploymentStatus,
-        error: previewDeployment.error,
-        envConfigured:
-          typeof previewDeployment.metadata === "object" &&
-          previewDeployment.metadata !== null &&
-          (previewDeployment.metadata as Record<string, unknown>).env != null,
-      }
-    : null;
-
-  // ── changed files / safe-file policy ──────────────────────────────────────
+  // ── changed files / safe-file policy / tests ─────────────────────────────
   const filesChanged = Array.isArray(result.filesChanged)
     ? result.filesChanged.filter((f): f is string => typeof f === "string")
     : [];
@@ -118,6 +121,26 @@ function buildEvaluationInput(ctx: NonNullable<Awaited<ReturnType<typeof loadSes
     touchesInfra: filesAssessment.touchesInfra,
     touchesWorkflow: filesAssessment.touchesWorkflow,
   };
+
+  const testsPresent = filesChanged.some(
+    (p) =>
+      /(^|\/)(__tests__|test|tests)(\/|$)/.test(p) ||
+      /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(p)
+  );
+
+  // ── preview (with inheritance) ────────────────────────────────────────────
+  const resolved = await resolveReadyPreviewForTask({
+    projectId: ctx.projectId,
+    taskId: ctx.taskId,
+    workSessionId: ctx.id,
+    branchName: task?.githubBranchName ?? null,
+    pullRequestNumber: task?.githubPrNumber ?? null,
+    repositoryFullName: ctx.project?.repositoryFullName ?? null,
+  });
+  const current = await findCurrentSessionPreview(ctx.id);
+  // Prefer the ready resolved preview; otherwise report the session's own
+  // preview (found but not ready) so diagnostics can explain it.
+  const preview = previewToSummary(resolved ?? current);
 
   // ── PR summary ────────────────────────────────────────────────────────────
   const prSummary = {
@@ -158,6 +181,7 @@ function buildEvaluationInput(ctx: NonNullable<Awaited<ReturnType<typeof loadSes
     prReviewLastCheckedAt: task?.githubPrReviewLastCheckedAt ?? null,
     prMarkedReadyAt: task?.githubPrMarkedReadyAt ?? null,
     builderCommitSha: task?.githubBuilderCommitSha ?? null,
+    testsPresent,
     checks,
     preview,
     files,
@@ -184,7 +208,9 @@ export async function prepareProductionReadiness(sessionId: string): Promise<Pro
     throw new Error("La sesión de trabajo no tiene una tarea vinculada.");
   }
 
-  const evaluation = evaluateProductionReadiness(buildEvaluationInput(ctx));
+  const evaluation = evaluateProductionReadiness(
+    await buildEvaluationInput(ctx)
+  );
 
   // Reuse the existing review when present (never create duplicates per session).
   const existing = await prisma.productionReadinessReview.findFirst({
@@ -281,7 +307,9 @@ export async function refreshProductionReadiness(
   const ctx = await loadSessionContext(review.workSessionId);
   if (!ctx) throw new Error("La sesión de trabajo ya no existe.");
 
-  const evaluation = evaluateProductionReadiness(buildEvaluationInput(ctx));
+  const evaluation = evaluateProductionReadiness(
+    await buildEvaluationInput(ctx)
+  );
 
   let status = evaluation.status;
   let recommendation = evaluation.recommendation;

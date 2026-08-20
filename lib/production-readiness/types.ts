@@ -56,6 +56,10 @@ export interface ProductionPreviewSummary {
   lastDeploymentStatus: string | null;
   error: string | null;
   envConfigured: boolean | null;
+  /** How the preview was resolved (current_session | task | branch | pr | recent). */
+  source?: string | null;
+  /** Work session that owns the resolved preview (for inherited previews). */
+  sourceWorkSessionId?: string | null;
 }
 
 /** Pull request + PR review summary. */

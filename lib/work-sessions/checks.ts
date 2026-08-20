@@ -18,6 +18,7 @@ export interface SessionCheckDefinition {
 export const SESSION_CHECK_ALLOWLIST: SessionCheckDefinition[] = [
   { name: "lint", command: "npm run lint", bin: "npm", argv: ["run", "lint"] },
   { name: "build", command: "npm run build", bin: "npm", argv: ["run", "build"] },
+  { name: "test", command: "npm test", bin: "npm", argv: ["test", "run", "--", "--passWithNoTests"] },
   { name: "prisma validate", command: "npx prisma validate", bin: "npx", argv: ["prisma", "validate"] },
 ];
 

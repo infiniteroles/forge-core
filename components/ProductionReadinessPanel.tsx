@@ -30,7 +30,11 @@ export interface ProductionReadinessData {
   approvedAt: string | null;
   rejectedAt: string | null;
   prNumber: number | null;
+  prDraft: boolean | null;
   prReviewRecommendation: string | null;
+  previewSource: string | null;
+  previewUrl: string | null;
+  testsPresent: boolean | null;
   lastEvaluatedAt: string | null;
 }
 
@@ -117,6 +121,14 @@ export function ProductionReadinessPanel({
       return;
     }
     await post(`/api/tasks/${taskId}/github/pr/review`);
+  }
+
+  async function markReady() {
+    if (!taskId) {
+      setError("Esta sesión no tiene tarea vinculada para marcar la PR como ready.");
+      return;
+    }
+    await post(`/api/tasks/${taskId}/github/pr/ready`);
   }
 
   async function fixIssues() {
@@ -223,6 +235,19 @@ export function ProductionReadinessPanel({
             </button>
             <button
               type="button"
+              onClick={markReady}
+              disabled={loading || review?.prDraft !== true}
+              className="rounded-md border border-emerald-500/40 px-2 py-1 text-xs text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-40"
+              title={
+                review?.prDraft === true
+                  ? "Convierte la PR draft en ready for review (no hace merge)"
+                  : "La PR ya no está en draft"
+              }
+            >
+              {loading ? "Marking…" : "Mark PR ready for review"}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setFixInstruction(defaultFixInstruction());
                 setFixOpen((v) => !v);
@@ -280,6 +305,39 @@ export function ProductionReadinessPanel({
             <div className="flex items-baseline justify-between gap-2">
               <dt className="text-text-dim">Risk</dt>
               <dd className="text-neutral-200">{review.riskLevel}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+
+      {review?.previewSource || review?.testsPresent != null || review?.prDraft != null ? (
+        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-3">
+          {review.previewSource ? (
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Preview source</dt>
+              <dd className="font-mono text-neutral-200">{review.previewSource}</dd>
+            </div>
+          ) : null}
+          {review.previewUrl ? (
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Preview URL</dt>
+              <dd className="break-all font-mono text-neutral-200">{review.previewUrl}</dd>
+            </div>
+          ) : null}
+          {review.testsPresent != null ? (
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Tests</dt>
+              <dd className={`font-mono ${review.testsPresent ? "text-emerald-300" : "text-amber-300"}`}>
+                {review.testsPresent ? "yes" : "no"}
+              </dd>
+            </div>
+          ) : null}
+          {review.prDraft != null ? (
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">PR draft</dt>
+              <dd className={`font-mono ${review.prDraft ? "text-amber-300" : "text-emerald-300"}`}>
+                {review.prDraft ? "yes" : "no"}
+              </dd>
             </div>
           ) : null}
         </dl>

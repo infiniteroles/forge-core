@@ -99,6 +99,8 @@ function productionReadinessData(review: {
   blockingReasons: unknown;
   diagnostics: unknown;
   prSummary: unknown;
+  previewSummary: unknown;
+  filesSummary: unknown;
   humanNotes: string | null;
   approvedBy: string | null;
   approvedAt: Date | null;
@@ -106,6 +108,15 @@ function productionReadinessData(review: {
   updatedAt: Date;
 }): ProductionReadinessData {
   const pr = review.prSummary as Record<string, unknown> | null;
+  const preview = review.previewSummary as Record<string, unknown> | null;
+  const files = review.filesSummary as Record<string, unknown> | null;
+  const testsPresent =
+    Array.isArray(files?.paths) &&
+    (files!.paths as string[]).some(
+      (p) =>
+        /(^|\/)(__tests__|test|tests)(\/|$)/.test(p) ||
+        /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(p)
+    );
   return {
     id: review.id,
     status: review.status,
@@ -119,10 +130,14 @@ function productionReadinessData(review: {
     approvedAt: review.approvedAt ? review.approvedAt.toISOString() : null,
     rejectedAt: review.rejectedAt ? review.rejectedAt.toISOString() : null,
     prNumber: typeof pr?.prNumber === "number" ? pr.prNumber : null,
+    prDraft: typeof pr?.draft === "boolean" ? (pr.draft as boolean) : null,
     prReviewRecommendation:
       typeof pr?.reviewRecommendation === "string"
         ? pr.reviewRecommendation
         : null,
+    previewSource: typeof preview?.source === "string" ? (preview.source as string) : null,
+    previewUrl: typeof preview?.previewUrl === "string" ? (preview.previewUrl as string) : null,
+    testsPresent,
     lastEvaluatedAt: review.updatedAt.toISOString(),
   };
 }

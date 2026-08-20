@@ -85,6 +85,30 @@ export function buildReadinessDiagnostics(
     positiveSignals.push("Hay un commit del Builder en la tarea.");
   }
 
+  // ── PR draft ──────────────────────────────────────────────────────────────
+  if (input.prDraft === true) {
+    needsChanges.push({
+      source: "pr",
+      reason: "La PR sigue en draft (no está lista para review).",
+      details: "Marca la PR como ready for review cuando proceda.",
+      severity: "needs_changes",
+    });
+  } else if (input.prDraft === false) {
+    positiveSignals.push("La PR no está en draft.");
+  }
+
+  // ── Minimal tests ─────────────────────────────────────────────────────────
+  if (!input.testsPresent) {
+    needsChanges.push({
+      source: "tests",
+      reason: "No hay tests mínimos para el endpoint.",
+      details: "Añade una prueba que verifique el contrato de /api/ping.",
+      severity: "needs_changes",
+    });
+  } else {
+    positiveSignals.push("Hay tests mínimos para el endpoint.");
+  }
+
   // ── PR review (guardrail: real state wins) ────────────────────────────────
   const reviewRec = input.prReviewRecommendation;
   const reviewRisk = input.prReviewRiskLevel;
@@ -160,34 +184,45 @@ export function buildReadinessDiagnostics(
   }
 
   // ── DEV preview ───────────────────────────────────────────────────────────
-  const previewStatus = input.preview?.status ?? "none";
-  if (previewStatus === "failed") {
-    blocking.push({
-      source: "preview",
-      reason: "El preview DEV falló.",
-      severity: "blocked",
-    });
-  } else if (previewStatus === "deploying" || previewStatus === "queued") {
-    needsChanges.push({
-      source: "preview",
-      reason: "El preview DEV todavía se está desplegando.",
-      severity: "manual_review_required",
-    });
-  } else if (
-    previewStatus === "not_configured" ||
-    previewStatus === "none" ||
-    previewStatus === "stopped"
-  ) {
+  const preview = input.preview;
+  const previewStatus = preview?.status ?? "none";
+  if (previewStatus === "ready") {
+    positiveSignals.push("El preview DEV está listo.");
+    if (preview?.previewUrl) {
+      positiveSignals.push(`El preview DEV responde en ${preview.previewUrl}.`);
+    }
+    if (preview?.source && preview.source !== "current_session") {
+      positiveSignals.push(
+        `Preview heredado de la WorkSession ${preview.sourceWorkSessionId?.slice(-6) ?? "?"} (${preview.source}).`
+      );
+    }
+  } else if (preview) {
+    // Preview exists but not ready.
+    if (previewStatus === "failed") {
+      blocking.push({
+        source: "preview",
+        reason: "El preview DEV falló.",
+        severity: "blocked",
+      });
+    } else if (previewStatus === "deploying" || previewStatus === "queued") {
+      needsChanges.push({
+        source: "preview",
+        reason: "El preview DEV todavía se está desplegando.",
+        severity: "manual_review_required",
+      });
+    } else {
+      needsChanges.push({
+        source: "preview",
+        reason: `El preview DEV existe pero no está listo (${previewStatus}).`,
+        severity: "needs_changes",
+      });
+    }
+  } else {
     needsChanges.push({
       source: "preview",
       reason: "No hay un preview DEV listo.",
       severity: "needs_changes",
     });
-  } else if (previewStatus === "ready") {
-    positiveSignals.push("El preview DEV está listo.");
-    if (input.preview?.previewUrl) {
-      positiveSignals.push(`El preview DEV responde en ${input.preview.previewUrl}.`);
-    }
   }
 
   // ── Safe-file policy ──────────────────────────────────────────────────────
