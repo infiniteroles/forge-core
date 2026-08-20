@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { assessPrPaths } from "@/lib/github/safe-file-policy";
+import { getPrFiles } from "@/lib/github/pr-context";
 import { evaluateProductionReadiness, type ProductionEvaluationInput } from "./evaluator";
 import { buildProductionReadinessSummary } from "./summary";
 import {
@@ -105,9 +106,28 @@ async function buildEvaluationInput(ctx: NonNullable<Awaited<ReturnType<typeof l
       : null;
 
   // ── changed files / safe-file policy / tests ─────────────────────────────
-  const filesChanged = Array.isArray(result.filesChanged)
+  const sessionFiles = Array.isArray(result.filesChanged)
     ? result.filesChanged.filter((f): f is string => typeof f === "string")
     : [];
+
+  // Merge with the actual PR changed files so the readiness reflects the real
+  // PR state (e.g. a test added directly to the branch without a work session).
+  let prFilePaths: string[] = [];
+  if (ctx.task?.githubPrNumber && ctx.project?.repositoryFullName) {
+    try {
+      const prFiles = await getPrFiles({
+        repositoryFullName: ctx.project.repositoryFullName,
+        prNumber: ctx.task.githubPrNumber,
+      });
+      prFilePaths = prFiles
+        .map((f) => f.filename)
+        .filter((f): f is string => Boolean(f));
+    } catch {
+      prFilePaths = [];
+    }
+  }
+
+  const filesChanged = Array.from(new Set([...sessionFiles, ...prFilePaths]));
   const filesAssessment = assessPrPaths(filesChanged);
   const files = {
     total: filesChanged.length,
