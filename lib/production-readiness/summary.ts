@@ -161,7 +161,7 @@ export function buildProductionReadinessSummary(review: ReviewLike): string {
   const warnings = diag ? diag.warnings : [];
 
   const ready =
-    review.status === "ready" &&
+    (review.status === "ready" || review.status === "approved") &&
     (review.recommendation === "ready_for_production" || review.recommendation == null);
 
   lines.push(

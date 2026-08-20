@@ -336,6 +336,7 @@ export async function refreshProductionReadiness(
 
   // Guardrail: if the review was approved and a critical blocker appears now,
   // fall back to needs_changes (never keep "approved" over a blocker).
+  // If it is still ready, keep the human approval.
   if (review.status === "approved") {
     if (
       evaluation.recommendation === "blocked" ||
@@ -344,6 +345,9 @@ export async function refreshProductionReadiness(
     ) {
       status = "needs_changes";
       recommendation = "needs_changes";
+    } else {
+      status = "approved";
+      recommendation = "ready_for_production";
     }
   }
 
