@@ -111,6 +111,7 @@ interface PrPayload {
   created_at?: string | null;
   updated_at?: string | null;
   merged_at?: string | null;
+  merge_commit_sha?: string | null;
 }
 
 function toGithubPullRequest(data: PrPayload | null): GithubPullRequest {
@@ -129,6 +130,7 @@ function toGithubPullRequest(data: PrPayload | null): GithubPullRequest {
     created_at: data.created_at ?? null,
     updated_at: data.updated_at ?? null,
     merged_at: data.merged_at ?? null,
+    mergeCommitSha: data.merge_commit_sha ?? null,
   };
 }
 
@@ -283,4 +285,94 @@ export async function markPullRequestReady(
 
   // 3. Return the fresh PR state.
   return getPullRequest(input);
+}
+
+export type MergeMethod = "squash" | "merge" | "rebase";
+
+export interface MergePullRequestInput {
+  repositoryFullName: string;
+  pullRequestNumber: number;
+  method?: MergeMethod;
+  commitTitle?: string;
+  commitMessage?: string;
+}
+
+export interface MergePullRequestResult {
+  sha: string | null;
+  merged: boolean;
+  message: string;
+}
+
+/**
+ * Merges a pull request using the GitHub REST "Merge a pull request" endpoint.
+ *
+ * Used ONLY by the controlled production promotion flow (Fase 3.9), after a
+ * human has approved readiness and typed the PROMOTE confirmation. Defaults to
+ * a squash merge. It deliberately does NOT delete the head branch and does NOT
+ * auto-close the linked issue — the promotion keeps those side effects out.
+ */
+export async function mergePullRequest(
+  input: MergePullRequestInput
+): Promise<MergePullRequestResult> {
+  requireToken();
+  validateFullName(input.repositoryFullName);
+
+  if (!Number.isInteger(input.pullRequestNumber) || input.pullRequestNumber <= 0) {
+    throw new GithubError("Invalid pull request number", "validation_error");
+  }
+
+  const method = input.method ?? "squash";
+  if (method !== "squash" && method !== "merge" && method !== "rebase") {
+    throw new GithubError(
+      "Invalid merge method. Use squash, merge or rebase",
+      "validation_error"
+    );
+  }
+
+  const payload: Record<string, unknown> = {
+    merge_method: method,
+  };
+  if (input.commitTitle) payload.commit_title = input.commitTitle;
+  if (input.commitMessage) payload.commit_message = input.commitMessage;
+
+  const res = await githubFetch(
+    `/repos/${input.repositoryFullName}/pulls/${input.pullRequestNumber}/merge`,
+    undefined,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    if (res.status === 405 || text.toLowerCase().includes("not mergeable")) {
+      throw new GithubError(
+        `Pull request #${input.pullRequestNumber} is not mergeable (conflict or not ready)`,
+        "validation_error",
+        res.status
+      );
+    }
+    if (res.status === 404) {
+      throw new GithubError(
+        "Repository or pull request not found",
+        "repository_not_found",
+        res.status
+      );
+    }
+    mapHttpError(res.status, text);
+  }
+
+  const data = (await res.json().catch(() => null)) as {
+    sha?: string | null;
+    merged?: boolean;
+    message?: string;
+  } | null;
+
+  return {
+    sha: data?.sha ?? null,
+    merged: data?.merged ?? false,
+    message: data?.message ?? "Merged",
+  };
 }

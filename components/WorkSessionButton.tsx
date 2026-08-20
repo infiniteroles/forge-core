@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { IterationActions } from "./IterationActions";
 
 interface WorkSessionResultData {
   taskId?: string;
@@ -123,24 +124,19 @@ export function WorkSessionButton({ taskId }: { taskId: string }) {
               ))}
             </div>
           ) : null}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={start}
-              disabled={loading}
-              className="rounded-md border border-accent/50 px-2 py-1 text-xs text-accent transition hover:bg-accent/10 disabled:opacity-50"
-            >
-              {loading ? "Working…" : "Continue"}
-            </button>
-            <span className="rounded-md border border-border px-2 py-1 text-xs text-text-dim">
-              Ask for changes — coming soon
-            </span>
-            <span className="rounded-md border border-border px-2 py-1 text-xs text-text-dim">
-              Discard — coming soon
-            </span>
-            <span className="rounded-md border border-border px-2 py-1 text-xs text-text-dim">
-              Prepare production — coming soon
-            </span>
+          <div className="mt-3">
+            <IterationActions
+              taskId={taskId}
+              workSessionId={session.id}
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-md border border-border px-2 py-1 text-xs text-text-dim">
+                Discard — coming soon
+              </span>
+              <span className="rounded-md border border-border px-2 py-1 text-xs text-text-dim">
+                Prepare production — coming soon
+              </span>
+            </div>
           </div>
         </div>
       ) : null}

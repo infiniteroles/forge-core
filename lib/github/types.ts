@@ -38,6 +38,7 @@ export interface GithubPullRequest {
   created_at: string | null;
   updated_at: string | null;
   merged_at: string | null;
+  mergeCommitSha: string | null;
 }
 
 export type GithubErrorCode =

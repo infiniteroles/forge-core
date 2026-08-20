@@ -13,6 +13,8 @@ import { TaskCard } from "@/components/TaskCard";
 import { RepositoryPanel } from "@/components/RepositoryPanel";
 import { IdeaForm } from "@/components/IdeaForm";
 import type { LatestWorkSessionSummary } from "@/components/TaskCard";
+import type { TaskProductionReadinessData } from "@/components/TaskProductionReadiness";
+import type { TaskPromotionData } from "@/components/TaskProductionPromotion";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import type { BuilderProposalSummary } from "@/components/BuilderProposalActions";
 
@@ -35,6 +37,32 @@ export default async function ProjectDetailPage({ params }: Props) {
         include: { _count: { select: { tasks: true } } },
       },
       activityLogs: { orderBy: { createdAt: "desc" }, take: 50 },
+      previewDeployments: { select: { id: true, status: true, previewUrl: true } },
+      productionReadinessReviews: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          taskId: true,
+          workSessionId: true,
+          status: true,
+          recommendation: true,
+          blockingReasons: true,
+          diagnostics: true,
+        },
+      },
+      productionPromotions: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          taskId: true,
+          workSessionId: true,
+          status: true,
+          prNumber: true,
+          mergeCommitSha: true,
+          summary: true,
+          error: true,
+        },
+      },
       tasks: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         include: {
@@ -62,13 +90,29 @@ export default async function ProjectDetailPage({ params }: Props) {
     if (latestWorkSessionByTask.has(ws.taskId)) continue;
     const result =
       typeof ws.result === "object" && ws.result !== null
-        ? (ws.result as { prUrl?: string | null; builderCommitUrl?: string | null })
+        ? (ws.result as {
+            prUrl?: string | null;
+            builderCommitUrl?: string | null;
+            checks?: { status?: string; summary?: string | null } | null;
+            previewId?: string | null;
+            previewUrl?: string | null;
+            previewStatus?: string | null;
+          })
         : null;
     latestWorkSessionByTask.set(ws.taskId, {
       id: ws.id,
       status: ws.status,
       summary: ws.summary,
-      result: { prUrl: result?.prUrl ?? null, builderCommitUrl: result?.builderCommitUrl ?? null },
+      result: {
+        prUrl: result?.prUrl ?? null,
+        builderCommitUrl: result?.builderCommitUrl ?? null,
+        checks: result?.checks
+          ? { status: result.checks.status ?? "skipped", summary: result.checks.summary ?? null }
+          : null,
+        previewId: result?.previewId ?? null,
+        previewUrl: result?.previewUrl ?? null,
+        previewStatus: result?.previewStatus ?? null,
+      },
     });
   }
 
@@ -106,6 +150,96 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   const prMarkedReadyCount = project.tasks.filter(
     (task) => task.githubPrMarkedReadyAt != null
+  ).length;
+
+  const devPreviewCount = project.previewDeployments.length;
+  const readyPreviewCount = project.previewDeployments.filter(
+    (p) => p.status === "ready"
+  ).length;
+
+  // Production readiness: latest review per task.
+  function readinessCause(review: {
+    diagnostics: unknown;
+    blockingReasons: unknown;
+  }): string | null {
+    const diag = review.diagnostics as Record<string, unknown> | null;
+    if (diag) {
+      const items = [
+        ...(Array.isArray(diag.blocking) ? (diag.blocking as { source?: string }[]) : []),
+        ...(Array.isArray(diag.needsChanges) ? (diag.needsChanges as { source?: string }[]) : []),
+      ];
+      const source = items.find((d) => d?.source)?.source ?? null;
+      const map: Record<string, string> = {
+        pr_review: "PR review",
+        preview: "preview",
+        checks: "checks",
+        files: "files",
+        pr: "PR draft",
+        builder: "builder",
+        tests: "tests",
+      };
+      return source ? (map[source] ?? source) : null;
+    }
+    const blocking = Array.isArray(review.blockingReasons)
+      ? review.blockingReasons.filter((b): b is string => typeof b === "string")
+      : [];
+    if (blocking.some((b) => /revisión automática|PR Review|needs_changes/i.test(b))) {
+      return "PR review";
+    }
+    return null;
+  }
+
+  const productionByTask = new Map<string, TaskProductionReadinessData>();
+  for (const review of project.productionReadinessReviews) {
+    if (!review.taskId) continue;
+    if (productionByTask.has(review.taskId)) continue;
+    productionByTask.set(review.taskId, {
+      reviewId: review.id,
+      status: review.status,
+      recommendation: review.recommendation,
+      workSessionId: review.workSessionId,
+      taskId: review.taskId,
+      cause: readinessCause(review),
+    });
+  }
+  const productionReadyCount = project.productionReadinessReviews.filter(
+    (r) => r.status === "ready"
+  ).length;
+  const productionApprovedCount = project.productionReadinessReviews.filter(
+    (r) => r.status === "approved"
+  ).length;
+  const productionBlockedCount = project.productionReadinessReviews.filter(
+    (r) => r.status === "blocked" || r.status === "needs_changes"
+  ).length;
+
+  // Production promotion: latest promotion per task.
+  const promotionByTask = new Map<string, TaskPromotionData>();
+  for (const p of project.productionPromotions) {
+    if (!p.taskId) continue;
+    if (promotionByTask.has(p.taskId)) continue;
+    const readiness = productionByTask.get(p.taskId);
+    promotionByTask.set(p.taskId, {
+      promotionId: p.id,
+      status: p.status,
+      prNumber: p.prNumber,
+      mergeCommitSha: p.mergeCommitSha,
+      summary: p.summary,
+      error: p.error,
+      reviewId: readiness?.reviewId ?? null,
+      workSessionId: readiness?.workSessionId ?? p.workSessionId ?? null,
+      readinessApproved:
+        readiness?.status === "approved" &&
+        readiness?.recommendation === "ready_for_production",
+    });
+  }
+  const promotionsReadyCount = project.productionPromotions.filter(
+    (p) => p.status === "ready_to_promote"
+  ).length;
+  const promotionsCompletedCount = project.productionPromotions.filter(
+    (p) => p.status === "completed"
+  ).length;
+  const promotionsFailedCount = project.productionPromotions.filter(
+    (p) => p.status === "failed" || p.status === "preflight_failed"
   ).length;
 
   function builderSummary(
@@ -390,6 +524,15 @@ export default async function ProjectDetailPage({ params }: Props) {
               </p>              <p className="mt-1 text-xs text-text-dim">
                 PRs marked ready: {prMarkedReadyCount} / {project.tasks.length}{" "}
                 tasks
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                DEV previews: {devPreviewCount} · Ready previews:{" "}
+                {readyPreviewCount}
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                Production ready: {productionReadyCount} · Approved:{" "}
+                {productionApprovedCount} · Blocked: {productionBlockedCount}
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                Promotions ready: {promotionsReadyCount} · Promotions completed:{" "}
+                {promotionsCompletedCount} · Promotions failed: {promotionsFailedCount}
               </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (
                   <TaskCard
@@ -398,6 +541,8 @@ export default async function ProjectDetailPage({ params }: Props) {
                     repositoryLinked={project.repositoryFullName != null}
                     builderProposal={builderSummary(task.agentRuns[0])}
                     workSession={latestWorkSessionByTask.get(task.id) ?? null}
+                    production={productionByTask.get(task.id) ?? null}
+                    promotion={promotionByTask.get(task.id) ?? null}
                   />
                 ))}
               </div>

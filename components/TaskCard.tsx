@@ -17,6 +17,16 @@ import {
 import { BuilderCommitActions } from "./BuilderCommitActions";
 import { PrReviewGateActions } from "./PrReviewGateActions";
 import { WorkSessionButton } from "./WorkSessionButton";
+import { IterationActions } from "./IterationActions";
+import { TaskDevPreview } from "./TaskDevPreview";
+import {
+  TaskProductionReadiness,
+  type TaskProductionReadinessData,
+} from "./TaskProductionReadiness";
+import {
+  TaskProductionPromotion,
+  type TaskPromotionData,
+} from "./TaskProductionPromotion";
 
 type TaskProps = {
   id: string;
@@ -56,6 +66,10 @@ export type LatestWorkSessionSummary = {
   result: {
     prUrl?: string | null;
     builderCommitUrl?: string | null;
+    checks?: { status?: string; summary?: string | null } | null;
+    previewId?: string | null;
+    previewUrl?: string | null;
+    previewStatus?: string | null;
   } | null;
 };
 
@@ -64,11 +78,15 @@ export function TaskCard({
   repositoryLinked,
   builderProposal,
   workSession,
+  production,
+  promotion,
 }: {
   task: TaskProps;
   repositoryLinked?: boolean;
   builderProposal?: BuilderProposalSummary | null;
   workSession?: LatestWorkSessionSummary | null;
+  production?: TaskProductionReadinessData | null;
+  promotion?: TaskPromotionData | null;
 }) {
   const tone =
     TASK_STATUS_TONES[task.status] ?? "bg-neutral-700/40 text-neutral-300";
@@ -126,7 +144,32 @@ export function TaskCard({
               Open PR
             </a>
           ) : null}
+          {workSession.result?.checks?.status ? (
+            <span
+              className={`rounded px-1.5 py-0.5 font-mono ${
+                workSession.result.checks.status === "passed"
+                  ? "bg-emerald-500/10 text-emerald-300"
+                  : workSession.result.checks.status === "failed"
+                    ? "bg-red-500/10 text-red-300"
+                    : "bg-neutral-700/40 text-neutral-400"
+              }`}
+            >
+              Checks: {workSession.result.checks.status}
+            </span>
+          ) : null}
+          <TaskDevPreview
+            workSessionId={workSession.id}
+            previewId={workSession.result?.previewId ?? null}
+            status={workSession.result?.previewStatus ?? null}
+            previewUrl={workSession.result?.previewUrl ?? null}
+          />
+          <TaskProductionReadiness data={production ?? null} />
+          <TaskProductionPromotion data={promotion ?? null} />
         </div>
+      ) : null}
+
+      {workSession ? (
+        <IterationActions taskId={task.id} workSessionId={workSession.id} compact />
       ) : null}
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-text-dim">

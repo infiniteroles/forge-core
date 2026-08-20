@@ -15,7 +15,24 @@ export interface BuilderContextRun {
   finishedAt: Date | null;
 }
 
-export interface BuilderProposalContext {
+export interface BuilderIterationContext {
+  isIteration: boolean;
+  requestedChanges: string | null;
+  iterationNumber: number;
+  previousWorkSessions: {
+    id: string;
+    mode: string;
+    status: string;
+    summary: string | null;
+    requestedChanges: string | null;
+    iterationNumber: number;
+    createdAt: Date;
+  }[];
+  lastReviewSummary: string | null;
+  lastBuilderCommitSummary: string | null;
+}
+
+export interface BuilderProposalContext extends BuilderIterationContext {
   taskId: string;
   taskTitle: string;
   taskDescription: string | null;
@@ -40,13 +57,96 @@ export interface BuilderProposalContext {
   recentAgentRuns: BuilderContextRun[];
 }
 
+export interface BuilderContextOptions {
+  requestedChanges?: string | null;
+  iterationNumber?: number;
+  workSessionId?: string;
+}
+
+/**
+ * Gathers the iteration context for a task: the new user instruction plus the
+ * history of previous work sessions, last PR review and last builder commit.
+ * Used by both the Builder Proposal and Builder Commit agents.
+ */
+export async function buildIterationContext(
+  taskId: string,
+  options: BuilderContextOptions = {}
+): Promise<BuilderIterationContext> {
+  const [workSessions, latestReviewRun, latestCommitRun] = await Promise.all([
+    prisma.workSession.findMany({
+      where: { taskId },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        mode: true,
+        status: true,
+        summary: true,
+        requestedChanges: true,
+        iterationNumber: true,
+        createdAt: true,
+      },
+    }),
+    prisma.agentRun.findFirst({
+      where: { taskId, agentName: "pr-review", status: "completed" },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.agentRun.findFirst({
+      where: { taskId, agentName: "builder-commit", status: "completed" },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  let lastReviewSummary: string | null = null;
+  if (latestReviewRun?.output) {
+    try {
+      const parsed = JSON.parse(latestReviewRun.output);
+      lastReviewSummary =
+        typeof parsed?.summary === "string" ? parsed.summary : null;
+    } catch {
+      lastReviewSummary = null;
+    }
+  }
+
+  let lastBuilderCommitSummary: string | null = null;
+  if (latestCommitRun?.output) {
+    try {
+      const parsed = JSON.parse(latestCommitRun.output);
+      lastBuilderCommitSummary =
+        typeof parsed?.summary === "string" ? parsed.summary : null;
+    } catch {
+      lastBuilderCommitSummary = null;
+    }
+  }
+
+  return {
+    isIteration: Boolean(
+      options.requestedChanges || (options.iterationNumber ?? 0) > 1
+    ),
+    requestedChanges: options.requestedChanges ?? null,
+    iterationNumber: options.iterationNumber ?? 1,
+    previousWorkSessions: workSessions.map((ws) => ({
+      id: ws.id,
+      mode: ws.mode,
+      status: ws.status,
+      summary: ws.summary,
+      requestedChanges: ws.requestedChanges,
+      iterationNumber: ws.iterationNumber,
+      createdAt: ws.createdAt,
+    })),
+    lastReviewSummary,
+    lastBuilderCommitSummary,
+  };
+}
+
 /**
  * Gathers a safe, limited context for the Builder Proposal agent. GitHub repo
  * context is best-effort: if it fails (no token, missing repo/branch) we record
  * a warning and continue with task/project context.
  */
 export async function buildBuilderProposalContext(
-  taskId: string
+  taskId: string,
+  options: BuilderContextOptions = {}
 ): Promise<BuilderProposalContext> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -87,6 +187,8 @@ export async function buildBuilderProposalContext(
       "No repository/branch linked — GitHub context unavailable.";
   }
 
+  const iteration = await buildIterationContext(taskId, options);
+
   return {
     taskId: task.id,
     taskTitle: task.title,
@@ -120,5 +222,6 @@ export async function buildBuilderProposalContext(
       createdAt: run.createdAt,
       finishedAt: run.finishedAt,
     })),
+    ...iteration,
   };
 }

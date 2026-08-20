@@ -50,26 +50,39 @@ model Project {
   environments         Environment[]
   tasks                Task[]
   workSessions         WorkSession[]
+  sessionChecks        SessionCheck[]
+  previewDeployments   PreviewDeployment[]
+  productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
 }
 
 model WorkSession {
-  id           String    @id @default(cuid())
-  projectId    String
-  taskId       String?
-  status       String    @default("queued")
-  mode         String    @default("dev")
-  objective    String
-  summary      String?
-  currentStage String?
-  result       Json?
-  error        String?
-  startedAt    DateTime?
-  finishedAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task         Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  agentRuns    AgentRun[]
+  id                   String         @id @default(cuid())
+  projectId            String
+  taskId               String?
+  parentWorkSessionId  String?
+  requestedChanges     String?
+  iterationNumber      Int            @default(1)
+  status               String         @default("queued")
+  mode                 String         @default("dev")
+  objective            String
+  summary              String?
+  currentStage         String?
+  result               Json?
+  error                String?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  project              Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                 Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  parentWorkSession    WorkSession?   @relation("WorkSessionIterations", fields: [parentWorkSessionId], references: [id], onDelete: SetNull)
+  childrenWorkSessions WorkSession[]  @relation("WorkSessionIterations")
+  agentRuns            AgentRun[]
+  sessionChecks        SessionCheck[]
+  previewDeployments   PreviewDeployment[]
+  productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
 }
 
 model Instruction {
@@ -195,4 +208,129 @@ model Task {
   sourceAgentRun   AgentRun? @relation("SourceAgentRuns", fields: [sourceAgentRunId], references: [id], onDelete: SetNull)
   agentRuns        AgentRun[] @relation("TaskRuns")
   workSessions     WorkSession[]
+  sessionChecks    SessionCheck[]
+  previewDeployments PreviewDeployment[]
+  productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
+}
+
+model PreviewDeployment {
+  id                     String    @id @default(cuid())
+  projectId              String
+  taskId                 String?
+  workSessionId          String?
+  provider               String    @default("coolify")
+  status                 String    @default("not_configured")
+  previewUrl             String?
+  domain                 String?
+  branchName             String?
+  repositoryFullName     String?
+  pullRequestNumber      Int?
+  coolifyApplicationUuid String?
+  coolifyDeploymentUuid  String?
+  coolifyProjectUuid     String?
+  coolifyServerUuid      String?
+  commitSha              String?
+  lastDeploymentStatus   String?
+  lastDeploymentLogUrl   String?
+  error                  String?
+  metadata               Json?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  requestedAt            DateTime?
+  deployedAt             DateTime?
+  lastCheckedAt          DateTime?
+  stoppedAt              DateTime?
+  project                Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                   Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  workSession            WorkSession?  @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  productionReadinessReviews ProductionReadinessReview[]
+  productionPromotions ProductionPromotion[]
+}
+
+model SessionCheck {
+  id            String     @id @default(cuid())
+  workSessionId String
+  projectId     String
+  taskId        String?
+  name          String
+  command       String
+  status        String     @default("queued")
+  exitCode      Int?
+  summary       String?
+  stdoutTail    String?
+  stderrTail    String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  durationMs    Int?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  workSession   WorkSession @relation(fields: [workSessionId], references: [id], onDelete: Cascade)
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task          Task?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+}
+
+model ProductionReadinessReview {
+  id                  String    @id @default(cuid())
+  projectId           String
+  taskId              String?
+  workSessionId       String?
+  previewDeploymentId String?
+  status              String    @default("draft")
+  recommendation      String?
+  riskLevel           String?
+  summary             String?
+  blockingReasons     Json?
+  diagnostics         Json?
+  checksSummary       Json?
+  previewSummary      Json?
+  prSummary           Json?
+  filesSummary        Json?
+  humanNotes          String?
+  approvedBy          String?
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  workSession         WorkSession?       @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  previewDeployment   PreviewDeployment? @relation(fields: [previewDeploymentId], references: [id], onDelete: SetNull)
+  productionPromotions ProductionPromotion[]
+}
+
+model ProductionPromotion {
+  id                          String    @id @default(cuid())
+  projectId                   String
+  taskId                      String?
+  workSessionId               String?
+  productionReadinessReviewId String?
+  previewDeploymentId         String?
+  status                      String    @default("draft")
+  strategy                    String    @default("github_pr_merge")
+  summary                     String?
+  error                       String?
+  prNumber                    Int?
+  prUrl                       String?
+  branchName                  String?
+  baseBranch                  String?
+  mergeCommitSha              String?
+  mergeMethod                 String?
+  preflightSummary            Json?
+  deploymentSummary           Json?
+  verificationSummary         Json?
+  metadata                    Json?
+  requestedBy                 String?
+  requestedAt                 DateTime?
+  startedAt                   DateTime?
+  completedAt                 DateTime?
+  failedAt                    DateTime?
+  cancelledAt                 DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  project                     Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                        Task?                      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  workSession                 WorkSession?               @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  productionReadinessReview   ProductionReadinessReview? @relation(fields: [productionReadinessReviewId], references: [id], onDelete: SetNull)
+  previewDeployment           PreviewDeployment?         @relation(fields: [previewDeploymentId], references: [id], onDelete: SetNull)
 }

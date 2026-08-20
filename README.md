@@ -19,10 +19,14 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **Builder Commit Agent**: generate concrete, validated functional changes for a task and commit them **only** on the task branch (guarded by proposal, safe-file policy and strict limits).
 - **PR Review Gate**: analyze a task's draft PR, summarize the diff, flag risks and recommend ready-for-review (never merges, deploys or auto-approves).
 - **Autonomous DEV Work Session**: a single "Work on this" action that runs issue → branch → plan → draft PR → Builder Proposal → Builder Commit → PR review automatically and prepares a PR for human review.
+- **Iteration Loop (Continue / Ask for changes)**: iterate on an existing task reusing the same branch and PR — a new Builder Proposal, a new commit on the same branch, a fresh PR analysis and an updated human summary.
+- **Session Checks Lite**: a lightweight internal validation stage that runs a closed allowlist of commands (`npm run lint`, `npm run build`, `npx prisma validate`) after a Builder Commit and shows a short, human summary. Never a full CI pipeline.
+- **DEV Preview from Work Session**: prepare a navigable preview URL for a task branch/PR without merging or touching `main`/production. Three modes (`disabled`/`manual`/`coolify_api`); default `disabled`.
+- **Human Approval: Prepare Production**: the first formal human-approval gate before production. Forge prepares a `ProductionReadinessReview` (recommendation, risk, preview, checks, changed files) and a human can Approve/Reject — **never merges, never deploys, never touches `main`**.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
-Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, Coolify API, LiteLLM, Ollama, Builder Agent commits/PR updates, real code-writing agents.
+Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, LiteLLM, Ollama, real test runner, automatic merge/deploy, automatic preview cleanup, preview auto-trigger at end of session.
 
 ## Stack
 
@@ -144,6 +148,17 @@ On Coolify:
 - `POST /api/tasks/[id]/github/pr/ready` — convert a draft PR to ready for review (no merge).
 - `POST /api/tasks/[id]/work-session/start` — run an autonomous DEV work session for a task.
 - `POST /api/projects/[id]/ideas/work-session/start` — create a task from an idea and run a DEV work session.
+- `POST /api/tasks/[id]/work-session/iterate` — start an iteration (mode `iteration`) for a task with a new instruction (`{ "instruction": "..." }`), reusing task/branch/PR.
+- `POST /api/work-sessions/[id]/continue` — continue a work session; optional `{ "instruction": "..." }` (no instruction → default "continue with the next safe step").
+- `POST /api/work-sessions/[id]/checks/run` — (re)run the lightweight session checks for a work session.
+- `POST /api/work-sessions/[id]/preview/prepare` — prepare a DEV preview for a work session (disabled → `not_configured`, manual → pending, coolify_api → create/reuse + deploy).
+- `POST /api/preview-deployments/[id]/refresh` — refresh a preview deployment status (coolify API or manual).
+- `POST /api/work-sessions/[id]/preview/manual` — register a manual preview URL (`{ "previewUrl": "https://..." }`).
+- `POST /api/work-sessions/[id]/production/prepare` — prepare a `ProductionReadinessReview` for a work session (no merge/deploy).
+- `POST /api/production-readiness/[id]/approve` — human approval (`{ "notes"?: "..." }`); only when recommendation is `ready_for_production`.
+- `POST /api/production-readiness/[id]/reject` — human rejection (`{ "notes": "..." }` required).
+- `POST /api/production-readiness/[id]/refresh` — re-evaluate and preserve human decisions.
+- `GET /api/settings/coolify/diagnostics` — Coolify/preview runner diagnostics (never returns the token).
 - `POST /api/instructions` — create an instruction.
 
 Mutating endpoints require an authenticated session.
@@ -681,12 +696,14 @@ Body for the idea endpoint: `{ "idea": "..." }`.
 
 - Task cards show a primary **Work on this** button; after the session, the card
   shows the session status, a human-readable summary, **View session** and
-  **Open PR**, plus `Continue` / `Ask for changes` / `Discard` /
-  `Prepare production` (the last three are coming soon).
+  **Open PR**, plus **Continue** and **Ask for changes** (real, see Iteration
+  Loop below) and `Discard` / `Prepare production` (coming soon).
 - The project detail page has a **New idea** box with **Start DEV Work Session**.
 - `/work-sessions/[id]` shows the objective, status, current stage, summary,
   artifacts (issue/branch/plan/PR/commit links), files changed, warnings,
-  agent runs and the activity timeline.
+  agent runs, the activity timeline, and — for iterations — parent/child
+  sessions, iteration number and requested changes, plus **Continue**,
+  **Ask for changes** and **Open PR** actions.
 
 Events logged: `work_session.started`, `work_session.stage_started`,
 `work_session.stage_completed`, `work_session.waiting_for_user`,
@@ -696,14 +713,717 @@ Events logged: `work_session.started`, `work_session.stage_started`,
 ### Orchestrator
 
 `lib/work-sessions/` contains `types.ts`, `stages.ts` (reusable ensure-stage
-functions) and `orchestrator.ts` (`runDevWorkSession`). It reuses the existing
-GitHub/LLM primitives and never duplicates work if a stage is already done.
+functions) and `orchestrator.ts` (`runDevWorkSession` + `runIterationWorkSession`).
+It reuses the existing GitHub/LLM primitives and never duplicates work if a stage
+is already done.
+
+## Iteration Loop: Continue / Ask for changes
+
+Forge does not stop at the first attempt. You can iterate on a task the way you
+work for real: ask Forge to change something and it reuses the same task, branch
+and pull request — it never starts a new task or a new PR unnecessarily.
+
+```
+Óscar: "bien, pero cambia esto…"
+→ Continue / Ask for changes
+→ same task, same branch, same PR
+→ fresh analysis (if needed)
+→ new Builder Proposal driven by the new instruction
+→ new Builder Commit on the SAME branch
+→ existing PR updates automatically
+→ PR re-analyzed
+→ updated human summary
+```
+
+### Two high-level actions
+
+- **Continue** — `POST /api/work-sessions/[id]/continue` (or the task-level
+  iterate endpoint without a session): ask Forge to keep working from the current
+  state. Without an instruction it uses a safe default: *"continue from the
+  current state of this task and apply the next safe, useful development step."*
+- **Ask for changes** — `POST /api/tasks/[id]/work-session/iterate` with
+  `{ "instruction": "Add a timestamp field…" }`: a concrete adjustment. The new
+  instruction takes priority over the original plan (as long as it does not
+  violate the guardrails).
+
+### How reuse works
+
+- The new `WorkSession` is created with `mode = "iteration"`,
+  `parentWorkSessionId` pointing to the previous session and a computed
+  `iterationNumber`.
+- The iteration pipeline is `refresh_context → ensure_existing_task →
+  ensure_issue → ensure_branch → ensure_draft_pr → run_iteration_builder_proposal
+  → run_builder_commit → analyze_pr → summarize_result`.
+- It never creates a new task, issue, branch or plan commit if they already
+  exist, and never opens a second PR for the same branch.
+- Builder Proposal and Builder Commit receive the iteration context: the user's
+  new instruction, previous work-session summaries, the last Builder Commit
+  summary, the last PR review summary and the current file contents from the
+  branch — so the Builder modifies the existing file instead of rewriting it.
+
+### Model fields (new in this phase)
+
+`WorkSession.parentWorkSessionId`, `WorkSession.requestedChanges` and
+`WorkSession.iterationNumber` (default `1`), plus the self-relation
+`parentWorkSession` / `childrenWorkSessions`.
+
+### Endpoints
+
+```
+POST /api/tasks/[id]/work-session/iterate   body: { "instruction": "..." }
+POST /api/work-sessions/[id]/continue       body: { "instruction"?: "..." }
+```
+
+Both create a NEW linked `WorkSession` (never overwrite the previous one) and
+return `{ ok, workSession }`.
+
+### ActivityLog
+
+`work_session.iteration_started`, `work_session.iteration_requested`,
+`work_session.iteration_completed`, `work_session.iteration_completed_with_warnings`,
+`work_session.iteration_failed`, `work_session.continued` (plus the shared
+`work_session.stage_started` / `work_session.stage_completed`). Metadata includes
+`workSessionId`, `parentWorkSessionId`, `taskId`, `iterationNumber`, a short
+`instruction`, `prUrl` and `commitUrl` — never tokens or secrets.
+
+### Guardrails (unchanged and mandatory)
+
+No merge, no deploy, no direct `main` writes, no automatic issue closing, no
+file deletion, no `.env`/secrets, no keys/certificates, no firewall/SSH/VPS, no
+workflow/Docker/infra edits, and the safe-file policy is never relaxed. If the
+Builder sets `safe_to_commit=false`, Forge does not force the write.
+
+## Session Checks Lite
+
+A lightweight, automatic validation stage inside Work Sessions. After Forge
+applies a Builder Commit it runs a small, closed allowlist of checks and reports
+a short result — it is **not** a CI pipeline, not a test runner and not a place
+for model-suggested commands.
+
+### When they run
+
+- In DEV sessions: `run_builder_commit → run_session_checks → analyze_pr → summarize_result`.
+- In iteration sessions: the same stage is inserted after the iteration Builder Commit.
+- If there was no new Builder Commit (or the commit was blocked with
+  `completed_with_warnings` without writing), the checks are recorded as
+  `skipped`.
+
+### Allowlist (closed, hardcoded)
+
+```
+npm run lint
+npm run build
+npx prisma validate
+```
+
+No commands come from user input or from the model. `npm test` is not run in
+this phase.
+
+### Runner modes
+
+- `SESSION_CHECKS_RUNNER=local` — enables the real runner: clone the task
+  branch into a temp dir, `npm ci`, run the allowlist commands via `spawn`
+  (no shell), bounded per-command and globally, and delete the temp dir.
+- default (or any other value) — **disabled**: every allowlist command is
+  recorded as `skipped` with the message *"Check runner not configured yet"* and
+  the session continues normally.
+
+In this deployment the runner is **disabled** by default because the app
+container does not keep the task branch or a full `node_modules`; enabling it
+would clone + `npm ci` on every session, which is slow and risky in production.
+
+### Safety limits
+
+- Per-command timeout: 120 s (`SESSION_CHECKS_TIMEOUT_MS`), global bounded.
+- Log tails capped at 8 KB each (`SESSION_CHECKS_MAX_TAIL`) — never full logs.
+- Commands run with `spawn` and `shell: false` — no shell, no arbitrary scripts.
+- Cloning uses the public `https://github.com/<owner>/<repo>.git` URL only —
+  tokens are never placed in the URL or printed.
+- Temp directory per session, removed when done.
+- Failing checks never revert, never block the session, never deploy — the
+  session is marked `completed_with_warnings` and the summary explains it.
+
+### Model
+
+`SessionCheck` (new): `workSessionId`, `projectId`, `taskId?`, `name`,
+`command`, `status` (`queued|running|passed|failed|skipped|cancelled|timeout`),
+`exitCode?`, `summary?`, `stdoutTail?`, `stderrTail?`, `startedAt`, `finishedAt?`,
+`durationMs?`, timestamps. Relations to `WorkSession` (cascade), `Project`
+(cascade) and `Task` (set-null). Migration: `20260823000000_add_session_checks`.
+
+### Orchestrator stage
+
+`lib/work-sessions/checks.ts` exports `runSessionChecks(workSessionId)` (creates
+`SessionCheck` rows + returns a short summary), the `SESSION_CHECK_ALLOWLIST`,
+`getSessionCheckRunnerConfig()` and `isSessionCheckRunnerEnabled()`.
+`stageRunSessionChecks` in `lib/work-sessions/stages.ts` runs it inside both
+pipelines and stores the compact result on the session (`result.checks`).
+
+### Manual endpoint
+
+```
+POST /api/work-sessions/[id]/checks/run
+```
+
+Authenticated. Re-runs the checks for an existing session and returns
+`{ ok, summary, checks }`. Useful to retry or backfill a session.
+
+### UI
+
+- `/work-sessions/[id]` shows a **Checks** section: name, command, status,
+  exit code, duration, summary and capped stdout/stderr tails, plus a small
+  **Run checks** button (manual re-run).
+- Task cards show a compact `Checks: passed | failed | skipped` chip on the
+  latest work session block.
+- The human summary includes a `Comprobaciones:` line (build/lint/prisma OK,
+  failed, or skipped because the runner is not configured).
+
+### ActivityLog
+
+`work_session.checks.started`, `work_session.checks.completed`,
+`work_session.checks.completed_with_warnings`, `work_session.checks.failed`,
+`work_session.checks.skipped`. Metadata includes `workSessionId`, `taskId`,
+`status` and a short `checks` array — never secrets, env vars or tokens.
+
+### Current limitations
+
+- Runner disabled by default; real local runner is behind
+  `SESSION_CHECKS_RUNNER=local` and not exercised in production yet.
+- No `npm test`, no model-suggested commands, no distributed runner, no CI.
+- Checks are advisory — failing checks mark the session
+  `completed_with_warnings` but never revert or block the PR.
+
+### Next steps
+
+Optional enablement of the local runner in a controlled environment, PR
+comments with the check summary, and (a later phase) a real build-validation
+sandbox.
+
+## DEV Preview from Work Session
+
+After a Work Session (or a Forge-generated PR) you can prepare a **navigable DEV
+preview URL** to review the result in the browser — without merging, without
+touching `main` and without touching production.
+
+```
+WorkSession with Task + Branch + PR
+→ Prepare DEV Preview
+→ Forge creates/reuses a DEV deployment for the branch
+→ Forge saves URL + status
+→ "Open DEV Preview"
+→ review in the browser
+```
+
+### Environment variables
+
+```
+COOLIFY_BASE_URL="https://forge.core01.io"
+COOLIFY_API_TOKEN=""
+COOLIFY_SERVER_UUID=""
+COOLIFY_PROJECT_UUID=""
+COOLIFY_ENVIRONMENT_NAME="dev"
+PREVIEW_DOMAIN_SUFFIX=".dev.core01.io"
+PREVIEW_RUNNER_MODE="disabled"    # disabled | manual | coolify_api
+```
+
+Rules: never commit a real token; the token is never shown in the UI, logs or
+ActivityLog; if `COOLIFY_API_TOKEN` is missing Forge keeps working and shows
+`DEV Preview: Not configured`; `PREVIEW_RUNNER_MODE` defaults to `disabled`.
+
+### Runner modes
+
+- **disabled** (default) — Forge never tries to create a preview; it records a
+  `PreviewDeployment` with status `not_configured` and the message *"DEV Preview
+  runner is not configured"*. The session is not affected.
+- **manual** — Forge records a pending manual preview; you register a URL via
+  the manual endpoint/UI and it becomes `ready`.
+- **coolify_api** — Forge creates/reuses a Coolify application for the task
+  branch (domain `preview-<taskShortId>.dev.core01.io` or
+  `ws-<workSessionShortId>.dev.core01.io`), launches a deploy in the DEV
+  environment (never production) and tracks its status.
+
+In this deployment the runner is **disabled** because no `COOLIFY_API_TOKEN` is
+configured. The Coolify API is reachable (`/api/v1` responds, 401 without a
+token) — enabling `coolify_api` requires generating a token in Coolify
+(*Keys & Tokens*) and adding it to the app environment.
+
+### Model
+
+`PreviewDeployment` (new): `projectId`, `taskId?`, `workSessionId?`, `provider`
+(`manual|coolify`), `status` (`not_configured|queued|creating|deploying|ready|
+failed|stopped|skipped`), `previewUrl?`, `domain?`, `branchName?`,
+`repositoryFullName?`, `pullRequestNumber?`, `coolifyApplicationUuid?`,
+`coolifyDeploymentUuid?`, `coolifyProjectUuid?`, `coolifyServerUuid?`,
+`commitSha?`, `lastDeploymentStatus?`, `lastDeploymentLogUrl?`, `error?`,
+`metadata?`, timestamps (`requestedAt`, `deployedAt`, `lastCheckedAt`,
+`stoppedAt`). Relations to `Project` (cascade), `Task` and `WorkSession`
+(set-null). Migration: `20260824000000_add_preview_deployments`.
+
+The preview URL/status is also stored on `WorkSession.result`
+(`previewUrl`/`previewStatus`) so cards can show it without an extra query.
+
+### Client
+
+`lib/coolify/` contains `types.ts`, `client.ts` (config + authenticated fetch
+with timeout; the token is never logged) and `preview.ts`
+(`prepareDevPreview`, `refreshPreviewDeployment`, `buildPreviewDomain`, plus
+`createOrReusePreviewApplication` / `triggerPreviewDeployment` /
+`getPreviewDeploymentStatus` for the `coolify_api` path). If Coolify is not
+configured or unreachable, previews degrade to `not_configured`/`failed` with a
+clear message and never break the app.
+
+### Endpoints
+
+```
+POST /api/work-sessions/[id]/preview/prepare   — prepare (create/reuse) a DEV preview
+POST /api/preview-deployments/[id]/refresh     — refresh deployment status
+POST /api/work-sessions/[id]/preview/manual    — body { "previewUrl": "https://..." }
+```
+
+When not configured, `prepare` returns `{ ok: false, status: "not_configured",
+error: "DEV Preview runner is not configured" }` (HTTP 200).
+
+### UI
+
+- `/work-sessions/[id]` shows a **DEV Preview** panel: Prepare, Deploying +
+  Refresh status, **Open DEV Preview** + Refresh, Preview failed (+ error, retry)
+  and a small "Register manual preview URL" form.
+- Task cards show a compact `DEV Preview: ready/deploying/failed/not configured`
+  chip in the latest work-session block, with **Open Preview** / **Prepare
+  Preview** actions (not the protagonist).
+- The project Backlog adds `DEV previews: X · Ready previews: Y`.
+- `/settings` shows DEV Preview status, runner mode, Coolify base URL, token
+  (Hidden/Not set), domain suffix and default provider.
+
+### ActivityLog
+
+`preview.prepare_requested`, `preview.created`, `preview.application_reused`,
+`preview.application_created`, `preview.deployment_started`, `preview.ready`,
+`preview.failed`, `preview.not_configured`, `preview.refreshed`,
+`preview.manual_registered`. Metadata includes `previewDeploymentId`,
+`workSessionId`, `taskId`, `provider`, `status`, `previewUrl`, `domain`,
+`branchName` — never tokens or secrets.
+
+### Guardrails
+
+No production, no merge, no direct `main` writes, no automatic issue closing,
+no deleting resources without approval, no `.env`/secrets, no keys/certificates,
+no firewall/SSH/VPS changes, no workflow/Docker/infra edits, and the token is
+never printed.
+
+### Current limitations
+
+- Runner disabled by default; `coolify_api` requires a `COOLIFY_API_TOKEN` +
+  a server/project UUID and is not exercised in production yet.
+- No automatic preview at the end of a session (manual "Prepare DEV Preview").
+- No cleanup/stop of previews, no multi-environment system, no background
+  queues/WebSockets.
+
+### Next steps
+
+Enable `coolify_api` with a real token, add preview cleanup, optional automatic
+preview after sessions, and a "Stop preview" action.
+
+## Coolify API Preview Runner
+
+This phase completes the real `coolify_api` mode: Forge talks to the Coolify
+REST API to create/reuse a preview application for the task branch, assigns a
+`*.dev.core01.io` domain, launches a deployment and tracks its status.
+
+### Creating a Coolify API token
+
+1. Log into Coolify (`https://forge.core01.io`) → **Keys & Tokens** →
+   **API tokens** → **Create new token**.
+2. Copy the generated token and add it to the app environment variables on
+   Coolify as `COOLIFY_API_TOKEN` (encrypted). Never commit it to the repo and
+   never paste it into Forge — Forge never prints it.
+3. Set `PREVIEW_RUNNER_MODE=coolify_api`.
+
+### Required variables
+
+```
+COOLIFY_BASE_URL="https://forge.core01.io"
+COOLIFY_API_TOKEN=""                # real token (Coolify Keys & Tokens)
+COOLIFY_SERVER_UUID=""              # optional: auto-discovered if empty
+COOLIFY_PROJECT_UUID=""             # optional: auto-discovered if empty
+COOLIFY_ENVIRONMENT_NAME="dev"
+PREVIEW_DOMAIN_SUFFIX=".dev.core01.io"
+PREVIEW_RUNNER_MODE="coolify_api"
+PREVIEW_DEFAULT_PORT="3000"
+PREVIEW_BUILD_PACK="dockerfile"
+PREVIEW_APP_NAME_PREFIX="forge-preview"
+PREVIEW_DEPLOY_TIMEOUT_MS="300000"
+```
+
+### Getting the server / project UUID
+
+`GET /api/settings/coolify/diagnostics` (or the **Check Coolify connection**
+button in `/settings`) lists the configured state and, when the env vars are
+empty, best-effort discovers the first Coolify server and project. If the UUIDs
+are missing the diagnostics report says `serverUuidSource: missing` /
+`projectUuidSource: missing` and you should set them explicitly in Coolify env
+vars.
+
+### Prepare DEV Preview flow (coolify_api)
+
+```
+validate session/task/project
+→ check branch + repo
+→ compute domain (preview-<taskShortId>.dev.core01.io)
+→ create/reuse PreviewDeployment (status creating)
+→ create/reuse Coolify app (forge-preview-<taskShortId>)
+→ trigger deployment (status deploying, coolifyDeploymentUuid saved)
+→ refresh maps Coolify status → queued/deploying/ready/failed/stopped
+→ Open DEV Preview
+```
+
+Never deploys to production, never merges, never touches `main`.
+
+### Diagnostics endpoint
+
+```
+GET /api/settings/coolify/diagnostics
+```
+
+Authenticated. Returns `{ configured, baseUrl, hasToken, runnerMode,
+connection, serverUuid, projectUuid, environmentName, … }`. Never returns the
+token. When `COOLIFY_API_TOKEN` is missing it returns
+`{ ok: false, configured: false, error: "COOLIFY_API_TOKEN is not configured" }`.
+
+### Troubleshooting
+
+- **401 Unauthorized** → token missing/incorrect or insufficient permissions.
+  Re-check `COOLIFY_API_TOKEN` in Coolify Keys & Tokens.
+- **404 endpoint** → the installed Coolify version/API differs; check the
+  client in `lib/coolify/client.ts` (base path `/api/v1`) and the actual
+  endpoints exposed by the instance.
+- **No server UUID** → set `COOLIFY_SERVER_UUID` (or let diagnostics discover it).
+- **No project UUID** → set `COOLIFY_PROJECT_UUID` (or let diagnostics discover it).
+- **Domain not reachable** → verify the DNS wildcard `*.dev.core01.io` points to
+  the VPS (`169.58.177.100`) and that the Coolify proxy picks up the new domain.
+- **Deploy failed** → check the deployment logs in Coolify (the preview stores
+  `lastDeploymentLogUrl`).
+
+### Current limitations
+
+- `coolify_api` is implemented but requires a real token; until then previews
+  stay `not_configured`/`failed` with a clear message and `manual` mode keeps
+  working.
+- No preview auto-trigger at the end of a session, no cleanup/stop, no
+  multi-environment management, no background queues.
+
+## Human Approval: Prepare Production
+
+Adds the first formal **human-approval gate before production**. Forge PREPARES
+a readiness summary for a work session / task / PR, and a human can approve or
+reject it. **Approve readiness no hace merge ni deploy**: the gate never merges
+the PR, never deploys to production and never touches `main`.
+
+### What it does
+
+1. **Prepare production** (`POST /api/work-sessions/[id]/production/prepare`):
+   loads the session + task + PR metadata + last PR review + session checks +
+   DEV preview + changed files (safe-file policy), runs the evaluator and
+   persists a `ProductionReadinessReview`.
+2. **Approve** (`POST /api/production-readiness/[id]/approve`): only when the
+   recommendation is `ready_for_production`. Records `approvedBy`/`approvedAt`.
+3. **Reject** (`POST /api/production-readiness/[id]/reject`): requires a
+   `notes` reason. Records `rejectedAt` + `humanNotes`.
+4. **Refresh** (`POST /api/production-readiness/[id]/refresh`): re-evaluates and
+   preserves human decisions. If the review was approved and a critical blocker
+   appears, it falls back to `needs_changes`.
+
+### Model
+
+`ProductionReadinessReview` (`prisma/migrations/20260825000000_add_production_readiness_reviews`):
+`projectId`, `taskId?`, `workSessionId?`, `previewDeploymentId?`, `status`
+(`draft|ready|blocked|needs_changes|approved|rejected|cancelled`),
+`recommendation` (`ready_for_production|needs_changes|blocked|manual_review_required`),
+`riskLevel` (`low|medium|high|critical|unknown`), `summary`, `blockingReasons`,
+`checksSummary`, `previewSummary`, `prSummary`, `filesSummary`, `humanNotes`,
+`approvedBy`, `approvedAt`, `rejectedAt`.
+
+### Readiness rules (`lib/production-readiness/evaluator.ts`)
+
+- **PR**: must be open, target `main`, branch ≠ `main`, and have a Builder commit.
+- **PR review**: `needs_changes` → `needs_changes`; `keep_draft` →
+  `manual_review_required`; risk `high/critical` → `blocked`. The evaluator
+  NEVER forces `ready_for_production` over a `needs_changes`/`keep_draft`.
+- **Session checks**: passed = positive, skipped = warning, failed =
+  `needs_changes`, timeout = `manual_review_required`.
+- **DEV preview**: ready = positive, deploying = `manual_review_required`,
+  failed = `blocked`, not_configured/none = `needs_changes`.
+- **Safe-file policy**: blocked paths / secrets → `blocked`.
+
+### Policy (always conservative)
+
+- Production Readiness Gate: **Available**.
+- Merge automation: **Disabled**.
+- Production deploy automation: **Disabled**.
+- Approval required: **Yes** (only a human can approve).
+
+### UI
+
+- `/work-sessions/[id]`: **Production readiness** panel (status, recommendation,
+  risk, summary, blocking reasons, Approve/Reject/Refresh + "This does not merge
+  or deploy").
+- Task card: compact `Production: …` chip + `Prepare` / `View`.
+- Project: counters `Production ready: X · Approved: Y · Blocked: Z`.
+- `/settings`: `Production Readiness Gate`, `Merge automation`, `Production
+  deploy automation`, `Approval required`.
+
+### ActivityLog events
+
+`production.prepare_requested`, `production.review_created`, `production.ready`,
+`production.needs_changes`, `production.blocked`, `production.approved`,
+`production.rejected`, `production.refreshed` — safe metadata only (review id,
+session/task id, recommendation, risk level, preview status, PR number).
+
+## Fase 3.8B — Resolve Readiness Needs Changes & Approval Happy Path
+
+Closes the happy path when a task is blocked by `needs_changes`: Forge can
+diagnose WHY it is not ready, re-run the PR review without touching code, apply
+a corrective iteration when needed, and approve only when the real state is
+`ready_for_production`. Same guardrails as Fase 3.8: never merge, never deploy
+to production, never touch `main`, never force `ready_for_production`.
+
+### Diagnostics ("Why not ready?")
+
+`lib/production-readiness/diagnostics.ts` — `buildReadinessDiagnostics(input)`
+returns structured diagnostics:
+
+```
+{
+  "blocking": [],                 // real blockers (→ blocked)
+  "needsChanges": [ ... ],        // required changes / manual review
+  "warnings": [ ... ],            // non-blocking (e.g. checks skipped, stale review)
+  "positiveSignals": [ ... ]      // what is OK (preview ready, PR open→main, files allowed)
+}
+```
+
+The evaluator (`evaluateProductionReadiness`) decides from these diagnostics and
+persists them on the review (`ProductionReadinessReview.diagnostics`,
+migration `20260826000000_add_readiness_diagnostics`). They feed
+`blockingReasons`, the human summary and the Work Session UI.
+
+### Re-run PR review (no code changes)
+
+Reuses the existing `POST /api/tasks/[id]/github/pr/review` (full re-analysis of
+the PR via the PR Review Gate). Accessible from the Production readiness panel
+and the task card. After re-running, use **Refresh readiness** to re-evaluate.
+
+### Fix readiness issues (corrective iteration)
+
+The panel offers **Fix readiness issues**: a form pre-filled with the detected
+reasons that calls the existing iteration flow
+(`POST /api/tasks/[id]/work-session/iterate`). It reuses the same task, branch
+and PR — no duplicated artifacts — runs a new Builder commit if needed, re-runs
+the PR review, and then **Refresh readiness** re-evaluates.
+
+### Summary humano
+
+`buildProductionReadinessSummary()` distinguishes:
+`Forge no recomienda pasar esta tarea a producción todavía.` → **Lo que está
+bien** (positive signals) → **Qué falta** (blockers + required changes) →
+**Avisos** → **Siguiente paso recomendado** (re-run PR review / corrective
+iteration / fix preview / fix checks).
+
+### UI
+
+- Work Session panel: **Why not ready?** (bloqueos, cambios requeridos, avisos,
+  señales positivas, última PR Review, fecha de evaluación) + actions
+  `Re-run PR review`, `Refresh readiness`, `Fix readiness issues`,
+  `Approve readiness` (solo si `ready_for_production`), `Reject`.
+- Task card: `Production: needs changes — PR review` + `View readiness` +
+  `Re-run review`.
+
+### Next steps
+
+Enable `coolify_api` with a real token, preview cleanup, optional automatic
+preview after sessions, and a "Stop preview" action.
 
 ### Current limitations
 
 - Synchronous execution (no background queue / WebSockets yet); a full session
   can take a few minutes.
 - No automatic merge, deploy, production approval, reviewers, or test runner yet.
+
+## Fase 3.8C — Approval Happy Path: Ready PR + Preview inheritance + Minimal Tests
+
+Closes the real approval happy path by satisfying the conditions Forge itself
+requires — without relaxing guardrails. Still never merges, never deploys to
+production and never touches `main`; `Approve readiness` only records human
+approval.
+
+### Preview inheritance (`lib/production-readiness/preview-resolver.ts`)
+
+`resolveReadyPreviewForTask()` finds the best ready DEV preview even when the
+current work session (e.g. an iteration child) has none, by priority:
+
+1. PreviewDeployment of the current work session (ready).
+2. PreviewDeployment of the same task (ready).
+3. PreviewDeployment with the same `branchName` (ready).
+4. PreviewDeployment with the same `pullRequestNumber` (ready).
+5. Most recent ready preview for the project.
+
+Avoids false positives: never uses `failed`/`stopped` previews, never a preview
+of another repository, and prefers an exact ready preview. Diagnostics show
+`Preview heredado de WorkSession <id> (branch|task|pr)` as a positive signal and
+`Preview source` in the panel.
+
+### Minimal tests (Vitest)
+
+`vitest` is a devDependency with `"test": "vitest run --passWithNoTests"` and a
+root `vitest.config.ts`. The real test for `/api/ping` (`tests/api/ping.test.ts`
+or co-located) lives on the feature branch (the route only exists there, since
+`main` keeps `/api/ping` 404). It checks the endpoint returns
+`{ ok: true, service: "forge-core" }` and does not assume `timestamp`/`checked`.
+`npm test` on `main` passes with no tests (`--passWithNoTests`). The test is
+added to the PR via the **Fix readiness issues** corrective iteration (same
+task, branch and PR — no duplicated artifacts). Session Checks allowlist now
+includes `npm test` (hardcoded, safe, short timeout; runner still disabled by
+default).
+
+### PR ready for review + approval happy path
+
+1. Add minimal tests to the PR (corrective iteration).
+2. `Re-run PR review` → `POST /api/tasks/[id]/github/pr/review` (new `pr-review`
+   AgentRun). It should return `ready_for_review` with risk `low`/`medium`.
+3. `Mark PR ready for review` → `POST /api/tasks/[id]/github/pr/ready`
+   (GraphQL `markPullRequestReadyForReview`, no merge; requires the last review
+   to recommend ready).
+4. `Refresh readiness` → re-evaluates PR (not draft), tests present, preview
+   inherited/ready, files allowed, checks passed/skipped.
+5. `Approve readiness` → only when `recommendation = ready_for_production`;
+   records `approvedBy`/`approvedAt` + `production.approved`. **Never merges or
+   deploys.**
+
+### UI
+
+- Work Session panel: `Preview source`, `Preview URL`, `Tests` (yes/no),
+  `PR draft` (yes/no) + actions `Re-run PR review`, `Mark PR ready for review`
+  (solo si draft), `Refresh readiness`, `Fix readiness issues`,
+  `Approve readiness` (solo si `ready_for_production`), `Reject`.
+- Task card: `Production: needs changes — PR review` / `— PR draft` / `— tests`
+  + `View readiness` + `Re-run review`.
+
+### Guardrails (unchanged)
+
+`Approve readiness` **no hace merge ni deploy**; la PR sigue abierta y `main`
+permanece intacto (`/api/ping` 404 hasta que un humano haga merge).
+
+## Fase 3.9 — Controlled Production Promotion
+
+Añade el paso final: **promover a producción** un cambio ya aprobado. A
+diferencia de todo lo anterior, esto **sí puede mergear a `main`**, pero solo
+bajo condiciones estrictas y una confirmación humana explícita.
+
+> **Resumen:** `Prepare promotion` solo hace preflight (nunca mergea).
+> `Execute promotion` requiere escribir literalmente **`PROMOTE`**, re-ejecuta
+> el preflight, mergea la PR vía GitHub API, espera al despliegue y verifica
+> `/api/health` + el endpoint esperado en producción.
+
+### Condiciones para promover (preflight)
+
+`runProductionPromotionPreflight()` re-valida **en el momento de la promoción**:
+
+1. `readiness.approved` — existe una revisión `approved` con recomendación
+   `ready_for_production`.
+2. `pr.ready` — la PR existe, está abierta, **no es draft**, **no está
+   mergeada** y su base es `main`.
+3. `pr.review` — la última PR Review recomienda `ready_for_review`.
+4. `preview.ready` — hay una preview DEV lista con URL verificada.
+5. `files.safe` — el diff de la PR no toca rutas bloqueadas por safe-file-policy.
+6. `checks.no_critical_fails` — no hay fallos críticos en los checks del trabajo.
+
+Si algo falla → `preflight_failed` con la lista de `blockingReasons`. **No se
+mergea nada.**
+
+### Modelo `ProductionPromotion`
+
+Campos: `projectId`, `taskId?`, `workSessionId?`, `productionReadinessReviewId?`,
+`previewDeploymentId?`, `status` (`draft|preflight_failed|ready_to_promote|
+promoting|merged|deploying|verifying|completed|failed|cancelled`), `strategy`
+(`github_pr_merge`), `mergeMethod` (`squash`), `prNumber?`, `prUrl?`,
+`branchName?`, `baseBranch?`, `mergeCommitSha?`, `preflightSummary Json?`,
+`deploymentSummary Json?`, `verificationSummary Json?`, `metadata Json?`,
+`requestedBy?`, `requestedAt?`, `startedAt?`, `completedAt?`, `failedAt?`,
+`cancelledAt?`.
+
+### Flujo
+
+1. `POST /api/production-readiness/[id]/promotion/prepare` — preflight →
+   crea la `ProductionPromotion` en `ready_to_promote` (o `preflight_failed`).
+   **Nunca mergea.**
+2. `POST /api/production-promotions/[id]/execute` — requiere `{ confirm:
+   "PROMOTE" }` (si no, HTTP 400). Re-ejecuta el preflight → `promoting` →
+   `mergePullRequest()` (GitHub REST `PUT /pulls/{n}/merge`, método `squash`,
+   título `Promote task <taskId>: <title>`) → `merged` (guarda `mergeCommitSha`)
+   → `deploying` (espera el despliegue: `PRODUCTION_DEPLOY_WAIT_MS`=180s,
+   poll `PRODUCTION_DEPLOY_POLL_INTERVAL_MS`=10s, modo `wait_for_existing_deploy`)
+   → `verifying` → `completed`|`failed` con `verificationSummary`
+   (`{ health, expectedEndpoint, prMerged, mergeCommitSha }`).
+3. `POST /api/production-promotions/[id]/refresh` — re-lee el estado del merge y
+   vuelve a sondear salud + endpoint. **Nunca re-mergea.**
+
+`mergePullRequest()` (en `lib/github/pull-requests.ts`) **no borra la rama** y
+**no cierra la issue** asociada. La verificación usa `PRODUCTION_BASE_URL`
+(por defecto `https://forge-app.dev.core01.io`): `/api/health` y el endpoint
+esperado derivado del diff (`app/api/ping/route.ts` → `/api/ping`).
+
+### Actividad
+
+Nuevos eventos `promotion.*`: `prepare_requested`, `preflight_passed`,
+`preflight_failed`, `ready`, `execute_requested`, `merge_started`, `merged`,
+`deploy_wait_started`, `verification_started`, `completed`, `failed`,
+`refreshed`, `cancelled`. Metadata segura (ids, `prNumber`, `status`,
+`mergeCommitSha`, `healthStatus` — nunca tokens).
+
+### UI
+
+- Work Session: panel **Production promotion** bajo Production readiness.
+  Estados: No preparada / Preflight fallido / Listo para promover / Promoviendo
+  / Mergeado / Desplegando / Verificando / Completado / Fallido / Cancelado.
+  Acciones: `Prepare promotion` (solo si readiness aprobada), `Execute
+  promotion` (solo si `ready_to_promote`, modal con input **PROMOTE**),
+  `Refresh promotion`. Textos de advertencia: "Esto sí mergea la PR en main" y
+  "Esto puede lanzar el despliegue de producción".
+- Task card: chip compacto `Promotion: not prepared / ready / completed /
+  failed` + `Prepare promotion` (solo si readiness aprobada) + `View promotion`.
+- Proyecto: contador `Promotions ready: X · Promotions completed: Y ·
+  Promotions failed: Z`.
+- Settings: fila `Production promotion` (estrategia, método de merge, base URL,
+  ventana de espera).
+
+### Qué NO hace la promoción
+
+- No fuerza `ready_for_production`: si la readiness no está aprobada, el
+  preflight falla.
+- No mergea sin `PROMOTE`: la confirmación es obligatoria (HTTP 400 si no).
+- No hace auto-rollback: si la verificación falla tras el merge, queda
+  `failed` con un error claro; un humano decide qué hacer.
+- No borra la rama de la PR ni cierra la issue.
+- No imprime tokens ni secretos.
+
+### Variables de entorno
+
+```bash
+PRODUCTION_BASE_URL="https://forge-app.dev.core01.io"
+PRODUCTION_PROMOTION_MODE="github_merge"
+PRODUCTION_DEPLOY_WAIT_MS="180000"
+PRODUCTION_DEPLOY_POLL_INTERVAL_MS="10000"
+```
+
+### Troubleshooting
+
+- **Preflight fallido**: mira `blockingReasons` en el panel. Típicamente falta
+  `Approve readiness` (y que la PR Review diga `ready_for_review`).
+- **Ejecutar devuelve 400**: el cuerpo no contenía `"PROMOTE"`.
+- **El PR se mergea pero el endpoint sigue 404**: Coolify puede no auto-desplegar
+  al hacer merge. Lanza el deploy manualmente (Actions → Deploy) y pulsa
+  `Refresh promotion` para completar la verificación.
+- **Verificación fallida tras merge**: revisa `verificationSummary`
+  (`health.status`, `expectedEndpoint.status`). No hay rollback automático.
 
 ## Backlog (Planner → tasks)
 
