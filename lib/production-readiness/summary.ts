@@ -143,11 +143,11 @@ export function buildProductionReadinessSummary(review: ReviewLike): string {
     lines.push(`Nota humana: ${review.humanNotes}`);
   }
 
-  if (review.approvedAt) {
+  if (review.status === "approved" && review.approvedAt) {
     lines.push("");
     lines.push(`Aprobado por ${review.approvedBy ?? "humano"} el ${review.approvedAt.toLocaleString()}.`);
   }
-  if (review.rejectedAt) {
+  if (review.status === "rejected" && review.rejectedAt) {
     lines.push("");
     lines.push(`Rechazado el ${review.rejectedAt.toLocaleString()}.`);
   }
