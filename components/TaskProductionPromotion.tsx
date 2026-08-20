@@ -57,7 +57,7 @@ export function TaskProductionPromotion({
   const label = status ? (LABELS[status] ?? status) : "not prepared";
   const canPrepare =
     Boolean(data?.reviewId) && Boolean(data?.readinessApproved) &&
-    (status === null || status === "draft" || status === "preflight_failed");
+    (status === null || status === "draft" || status === "preflight_failed" || status === "failed");
 
   async function prepare() {
     if (loading || !data?.reviewId) return;

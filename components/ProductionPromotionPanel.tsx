@@ -141,7 +141,7 @@ export function ProductionPromotionPanel({
   }
 
   const status = promotion?.status ?? null;
-  const canPrepare = readinessApproved && (status === null || status === "draft" || status === "preflight_failed");
+  const canPrepare = readinessApproved && (status === null || status === "draft" || status === "preflight_failed" || status === "failed");
   const canExecute = status === "ready_to_promote";
 
   return (
