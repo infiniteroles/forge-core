@@ -3,6 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+export interface ReadinessDiagnosticItem {
+  source: string;
+  reason: string;
+  details?: string;
+  severity: string;
+}
+
+export interface ReadinessDiagnosticsData {
+  blocking: ReadinessDiagnosticItem[];
+  needsChanges: ReadinessDiagnosticItem[];
+  warnings: ReadinessDiagnosticItem[];
+  positiveSignals: string[];
+}
+
 export interface ProductionReadinessData {
   id: string | null;
   status: string | null; // draft|ready|blocked|needs_changes|approved|rejected
@@ -10,10 +24,14 @@ export interface ProductionReadinessData {
   riskLevel: string | null;
   summary: string | null;
   blockingReasons: string[];
+  diagnostics: ReadinessDiagnosticsData | null;
   humanNotes: string | null;
   approvedBy: string | null;
   approvedAt: string | null;
   rejectedAt: string | null;
+  prNumber: number | null;
+  prReviewRecommendation: string | null;
+  lastEvaluatedAt: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -43,21 +61,26 @@ function toneFor(status: string | null): string {
 }
 
 /**
- * Human Approval gate — Production readiness panel (Fase 3.8).
- * PREPARES a readiness summary and lets a human approve/reject. It NEVER
- * merges, NEVER deploys and NEVER touches main or production.
+ * Human Approval gate — Production readiness panel (Fase 3.8 / 3.8B).
+ * PREPARES a readiness summary, explains WHY it is not ready, and lets a human
+ * re-run the PR review, apply a corrective iteration, refresh and approve/
+ * reject. It NEVER merges, NEVER deploys and NEVER touches main/production.
  */
 export function ProductionReadinessPanel({
   workSessionId,
+  taskId,
   review,
 }: {
   workSessionId: string;
+  taskId: string | null;
   review?: ProductionReadinessData | null;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
+  const [fixOpen, setFixOpen] = useState(false);
+  const [fixInstruction, setFixInstruction] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function post(url: string, body?: Record<string, unknown>) {
@@ -86,6 +109,36 @@ export function ProductionReadinessPanel({
 
   async function prepare() {
     await post(`/api/work-sessions/${workSessionId}/production/prepare`);
+  }
+
+  async function rerunReview() {
+    if (!taskId) {
+      setError("Esta sesión no tiene tarea vinculada para re-ejecutar la PR Review.");
+      return;
+    }
+    await post(`/api/tasks/${taskId}/github/pr/review`);
+  }
+
+  async function fixIssues() {
+    if (!taskId) return;
+    await post(`/api/tasks/${taskId}/work-session/iterate`, {
+      instruction: fixInstruction.trim(),
+    });
+    setFixOpen(false);
+    setFixInstruction("");
+  }
+
+  function defaultFixInstruction(): string {
+    const diag = review?.diagnostics;
+    const reasons = [
+      ...(diag?.blocking ?? []),
+      ...(diag?.needsChanges ?? []),
+    ]
+      .map((d) => d.reason)
+      .join("; ");
+    const base =
+      "Revisa la PR y corrige únicamente lo necesario para que la revisión automática deje de marcar needs_changes. Mantén el cambio limitado a /api/ping y no toques infraestructura ni secretos.";
+    return reasons ? `${base}\n\nMotivos detectados: ${reasons}` : base;
   }
 
   async function refresh() {
@@ -148,16 +201,42 @@ export function ProductionReadinessPanel({
         ) : null}
 
         {review?.id ? (
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={loading}
+            className="rounded-md border border-border px-2 py-1 text-xs text-neutral-300 transition hover:border-accent/50 disabled:opacity-50"
+          >
+            {loading ? "Refreshing…" : "Refresh readiness"}
+          </button>
+        ) : null}
+
+        {taskId && (status === "needs_changes" || status === "blocked" || status === "draft" || !status) ? (
           <>
             <button
               type="button"
-              onClick={refresh}
+              onClick={rerunReview}
               disabled={loading}
-              className="rounded-md border border-border px-2 py-1 text-xs text-neutral-300 transition hover:border-accent/50 disabled:opacity-50"
+              className="rounded-md border border-accent/50 px-2 py-1 text-xs text-accent transition hover:bg-accent/10 disabled:opacity-50"
             >
-              {loading ? "Refreshing…" : "Refresh"}
+              {loading ? "Reviewing…" : "Re-run PR review"}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFixInstruction(defaultFixInstruction());
+                setFixOpen((v) => !v);
+              }}
+              disabled={loading}
+              className="rounded-md border border-amber-500/40 px-2 py-1 text-xs text-amber-300 transition hover:bg-amber-500/10 disabled:opacity-50"
+            >
+              Fix readiness issues
+            </button>
+          </>
+        ) : null}
 
+        {review?.id ? (
+          <>
             {canApprove ? (
               <button
                 type="button"
@@ -165,7 +244,7 @@ export function ProductionReadinessPanel({
                 disabled={loading}
                 className="rounded-md bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-50"
               >
-                {loading ? "Approving…" : "Approve"}
+                {loading ? "Approving…" : "Approve readiness"}
               </button>
             ) : null}
 
@@ -210,6 +289,61 @@ export function ProductionReadinessPanel({
         <pre className="mt-3 whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-xs text-neutral-200">
           {review.summary}
         </pre>
+      ) : null}
+
+      {review?.diagnostics ? (
+        <div className="mt-3 rounded-lg border border-border bg-background p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+              Why not ready?
+            </h3>
+            {review.lastEvaluatedAt ? (
+              <span className="text-[11px] text-text-dim">
+                Evaluado {new Date(review.lastEvaluatedAt).toLocaleString()}
+              </span>
+            ) : null}
+          </div>
+
+          {review.prNumber ? (
+            <p className="mt-1 text-[11px] text-text-dim">
+              PR #{review.prNumber}
+              {review.prReviewRecommendation
+                ? ` · Última PR Review: ${review.prReviewRecommendation}`
+                : ""}
+            </p>
+          ) : null}
+
+          <DiagnosticsList
+            title="Bloqueos"
+            items={review.diagnostics.blocking}
+            className="bg-red-500/5 text-red-300/90"
+          />
+          <DiagnosticsList
+            title="Cambios requeridos"
+            items={review.diagnostics.needsChanges}
+            className="bg-amber-500/5 text-amber-300/90"
+          />
+          <DiagnosticsList
+            title="Avisos"
+            items={review.diagnostics.warnings}
+            className="bg-neutral-700/20 text-neutral-300"
+          />
+
+          {review.diagnostics.positiveSignals.length > 0 ? (
+            <div className="mt-2">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300/80">
+                Señales positivas
+              </h4>
+              <ul className="mt-1 flex flex-col gap-1">
+                {review.diagnostics.positiveSignals.map((s, i) => (
+                  <li key={i} className="text-xs text-emerald-300/90">
+                    ✓ {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {review?.blockingReasons && review.blockingReasons.length > 0 ? (
@@ -274,7 +408,65 @@ export function ProductionReadinessPanel({
         </div>
       ) : null}
 
+      {fixOpen ? (
+        <div className="mt-3 rounded-lg border border-amber-500/30 bg-background p-3">
+          <label className="text-xs font-semibold text-neutral-200">
+            Iteración correctiva (misma task, branch y PR — no duplica artefactos)
+          </label>
+          <textarea
+            value={fixInstruction}
+            onChange={(e) => setFixInstruction(e.target.value)}
+            rows={4}
+            className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-accent/60 focus:outline-none"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={fixIssues}
+              disabled={loading || !fixInstruction.trim()}
+              className="rounded-md bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/25 disabled:opacity-50"
+            >
+              {loading ? "Starting…" : "Run corrective iteration"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFixOpen(false)}
+              className="rounded-md border border-border px-2 py-1 text-xs text-neutral-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {error ? <p className="mt-2 text-xs text-red-300">{error}</p> : null}
+    </div>
+  );
+}
+
+function DiagnosticsList({
+  title,
+  items,
+  className,
+}: {
+  title: string;
+  items: ReadinessDiagnosticItem[];
+  className: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-2">
+      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-text-dim">
+        {title}
+      </h4>
+      <ul className="mt-1 flex flex-col gap-1">
+        {items.map((d, i) => (
+          <li key={i} className={`rounded px-2 py-1 text-xs ${className}`}>
+            {d.reason}
+            {d.details ? <span className="opacity-70"> — {d.details}</span> : null}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

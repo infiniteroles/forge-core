@@ -1179,7 +1179,63 @@ the PR, never deploys to production and never touches `main`.
 `production.rejected`, `production.refreshed` — safe metadata only (review id,
 session/task id, recommendation, risk level, preview status, PR number).
 
+## Fase 3.8B — Resolve Readiness Needs Changes & Approval Happy Path
 
+Closes the happy path when a task is blocked by `needs_changes`: Forge can
+diagnose WHY it is not ready, re-run the PR review without touching code, apply
+a corrective iteration when needed, and approve only when the real state is
+`ready_for_production`. Same guardrails as Fase 3.8: never merge, never deploy
+to production, never touch `main`, never force `ready_for_production`.
+
+### Diagnostics ("Why not ready?")
+
+`lib/production-readiness/diagnostics.ts` — `buildReadinessDiagnostics(input)`
+returns structured diagnostics:
+
+```
+{
+  "blocking": [],                 // real blockers (→ blocked)
+  "needsChanges": [ ... ],        // required changes / manual review
+  "warnings": [ ... ],            // non-blocking (e.g. checks skipped, stale review)
+  "positiveSignals": [ ... ]      // what is OK (preview ready, PR open→main, files allowed)
+}
+```
+
+The evaluator (`evaluateProductionReadiness`) decides from these diagnostics and
+persists them on the review (`ProductionReadinessReview.diagnostics`,
+migration `20260826000000_add_readiness_diagnostics`). They feed
+`blockingReasons`, the human summary and the Work Session UI.
+
+### Re-run PR review (no code changes)
+
+Reuses the existing `POST /api/tasks/[id]/github/pr/review` (full re-analysis of
+the PR via the PR Review Gate). Accessible from the Production readiness panel
+and the task card. After re-running, use **Refresh readiness** to re-evaluate.
+
+### Fix readiness issues (corrective iteration)
+
+The panel offers **Fix readiness issues**: a form pre-filled with the detected
+reasons that calls the existing iteration flow
+(`POST /api/tasks/[id]/work-session/iterate`). It reuses the same task, branch
+and PR — no duplicated artifacts — runs a new Builder commit if needed, re-runs
+the PR review, and then **Refresh readiness** re-evaluates.
+
+### Summary humano
+
+`buildProductionReadinessSummary()` distinguishes:
+`Forge no recomienda pasar esta tarea a producción todavía.` → **Lo que está
+bien** (positive signals) → **Qué falta** (blockers + required changes) →
+**Avisos** → **Siguiente paso recomendado** (re-run PR review / corrective
+iteration / fix preview / fix checks).
+
+### UI
+
+- Work Session panel: **Why not ready?** (bloqueos, cambios requeridos, avisos,
+  señales positivas, última PR Review, fecha de evaluación) + actions
+  `Re-run PR review`, `Refresh readiness`, `Fix readiness issues`,
+  `Approve readiness` (solo si `ready_for_production`), `Reject`.
+- Task card: `Production: needs changes — PR review` + `View readiness` +
+  `Re-run review`.
 
 ### Next steps
 

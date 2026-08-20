@@ -98,10 +98,35 @@ export interface ProductionEvaluationResult {
   riskLevel: ProductionRiskLevel;
   summary: string;
   blockingReasons: string[];
+  diagnostics: ReadinessDiagnostics;
   checksSummary: ProductionChecksSummary | null;
   previewSummary: ProductionPreviewSummary | null;
   prSummary: ProductionPrSummary | null;
   filesSummary: ProductionFilesSummary | null;
+}
+
+/** Severity of a readiness diagnostic. */
+export type ReadinessDiagnosticSeverity =
+  | "blocked"
+  | "needs_changes"
+  | "manual_review_required"
+  | "warning";
+
+/** A single readiness diagnostic item. */
+export interface ReadinessDiagnostic {
+  source: string; // pr_review | pr | builder | checks | preview | files
+  reason: string;
+  details?: string;
+  /** Required for blocking/needsChanges items; warnings default to "warning". */
+  severity?: ReadinessDiagnosticSeverity;
+}
+
+/** Structured readiness diagnostics ("Why not ready?"). */
+export interface ReadinessDiagnostics {
+  blocking: ReadinessDiagnostic[];
+  needsChanges: ReadinessDiagnostic[];
+  warnings: ReadinessDiagnostic[];
+  positiveSignals: string[];
 }
 
 /** Safe metadata stored on ActivityLog for production.* events. */

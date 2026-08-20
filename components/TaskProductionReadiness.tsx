@@ -9,6 +9,8 @@ export interface TaskProductionReadinessData {
   status: string | null; // draft|ready|blocked|needs_changes|approved|rejected|null
   recommendation: string | null;
   workSessionId: string | null;
+  taskId: string | null;
+  cause: string | null; // compact reason: "PR review" | "preview" | "checks" | ...
 }
 
 const LABELS: Record<string, string> = {
@@ -30,8 +32,9 @@ function toneFor(status: string | null): string {
 }
 
 /**
- * Compact production-readiness chip for a task card (Fase 3.8).
- * Prepare only creates a readiness review — never merges or deploys.
+ * Compact production-readiness chip for a task card (Fase 3.8 / 3.8B).
+ * Prepare only creates a readiness review; Re-run review only re-analyses the
+ * PR — never merges or deploys.
  */
 export function TaskProductionReadiness({
   data,
@@ -43,17 +46,21 @@ export function TaskProductionReadiness({
   const [error, setError] = useState<string | null>(null);
 
   const status = data?.status ?? null;
-  const label = status ? LABELS[status] ?? status : "not prepared";
+  const baseLabel = status ? LABELS[status] ?? status : "not prepared";
+  const label =
+    status === "needs_changes" && data?.cause
+      ? `needs changes — ${data.cause}`
+      : baseLabel;
 
-  async function prepare() {
-    if (!data?.workSessionId || loading) return;
+  async function post(url: string) {
+    if (loading) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/work-sessions/${data.workSessionId}/production/prepare`,
-        { method: "POST", headers: { "Content-Type": "application/json" } }
-      );
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
         router.refresh();
@@ -62,11 +69,23 @@ export function TaskProductionReadiness({
         setError(body.error || body.message || "Production readiness request failed.");
       }
     } catch {
-      setError("Network error while preparing production.");
+      setError("Network error while handling production readiness.");
     } finally {
       setLoading(false);
     }
   }
+
+  async function prepare() {
+    if (!data?.workSessionId) return;
+    await post(`/api/work-sessions/${data.workSessionId}/production/prepare`);
+  }
+
+  async function rerunReview() {
+    if (!data?.taskId) return;
+    await post(`/api/tasks/${data.taskId}/github/pr/review`);
+  }
+
+  const canRerun = data?.taskId != null && (status === "needs_changes" || status === "blocked");
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -90,8 +109,18 @@ export function TaskProductionReadiness({
             href={`/work-sessions/${data.workSessionId}`}
             className="rounded border border-border px-1.5 py-0.5 text-[11px] text-accent transition hover:border-accent/50"
           >
-            View
+            View readiness
           </Link>
+          {canRerun ? (
+            <button
+              type="button"
+              onClick={rerunReview}
+              disabled={loading}
+              className="rounded border border-accent/50 px-1.5 py-0.5 text-[11px] text-accent transition hover:bg-accent/10 disabled:opacity-50"
+            >
+              {loading ? "Reviewing…" : "Re-run review"}
+            </button>
+          ) : null}
         </>
       ) : null}
       {error ? (

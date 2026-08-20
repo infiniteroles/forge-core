@@ -55,6 +55,41 @@ function blockingReasonsFrom(review: {
   return review.blockingReasons.filter((r): r is string => typeof r === "string");
 }
 
+function diagnosticsFrom(review: {
+  diagnostics: unknown;
+  prSummary: unknown;
+}): ProductionReadinessData["diagnostics"] {
+  if (!review.diagnostics || typeof review.diagnostics !== "object") {
+    // Fallback: derive from prSummary + blockingReasons when no diagnostics yet.
+    const pr = review.prSummary as Record<string, unknown> | null;
+    const rec = pr?.reviewRecommendation;
+    if (rec === "needs_changes") {
+      return {
+        blocking: [],
+        needsChanges: [
+          {
+            source: "pr_review",
+            reason: "La última PR Review pide cambios (needs_changes).",
+            severity: "needs_changes",
+          },
+        ],
+        warnings: [],
+        positiveSignals: [],
+      };
+    }
+    return null;
+  }
+  const d = review.diagnostics as Record<string, unknown>;
+  return {
+    blocking: Array.isArray(d.blocking) ? (d.blocking as never[]) : [],
+    needsChanges: Array.isArray(d.needsChanges) ? (d.needsChanges as never[]) : [],
+    warnings: Array.isArray(d.warnings) ? (d.warnings as never[]) : [],
+    positiveSignals: Array.isArray(d.positiveSignals)
+      ? (d.positiveSignals as string[])
+      : [],
+  };
+}
+
 function productionReadinessData(review: {
   id: string;
   status: string;
@@ -62,11 +97,15 @@ function productionReadinessData(review: {
   riskLevel: string | null;
   summary: string | null;
   blockingReasons: unknown;
+  diagnostics: unknown;
+  prSummary: unknown;
   humanNotes: string | null;
   approvedBy: string | null;
   approvedAt: Date | null;
   rejectedAt: Date | null;
+  updatedAt: Date;
 }): ProductionReadinessData {
+  const pr = review.prSummary as Record<string, unknown> | null;
   return {
     id: review.id,
     status: review.status,
@@ -74,10 +113,17 @@ function productionReadinessData(review: {
     riskLevel: review.riskLevel,
     summary: review.summary,
     blockingReasons: blockingReasonsFrom(review),
+    diagnostics: diagnosticsFrom(review),
     humanNotes: review.humanNotes,
     approvedBy: review.approvedBy,
     approvedAt: review.approvedAt ? review.approvedAt.toISOString() : null,
     rejectedAt: review.rejectedAt ? review.rejectedAt.toISOString() : null,
+    prNumber: typeof pr?.prNumber === "number" ? pr.prNumber : null,
+    prReviewRecommendation:
+      typeof pr?.reviewRecommendation === "string"
+        ? pr.reviewRecommendation
+        : null,
+    lastEvaluatedAt: review.updatedAt.toISOString(),
   };
 }
 
@@ -189,6 +235,7 @@ export default async function WorkSessionPage({ params }: Props) {
 
         <ProductionReadinessPanel
           workSessionId={session.id}
+          taskId={session.taskId}
           review={
             session.productionReadinessReviews[0]
               ? productionReadinessData(session.productionReadinessReviews[0])

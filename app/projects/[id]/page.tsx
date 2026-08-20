@@ -45,6 +45,8 @@ export default async function ProjectDetailPage({ params }: Props) {
           workSessionId: true,
           status: true,
           recommendation: true,
+          blockingReasons: true,
+          diagnostics: true,
         },
       },
       tasks: {
@@ -142,6 +144,36 @@ export default async function ProjectDetailPage({ params }: Props) {
   ).length;
 
   // Production readiness: latest review per task.
+  function readinessCause(review: {
+    diagnostics: unknown;
+    blockingReasons: unknown;
+  }): string | null {
+    const diag = review.diagnostics as Record<string, unknown> | null;
+    if (diag) {
+      const items = [
+        ...(Array.isArray(diag.blocking) ? (diag.blocking as { source?: string }[]) : []),
+        ...(Array.isArray(diag.needsChanges) ? (diag.needsChanges as { source?: string }[]) : []),
+      ];
+      const source = items.find((d) => d?.source)?.source ?? null;
+      const map: Record<string, string> = {
+        pr_review: "PR review",
+        preview: "preview",
+        checks: "checks",
+        files: "files",
+        pr: "PR",
+        builder: "builder",
+      };
+      return source ? (map[source] ?? source) : null;
+    }
+    const blocking = Array.isArray(review.blockingReasons)
+      ? review.blockingReasons.filter((b): b is string => typeof b === "string")
+      : [];
+    if (blocking.some((b) => /revisión automática|PR Review|needs_changes/i.test(b))) {
+      return "PR review";
+    }
+    return null;
+  }
+
   const productionByTask = new Map<string, TaskProductionReadinessData>();
   for (const review of project.productionReadinessReviews) {
     if (!review.taskId) continue;
@@ -151,6 +183,8 @@ export default async function ProjectDetailPage({ params }: Props) {
       status: review.status,
       recommendation: review.recommendation,
       workSessionId: review.workSessionId,
+      taskId: review.taskId,
+      cause: readinessCause(review),
     });
   }
   const productionReadyCount = project.productionReadinessReviews.filter(
