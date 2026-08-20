@@ -61,6 +61,14 @@ export default async function ProjectDetailPage({ params }: Props) {
           mergeCommitSha: true,
           summary: true,
           error: true,
+          jobRun: {
+            select: {
+              id: true,
+              status: true,
+              currentStage: true,
+              progressPercent: true,
+            },
+          },
         },
       },
       tasks: {
@@ -227,6 +235,10 @@ export default async function ProjectDetailPage({ params }: Props) {
       error: p.error,
       reviewId: readiness?.reviewId ?? null,
       workSessionId: readiness?.workSessionId ?? p.workSessionId ?? null,
+      jobRunId: p.jobRun?.id ?? null,
+      jobStatus: p.jobRun?.status ?? null,
+      jobStage: p.jobRun?.currentStage ?? null,
+      jobProgress: p.jobRun?.progressPercent ?? null,
       readinessApproved:
         readiness?.status === "approved" &&
         readiness?.recommendation === "ready_for_production",

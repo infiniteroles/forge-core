@@ -1425,6 +1425,108 @@ PRODUCTION_DEPLOY_POLL_INTERVAL_MS="10000"
 - **Verificación fallida tras merge**: revisa `verificationSummary`
   (`health.status`, `expectedEndpoint.status`). No hay rollback automático.
 
+## Fase 4.0 — Async Promotion Jobs & Recovery
+
+### Por qué existe
+
+En Fase 3.9 el `execute` hacía todo dentro de la request HTTP (merge +
+deploy wait hasta 180s + verify). El proxy cortaba la request con un 502 a los
+~60s, aunque el merge y el estado se guardaban correctamente en el servidor y la
+promoción se podía recuperar con Refresh. Para no depender de requests HTTP
+largas, Fase 4.0 introduce un sistema simple de **jobs asíncronos y
+recuperación**, empezando por `ProductionPromotion`.
+
+### Modelo `JobRun`
+
+Tabla `JobRun` (migración `20260828000000_add_job_runs`):
+
+```
+type            production_promotion | preview_deployment | session_checks | work_session
+status          queued | running | waiting | completed | failed | cancelled | stale | recovered
+resourceType / resourceId   el recurso del job (p.ej. production_promotion / <id>)
+projectId / taskId / workSessionId
+currentStage / progressPercent / summary / error
+input / result / metadata   (Json, sin secretos)
+lockedAt / lockedBy / startedAt / finishedAt / failedAt / cancelledAt / lastHeartbeatAt
+createdAt / updatedAt
+```
+
+`ProductionPromotion.jobRunId` (nullable, único) enlaza la promoción a su job.
+
+### Cómo evita el 502
+
+```
+POST /execute
+├─ valida sesión + confirm "PROMOTE"
+├─ gate rápido de readiness (approved)
+├─ crea JobRun type=production_promotion
+├─ enlaza jobRunId + marca promotion "promoting"
+├─ lanza el job en background (inline runner)
+└─ responde YA: { ok, promotionId, jobRunId, status: "queued" }
+```
+
+El merge/deploy/verify corren en el job; la request vuelve en milisegundos.
+**El runner actual es inline/background simple (continuación en el mismo
+proceso Node), NO es una cola distribuida.** Está diseñado para poder moverse a
+una cola real (Redis/BullMQ) más adelante sin cambiar el dominio.
+
+### Stages del job
+
+```
+preflight    (10%)  re-ejecuta todos los guardrails
+merge        (35%)  mergePullRequest vía GitHub API (squash)
+deploy_wait  (60%)  espera a que main recoja el merge (poll /api/health + endpoint)
+verify       (85%)  verifica PR merged + salud + endpoint esperado
+complete     (100%) promotion completed | failed (sin rollback automático)
+```
+
+Cada stage actualiza `JobRun.currentStage`, `JobRun.progressPercent`,
+`ProductionPromotion.status` y `ActivityLog` (`job.stage_*`, `promotion.*`).
+
+### Endpoints
+
+```
+GET  /api/jobs/[id]           estado seguro del job (stage, %, error, timestamps)
+POST /api/jobs/[id]/recover   recuperación manual desde la etapa correcta
+POST /api/production-promotions/[id]/execute    (async, responde "queued")
+POST /api/production-promotions/[id]/refresh    (sincroniza el JobRun si existe)
+```
+
+### UI
+
+- `ProductionPromotionPanel` (WorkSession): al pulsar Execute muestra al momento
+  "Promotion job started", Stage, progreso y Refresh. Polling cada 5s mientras el
+  job está activo. Botón **Recover job** si el job es stale/failed recuperable.
+- `TaskProductionPromotion` (TaskCard): `Promotion: promoting` + `Job: deploy_wait · 70%`.
+- Settings: `Async Jobs: Available · Promotion execution: Async · Job polling:
+  Enabled · Background queue: Inline runner · Recovery: Manual`.
+
+### Recovery (idempotente)
+
+Regla central: **una vez la PR está merged, el recovery NO repite el merge.**
+
+- PR ya mergeada → el job se reanuda desde `deploy_wait` / `verify`.
+- PR sin mergear → el job se reanuda desde `preflight` (guardrails re-evaluados).
+- Si el endpoint no aparece tras el timeout → promotion `failed`, job `failed`,
+  error claro, **sin rollback automático**.
+
+### Limitaciones actuales
+
+- El runner es inline (misma instancia Node); no hay cola distribuida, workers
+  ni WebSockets. Si el contenedor se reinicia a mitad de job, el job queda
+  `running`/`stale` y se recupera manualmente vía `/api/jobs/[id]/recover` o
+  Refresh (marca `stale` si no hay heartbeat).
+- No hay retry automático agresivo, cleanup automático ni rollback.
+- Solo `production_promotion` tiene recuperación implementada; los demás tipos
+  de `JobRun` están definidos pero no se usan todavía.
+
+### Próximos pasos
+
+- Validar el flujo async completo con una micro-tarea nueva (p.ej.
+  `/api/version-lite`) end-to-end.
+- Mover el runner a una cola real (Redis/BullMQ) y workers distribuidos.
+- Telemetría/retry programado y cleanup de jobs.
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.

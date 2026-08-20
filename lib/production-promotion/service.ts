@@ -22,6 +22,8 @@ import {
   getPullRequest,
   mergePullRequest,
 } from "@/lib/github/pull-requests";
+import { getJobPolicy } from "@/lib/jobs/policy";
+import { markJobStale } from "@/lib/jobs/service";
 import { getProductionPromotionPolicy } from "./policy";
 import { runProductionPromotionPreflight } from "./preflight";
 import { buildProductionPromotionSummary } from "./summary";
@@ -50,6 +52,7 @@ export interface ProductionPromotionRecord {
   baseBranch: string | null;
   mergeCommitSha: string | null;
   mergeMethod: string | null;
+  jobRunId: string | null;
   preflightSummary: unknown;
   deploymentSummary: unknown;
   verificationSummary: unknown;
@@ -157,7 +160,7 @@ export async function verifyProductionPromotion(
  * expected endpoint (and health). Returns the deploy summary and whether the
  * deploy looks live.
  */
-async function waitForProductionDeploy(
+export async function waitForProductionDeploy(
   expectedEndpoint: string | null
 ): Promise<{ live: boolean; deploymentSummary: ProductionDeploymentSummary }> {
   const policy = getProductionPromotionPolicy();
@@ -213,7 +216,7 @@ async function waitForProductionDeploy(
 /**
  * Loads a ProductionPromotion with its review/task/project for the service.
  */
-async function loadPromotion(promotionId: string) {
+export async function loadPromotion(promotionId: string) {
   return prisma.productionPromotion.findUnique({
     where: { id: promotionId },
     include: {
@@ -227,7 +230,7 @@ async function loadPromotion(promotionId: string) {
   });
 }
 
-async function updateSummary(
+export async function updateSummary(
   id: string,
   data: {
     status?: string;
@@ -237,12 +240,13 @@ async function updateSummary(
     prUrl?: string | null;
     verificationSummary?: unknown;
     deploymentSummary?: unknown;
+    metadata?: unknown;
     startedAt?: Date;
     completedAt?: Date | null;
     failedAt?: Date | null;
   }
 ): Promise<void> {
-  const { summary, ...rest } = data;
+  const { summary, metadata, ...rest } = data;
   const payload: Record<string, unknown> = { ...rest };
   if (summary !== undefined) payload.summary = summary;
   if (data.verificationSummary !== undefined) {
@@ -251,6 +255,7 @@ async function updateSummary(
   if (data.deploymentSummary !== undefined) {
     payload.deploymentSummary = jsonField(data.deploymentSummary);
   }
+  if (metadata !== undefined) payload.metadata = jsonField(metadata);
   await prisma.productionPromotion.update({
     where: { id },
     data: payload as Prisma.ProductionPromotionUpdateInput,
@@ -744,6 +749,49 @@ export async function refreshProductionPromotion(
     throw new Error("No existe la promoción indicada.");
   }
 
+  // --- Fase 4.0: sync the linked JobRun (if any) ---
+  let jobSnapshot: Record<string, unknown> | null = null;
+  if (promotion.jobRunId) {
+    const job = await prisma.jobRun.findUnique({
+      where: { id: promotion.jobRunId },
+    });
+    if (job) {
+      const isActive =
+        job.status === "running" || job.status === "waiting";
+      if (
+        isActive &&
+        job.lastHeartbeatAt &&
+        Date.now() - job.lastHeartbeatAt.getTime() >
+          getJobPolicy().heartbeatStaleMs
+      ) {
+        await markJobStale(job.id);
+        await logActivity({
+          projectId: promotion.projectId,
+          type: "job.stale",
+          message: `El job de promoción (${job.id}) no reportó actividad dentro de la ventana esperada y se marcó como stale; requiere recuperación manual.`,
+          metadata: {
+            jobRunId: job.id,
+            type: job.type,
+            resourceType: job.resourceType ?? undefined,
+            resourceId: job.resourceId ?? undefined,
+            stage: job.currentStage ?? undefined,
+            status: "stale",
+          },
+        });
+        job.status = "stale";
+      }
+      jobSnapshot = {
+        jobRunId: job.id,
+        status: job.status,
+        currentStage: job.currentStage,
+        progressPercent: job.progressPercent,
+        summary: job.summary,
+        error: job.error,
+        updatedAt: job.updatedAt.toISOString(),
+      };
+    }
+  }
+
   const repositoryFullName =
     promotion.productionReadinessReview?.project?.repositoryFullName ??
     promotion.project.repositoryFullName;
@@ -769,12 +817,16 @@ export async function refreshProductionPromotion(
     status = "failed";
   }
 
+  const mergedMetadata = jobSnapshot
+    ? { ...metadata, job: jobSnapshot }
+    : metadata;
   const updated = await prisma.productionPromotion.update({
     where: { id: promotion.id },
     data: {
       status,
       mergeCommitSha: verification.mergeCommitSha ?? promotion.mergeCommitSha,
       verificationSummary: jsonField(verification),
+      metadata: jsonField(mergedMetadata),
       error: verification.ok ? null : promotion.error,
       completedAt: status === "completed" ? new Date() : promotion.completedAt,
       failedAt: status === "failed" ? new Date() : promotion.failedAt,

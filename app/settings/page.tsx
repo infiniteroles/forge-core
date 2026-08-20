@@ -22,6 +22,7 @@ import {
   getProductionReadinessPolicy,
   PRODUCTION_READINESS_LABELS,
 } from "@/lib/production-readiness/policy";
+import { getJobPolicy } from "@/lib/jobs/policy";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
 export const dynamic = "force-dynamic";
@@ -245,6 +246,11 @@ export default async function SettingsPage() {
         ? PRODUCTION_READINESS_LABELS.approvalRequired
         : "No",
     },
+    { label: "Async Jobs", value: getJobPolicy().available ? "Available" : "Disabled" },
+    { label: "Promotion execution", value: "Async" },
+    { label: "Job polling", value: "Enabled" },
+    { label: "Background queue", value: "Inline runner" },
+    { label: "Recovery", value: "Manual" },
     { label: "Telegram bot", value: "Not configured" },
   ];
 

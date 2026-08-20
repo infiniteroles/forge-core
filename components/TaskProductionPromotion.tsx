@@ -13,8 +13,27 @@ export interface TaskPromotionData {
   error: string | null;
   reviewId: string | null;
   workSessionId: string | null;
+  jobRunId: string | null;
+  jobStatus: string | null;
+  jobStage: string | null;
+  jobProgress: number | null;
   readinessApproved: boolean;
 }
+
+const JOB_STAGE_SHORT: Record<string, string> = {
+  preflight: "preflight",
+  merge: "merge",
+  deploy_wait: "deploy_wait",
+  verify: "verify",
+  complete: "complete",
+};
+
+const PROMOTION_JOB_ACTIVE = [
+  "promoting",
+  "merged",
+  "deploying",
+  "verifying",
+];
 
 const LABELS: Record<string, string> = {
   ready_to_promote: "ready",
@@ -58,6 +77,12 @@ export function TaskProductionPromotion({
   const canPrepare =
     Boolean(data?.reviewId) && Boolean(data?.readinessApproved) &&
     (status === null || status === "draft" || status === "preflight_failed" || status === "failed");
+  const jobActive =
+    status !== null && PROMOTION_JOB_ACTIVE.includes(status);
+  const jobLine =
+    jobActive && data?.jobStatus
+      ? `Job: ${JOB_STAGE_SHORT[data.jobStage ?? ""] ?? data.jobStage ?? "?"}${typeof data.jobProgress === "number" ? ` · ${data.jobProgress}%` : ""}`
+      : null;
 
   async function prepare() {
     if (loading || !data?.reviewId) return;
@@ -97,6 +122,14 @@ export function TaskProductionPromotion({
       >
         Promotion: {label}
       </span>
+      {jobLine ? (
+        <span
+          className="rounded bg-neutral-700/40 px-1.5 py-0.5 font-mono text-[11px] text-neutral-300"
+          title={`Job ${data?.jobRunId ?? ""} — estado ${data?.jobStatus ?? ""}`}
+        >
+          {jobLine}
+        </span>
+      ) : null}
       {canPrepare ? (
         <button
           type="button"

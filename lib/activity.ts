@@ -101,6 +101,16 @@ export const ACTIVITY_TYPES = [
   "promotion.failed",
   "promotion.refreshed",
   "promotion.cancelled",
+  "job.created",
+  "job.started",
+  "job.stage_started",
+  "job.stage_completed",
+  "job.completed",
+  "job.failed",
+  "job.stale",
+  "job.recovered",
+  "job.recovery_started",
+  "job.recovery_completed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

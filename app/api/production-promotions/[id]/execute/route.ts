@@ -1,16 +1,21 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { executeProductionPromotion } from "@/lib/production-promotion/service";
+import { enqueueProductionPromotionExecution } from "@/lib/production-promotion/job";
 
 export const runtime = "nodejs";
 
 /**
  * POST /api/production-promotions/[id]/execute
  *
- * Executes a promotion. Requires body `{ confirm: "PROMOTE" }`.
- * Re-runs the preflight, merges the PR into main via GitHub, waits for the
- * production deploy and verifies /api/health + expected endpoint.
- * There is NO automatic rollback.
+ * Fase 4.0 — async execution. Requires body `{ confirm: "PROMOTE" }`.
+ * Validates the session + confirmation, runs a quick readiness gate, creates
+ * a JobRun (type=production_promotion), links it to the promotion, marks the
+ * promotion "promoting" and starts the background pipeline (preflight -> merge
+ * -> deploy_wait -> verify -> complete).
+ *
+ * Returns IMMEDIATELY with:
+ *   { "ok": true, "promotionId": "...", "jobRunId": "...", "status": "queued" }
+ * It does NOT wait for the merge/deploy/verify inside the HTTP request.
  */
 export async function POST(
   _req: Request,
@@ -34,12 +39,12 @@ export async function POST(
   }
 
   try {
-    const promotion = await executeProductionPromotion({
+    const enqueued = await enqueueProductionPromotionExecution({
       promotionId: id,
       humanEmail,
       confirm,
     });
-    return NextResponse.json({ promotion });
+    return NextResponse.json(enqueued);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Error ejecutando la promoción";

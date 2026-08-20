@@ -316,6 +316,7 @@ model ProductionPromotion {
   baseBranch                  String?
   mergeCommitSha              String?
   mergeMethod                 String?
+  jobRunId                    String?  @unique
   preflightSummary            Json?
   deploymentSummary           Json?
   verificationSummary         Json?
@@ -333,4 +334,38 @@ model ProductionPromotion {
   workSession                 WorkSession?               @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
   productionReadinessReview   ProductionReadinessReview? @relation(fields: [productionReadinessReviewId], references: [id], onDelete: SetNull)
   previewDeployment           PreviewDeployment?         @relation(fields: [previewDeploymentId], references: [id], onDelete: SetNull)
+  jobRun                      JobRun?                    @relation(fields: [jobRunId], references: [id], onDelete: SetNull)
+}
+
+model JobRun {
+  id            String   @id @default(cuid())
+  type          String
+  status        String   @default("queued")
+  resourceType  String?
+  resourceId    String?
+  projectId     String?
+  taskId        String?
+  workSessionId String?
+
+  currentStage    String?
+  progressPercent Int?
+  summary         String?
+  error           String?
+
+  input    Json?
+  result   Json?
+  metadata Json?
+
+  lockedAt        DateTime?
+  lockedBy        String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  failedAt        DateTime?
+  cancelledAt     DateTime?
+  lastHeartbeatAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productionPromotion ProductionPromotion?
 }

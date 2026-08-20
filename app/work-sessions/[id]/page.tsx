@@ -15,6 +15,7 @@ import {
   ProductionPromotionPanel,
   type ProductionPromotionData,
 } from "@/components/ProductionPromotionPanel";
+import type { JobRunPublicData } from "@/lib/jobs/types";
 
 export const dynamic = "force-dynamic";
 
@@ -213,6 +214,57 @@ function productionPromotionData(promotion: {
   };
 }
 
+function jobRunData(job: {
+  id: string;
+  type: string;
+  status: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  projectId: string | null;
+  taskId: string | null;
+  workSessionId: string | null;
+  currentStage: string | null;
+  progressPercent: number | null;
+  summary: string | null;
+  error: string | null;
+  result: unknown;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  failedAt: Date | null;
+  cancelledAt: Date | null;
+  lastHeartbeatAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): JobRunPublicData {
+  return {
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    resourceType: job.resourceType,
+    resourceId: job.resourceId,
+    projectId: job.projectId,
+    taskId: job.taskId,
+    workSessionId: job.workSessionId,
+    currentStage: job.currentStage,
+    progressPercent: job.progressPercent,
+    summary: job.summary,
+    error: job.error,
+    result:
+      job.result && typeof job.result === "object"
+        ? (job.result as Record<string, unknown>)
+        : null,
+    startedAt: job.startedAt ? job.startedAt.toISOString() : null,
+    finishedAt: job.finishedAt ? job.finishedAt.toISOString() : null,
+    failedAt: job.failedAt ? job.failedAt.toISOString() : null,
+    cancelledAt: job.cancelledAt ? job.cancelledAt.toISOString() : null,
+    lastHeartbeatAt: job.lastHeartbeatAt
+      ? job.lastHeartbeatAt.toISOString()
+      : null,
+    createdAt: job.createdAt.toISOString(),
+    updatedAt: job.updatedAt.toISOString(),
+  };
+}
+
 export default async function WorkSessionPage({ params }: Props) {
   if (!(await getSession())) redirect("/login");
 
@@ -227,7 +279,10 @@ export default async function WorkSessionPage({ params }: Props) {
       sessionChecks: { orderBy: { createdAt: "asc" } },
       previewDeployments: { orderBy: { createdAt: "desc" } },
       productionReadinessReviews: { orderBy: { createdAt: "desc" } },
-      productionPromotions: { orderBy: { createdAt: "desc" } },
+      productionPromotions: {
+        orderBy: { createdAt: "desc" },
+        include: { jobRun: true },
+      },
       parentWorkSession: { select: { id: true, status: true, mode: true, iterationNumber: true, objective: true } },
       childrenWorkSessions: {
         orderBy: { createdAt: "desc" },
@@ -340,6 +395,11 @@ export default async function WorkSessionPage({ params }: Props) {
           promotion={
             session.productionPromotions[0]
               ? productionPromotionData(session.productionPromotions[0])
+              : null
+          }
+          job={
+            session.productionPromotions[0]?.jobRun
+              ? jobRunData(session.productionPromotions[0].jobRun)
               : null
           }
         />
