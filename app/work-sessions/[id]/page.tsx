@@ -7,6 +7,10 @@ import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { IterationActions } from "@/components/IterationActions";
 import { RunSessionChecksButton } from "@/components/RunSessionChecksButton";
 import { DevPreviewPanel, type DevPreviewData } from "@/components/DevPreviewPanel";
+import {
+  ProductionReadinessPanel,
+  type ProductionReadinessData,
+} from "@/components/ProductionReadinessPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +48,39 @@ function previewEnvFromMetadata(metadata: unknown): DevPreviewData["env"] {
   };
 }
 
+function blockingReasonsFrom(review: {
+  blockingReasons: unknown;
+}): string[] {
+  if (!Array.isArray(review.blockingReasons)) return [];
+  return review.blockingReasons.filter((r): r is string => typeof r === "string");
+}
+
+function productionReadinessData(review: {
+  id: string;
+  status: string;
+  recommendation: string | null;
+  riskLevel: string | null;
+  summary: string | null;
+  blockingReasons: unknown;
+  humanNotes: string | null;
+  approvedBy: string | null;
+  approvedAt: Date | null;
+  rejectedAt: Date | null;
+}): ProductionReadinessData {
+  return {
+    id: review.id,
+    status: review.status,
+    recommendation: review.recommendation,
+    riskLevel: review.riskLevel,
+    summary: review.summary,
+    blockingReasons: blockingReasonsFrom(review),
+    humanNotes: review.humanNotes,
+    approvedBy: review.approvedBy,
+    approvedAt: review.approvedAt ? review.approvedAt.toISOString() : null,
+    rejectedAt: review.rejectedAt ? review.rejectedAt.toISOString() : null,
+  };
+}
+
 export default async function WorkSessionPage({ params }: Props) {
   if (!(await getSession())) redirect("/login");
 
@@ -57,6 +94,7 @@ export default async function WorkSessionPage({ params }: Props) {
       agentRuns: { orderBy: { createdAt: "desc" } },
       sessionChecks: { orderBy: { createdAt: "asc" } },
       previewDeployments: { orderBy: { createdAt: "desc" } },
+      productionReadinessReviews: { orderBy: { createdAt: "desc" } },
       parentWorkSession: { select: { id: true, status: true, mode: true, iterationNumber: true, objective: true } },
       childrenWorkSessions: {
         orderBy: { createdAt: "desc" },
@@ -145,6 +183,15 @@ export default async function WorkSessionPage({ params }: Props) {
                   error: session.previewDeployments[0].error,
                   env: previewEnvFromMetadata(session.previewDeployments[0].metadata),
                 }
+              : null
+          }
+        />
+
+        <ProductionReadinessPanel
+          workSessionId={session.id}
+          review={
+            session.productionReadinessReviews[0]
+              ? productionReadinessData(session.productionReadinessReviews[0])
               : null
           }
         />

@@ -80,6 +80,14 @@ export const ACTIVITY_TYPES = [
   "preview.env_configured",
   "preview.env_skipped",
   "preview.env_failed",
+  "production.prepare_requested",
+  "production.review_created",
+  "production.ready",
+  "production.needs_changes",
+  "production.blocked",
+  "production.approved",
+  "production.rejected",
+  "production.refreshed",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

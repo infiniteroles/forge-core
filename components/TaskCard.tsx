@@ -19,6 +19,10 @@ import { PrReviewGateActions } from "./PrReviewGateActions";
 import { WorkSessionButton } from "./WorkSessionButton";
 import { IterationActions } from "./IterationActions";
 import { TaskDevPreview } from "./TaskDevPreview";
+import {
+  TaskProductionReadiness,
+  type TaskProductionReadinessData,
+} from "./TaskProductionReadiness";
 
 type TaskProps = {
   id: string;
@@ -70,11 +74,13 @@ export function TaskCard({
   repositoryLinked,
   builderProposal,
   workSession,
+  production,
 }: {
   task: TaskProps;
   repositoryLinked?: boolean;
   builderProposal?: BuilderProposalSummary | null;
   workSession?: LatestWorkSessionSummary | null;
+  production?: TaskProductionReadinessData | null;
 }) {
   const tone =
     TASK_STATUS_TONES[task.status] ?? "bg-neutral-700/40 text-neutral-300";
@@ -151,6 +157,7 @@ export function TaskCard({
             status={workSession.result?.previewStatus ?? null}
             previewUrl={workSession.result?.previewUrl ?? null}
           />
+          <TaskProductionReadiness data={production ?? null} />
         </div>
       ) : null}
 

@@ -18,6 +18,10 @@ import {
   isPreviewEnvKeyForbidden,
   PREVIEW_ENV_DEFAULT_ALLOWED_KEYS,
 } from "@/lib/coolify/preview-env-policy";
+import {
+  getProductionReadinessPolicy,
+  PRODUCTION_READINESS_LABELS,
+} from "@/lib/production-readiness/policy";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +46,7 @@ export default async function SettingsPage() {
   const coolifyCfg = getCoolifyConfig();
   const coolifyConfigured = isCoolifyConfigured();
   const previewEnv = getPreviewEnvConfig();
+  const productionPolicy = getProductionReadinessPolicy();
 
   const previewEnvAvailability = PREVIEW_ENV_DEFAULT_ALLOWED_KEYS.map((key) => {
     if (key === "APP_URL" || key === "NEXT_PUBLIC_APP_URL") {
@@ -215,6 +220,30 @@ export default async function SettingsPage() {
     {
       label: "Default preview provider",
       value: previewMode === "manual" ? "manual" : "coolify",
+    },
+    {
+      label: "Production Readiness Gate",
+      value: productionPolicy.gateAvailable
+        ? PRODUCTION_READINESS_LABELS.gateAvailable
+        : "Not configured",
+    },
+    {
+      label: "Merge automation",
+      value: productionPolicy.mergeAutomationEnabled
+        ? "Enabled"
+        : PRODUCTION_READINESS_LABELS.mergeAutomationEnabled,
+    },
+    {
+      label: "Production deploy automation",
+      value: productionPolicy.deployAutomationEnabled
+        ? "Enabled"
+        : PRODUCTION_READINESS_LABELS.deployAutomationEnabled,
+    },
+    {
+      label: "Approval required",
+      value: productionPolicy.approvalRequired
+        ? PRODUCTION_READINESS_LABELS.approvalRequired
+        : "No",
     },
     { label: "Telegram bot", value: "Not configured" },
   ];

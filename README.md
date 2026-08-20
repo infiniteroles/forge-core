@@ -22,6 +22,7 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 - **Iteration Loop (Continue / Ask for changes)**: iterate on an existing task reusing the same branch and PR — a new Builder Proposal, a new commit on the same branch, a fresh PR analysis and an updated human summary.
 - **Session Checks Lite**: a lightweight internal validation stage that runs a closed allowlist of commands (`npm run lint`, `npm run build`, `npx prisma validate`) after a Builder Commit and shows a short, human summary. Never a full CI pipeline.
 - **DEV Preview from Work Session**: prepare a navigable preview URL for a task branch/PR without merging or touching `main`/production. Three modes (`disabled`/`manual`/`coolify_api`); default `disabled`.
+- **Human Approval: Prepare Production**: the first formal human-approval gate before production. Forge prepares a `ProductionReadinessReview` (recommendation, risk, preview, checks, changed files) and a human can Approve/Reject — **never merges, never deploys, never touches `main`**.
 - Read-only `/settings` page describing the deployment and integration status.
 - Healthcheck endpoint at `/api/health`.
 
@@ -153,6 +154,10 @@ On Coolify:
 - `POST /api/work-sessions/[id]/preview/prepare` — prepare a DEV preview for a work session (disabled → `not_configured`, manual → pending, coolify_api → create/reuse + deploy).
 - `POST /api/preview-deployments/[id]/refresh` — refresh a preview deployment status (coolify API or manual).
 - `POST /api/work-sessions/[id]/preview/manual` — register a manual preview URL (`{ "previewUrl": "https://..." }`).
+- `POST /api/work-sessions/[id]/production/prepare` — prepare a `ProductionReadinessReview` for a work session (no merge/deploy).
+- `POST /api/production-readiness/[id]/approve` — human approval (`{ "notes"?: "..." }`); only when recommendation is `ready_for_production`.
+- `POST /api/production-readiness/[id]/reject` — human rejection (`{ "notes": "..." }` required).
+- `POST /api/production-readiness/[id]/refresh` — re-evaluate and preserve human decisions.
 - `GET /api/settings/coolify/diagnostics` — Coolify/preview runner diagnostics (never returns the token).
 - `POST /api/instructions` — create an instruction.
 
@@ -1106,6 +1111,75 @@ token. When `COOLIFY_API_TOKEN` is missing it returns
   working.
 - No preview auto-trigger at the end of a session, no cleanup/stop, no
   multi-environment management, no background queues.
+
+## Human Approval: Prepare Production
+
+Adds the first formal **human-approval gate before production**. Forge PREPARES
+a readiness summary for a work session / task / PR, and a human can approve or
+reject it. **Approve readiness no hace merge ni deploy**: the gate never merges
+the PR, never deploys to production and never touches `main`.
+
+### What it does
+
+1. **Prepare production** (`POST /api/work-sessions/[id]/production/prepare`):
+   loads the session + task + PR metadata + last PR review + session checks +
+   DEV preview + changed files (safe-file policy), runs the evaluator and
+   persists a `ProductionReadinessReview`.
+2. **Approve** (`POST /api/production-readiness/[id]/approve`): only when the
+   recommendation is `ready_for_production`. Records `approvedBy`/`approvedAt`.
+3. **Reject** (`POST /api/production-readiness/[id]/reject`): requires a
+   `notes` reason. Records `rejectedAt` + `humanNotes`.
+4. **Refresh** (`POST /api/production-readiness/[id]/refresh`): re-evaluates and
+   preserves human decisions. If the review was approved and a critical blocker
+   appears, it falls back to `needs_changes`.
+
+### Model
+
+`ProductionReadinessReview` (`prisma/migrations/20260825000000_add_production_readiness_reviews`):
+`projectId`, `taskId?`, `workSessionId?`, `previewDeploymentId?`, `status`
+(`draft|ready|blocked|needs_changes|approved|rejected|cancelled`),
+`recommendation` (`ready_for_production|needs_changes|blocked|manual_review_required`),
+`riskLevel` (`low|medium|high|critical|unknown`), `summary`, `blockingReasons`,
+`checksSummary`, `previewSummary`, `prSummary`, `filesSummary`, `humanNotes`,
+`approvedBy`, `approvedAt`, `rejectedAt`.
+
+### Readiness rules (`lib/production-readiness/evaluator.ts`)
+
+- **PR**: must be open, target `main`, branch ≠ `main`, and have a Builder commit.
+- **PR review**: `needs_changes` → `needs_changes`; `keep_draft` →
+  `manual_review_required`; risk `high/critical` → `blocked`. The evaluator
+  NEVER forces `ready_for_production` over a `needs_changes`/`keep_draft`.
+- **Session checks**: passed = positive, skipped = warning, failed =
+  `needs_changes`, timeout = `manual_review_required`.
+- **DEV preview**: ready = positive, deploying = `manual_review_required`,
+  failed = `blocked`, not_configured/none = `needs_changes`.
+- **Safe-file policy**: blocked paths / secrets → `blocked`.
+
+### Policy (always conservative)
+
+- Production Readiness Gate: **Available**.
+- Merge automation: **Disabled**.
+- Production deploy automation: **Disabled**.
+- Approval required: **Yes** (only a human can approve).
+
+### UI
+
+- `/work-sessions/[id]`: **Production readiness** panel (status, recommendation,
+  risk, summary, blocking reasons, Approve/Reject/Refresh + "This does not merge
+  or deploy").
+- Task card: compact `Production: …` chip + `Prepare` / `View`.
+- Project: counters `Production ready: X · Approved: Y · Blocked: Z`.
+- `/settings`: `Production Readiness Gate`, `Merge automation`, `Production
+  deploy automation`, `Approval required`.
+
+### ActivityLog events
+
+`production.prepare_requested`, `production.review_created`, `production.ready`,
+`production.needs_changes`, `production.blocked`, `production.approved`,
+`production.rejected`, `production.refreshed` — safe metadata only (review id,
+session/task id, recommendation, risk level, preview status, PR number).
+
+
 
 ### Next steps
 

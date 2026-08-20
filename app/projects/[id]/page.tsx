@@ -13,6 +13,7 @@ import { TaskCard } from "@/components/TaskCard";
 import { RepositoryPanel } from "@/components/RepositoryPanel";
 import { IdeaForm } from "@/components/IdeaForm";
 import type { LatestWorkSessionSummary } from "@/components/TaskCard";
+import type { TaskProductionReadinessData } from "@/components/TaskProductionReadiness";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import type { BuilderProposalSummary } from "@/components/BuilderProposalActions";
 
@@ -36,6 +37,16 @@ export default async function ProjectDetailPage({ params }: Props) {
       },
       activityLogs: { orderBy: { createdAt: "desc" }, take: 50 },
       previewDeployments: { select: { id: true, status: true, previewUrl: true } },
+      productionReadinessReviews: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          taskId: true,
+          workSessionId: true,
+          status: true,
+          recommendation: true,
+        },
+      },
       tasks: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         include: {
@@ -128,6 +139,28 @@ export default async function ProjectDetailPage({ params }: Props) {
   const devPreviewCount = project.previewDeployments.length;
   const readyPreviewCount = project.previewDeployments.filter(
     (p) => p.status === "ready"
+  ).length;
+
+  // Production readiness: latest review per task.
+  const productionByTask = new Map<string, TaskProductionReadinessData>();
+  for (const review of project.productionReadinessReviews) {
+    if (!review.taskId) continue;
+    if (productionByTask.has(review.taskId)) continue;
+    productionByTask.set(review.taskId, {
+      reviewId: review.id,
+      status: review.status,
+      recommendation: review.recommendation,
+      workSessionId: review.workSessionId,
+    });
+  }
+  const productionReadyCount = project.productionReadinessReviews.filter(
+    (r) => r.status === "ready"
+  ).length;
+  const productionApprovedCount = project.productionReadinessReviews.filter(
+    (r) => r.status === "approved"
+  ).length;
+  const productionBlockedCount = project.productionReadinessReviews.filter(
+    (r) => r.status === "blocked" || r.status === "needs_changes"
   ).length;
 
   function builderSummary(
@@ -415,6 +448,9 @@ export default async function ProjectDetailPage({ params }: Props) {
               </p>              <p className="mt-1 text-xs text-text-dim">
                 DEV previews: {devPreviewCount} · Ready previews:{" "}
                 {readyPreviewCount}
+              </p>              <p className="mt-1 text-xs text-text-dim">
+                Production ready: {productionReadyCount} · Approved:{" "}
+                {productionApprovedCount} · Blocked: {productionBlockedCount}
               </p>              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {project.tasks.map((task) => (
                   <TaskCard
@@ -423,6 +459,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                     repositoryLinked={project.repositoryFullName != null}
                     builderProposal={builderSummary(task.agentRuns[0])}
                     workSession={latestWorkSessionByTask.get(task.id) ?? null}
+                    production={productionByTask.get(task.id) ?? null}
                   />
                 ))}
               </div>

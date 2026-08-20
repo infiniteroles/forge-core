@@ -52,6 +52,7 @@ model Project {
   workSessions         WorkSession[]
   sessionChecks        SessionCheck[]
   previewDeployments   PreviewDeployment[]
+  productionReadinessReviews ProductionReadinessReview[]
 }
 
 model WorkSession {
@@ -79,6 +80,7 @@ model WorkSession {
   agentRuns            AgentRun[]
   sessionChecks        SessionCheck[]
   previewDeployments   PreviewDeployment[]
+  productionReadinessReviews ProductionReadinessReview[]
 }
 
 model Instruction {
@@ -206,6 +208,7 @@ model Task {
   workSessions     WorkSession[]
   sessionChecks    SessionCheck[]
   previewDeployments PreviewDeployment[]
+  productionReadinessReviews ProductionReadinessReview[]
 }
 
 model PreviewDeployment {
@@ -238,6 +241,7 @@ model PreviewDeployment {
   project                Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task                   Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
   workSession            WorkSession?  @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  productionReadinessReviews ProductionReadinessReview[]
 }
 
 model SessionCheck {
@@ -260,4 +264,31 @@ model SessionCheck {
   workSession   WorkSession @relation(fields: [workSessionId], references: [id], onDelete: Cascade)
   project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task          Task?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+}
+
+model ProductionReadinessReview {
+  id                  String    @id @default(cuid())
+  projectId           String
+  taskId              String?
+  workSessionId       String?
+  previewDeploymentId String?
+  status              String    @default("draft")
+  recommendation      String?
+  riskLevel           String?
+  summary             String?
+  blockingReasons     Json?
+  checksSummary       Json?
+  previewSummary      Json?
+  prSummary           Json?
+  filesSummary        Json?
+  humanNotes          String?
+  approvedBy          String?
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task                Task?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  workSession         WorkSession?       @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  previewDeployment   PreviewDeployment? @relation(fields: [previewDeploymentId], references: [id], onDelete: SetNull)
 }
