@@ -607,7 +607,10 @@ async function runDeployWaitStage(
   const { live, deploymentSummary } = await waitForProductionDeploy(expectedEndpoint);
   // Persist the deploy outcome (including `live` and the mode) so recovery can
   // resume and the complete stage can decide without re-running the wait.
-  const prevDeployment = jobField(promotion.deploymentSummary) ?? {};
+  // NOTE: re-load the promotion so `deploymentSummary` reflects what the
+  // trigger_deploy stage persisted (the in-memory `promotion` object is stale).
+  const fresh = await loadPromotion(promotion.id);
+  const prevDeployment = fresh ? jobField(fresh.deploymentSummary) ?? {} : {};
   await updateSummary(promotion.id, {
     status: "verifying",
     deploymentSummary: {
@@ -659,8 +662,13 @@ async function runCompleteStage(
   promotion: NonNullable<Awaited<ReturnType<typeof loadPromotion>>>,
   job: JobRunRow
 ): Promise<void> {
-  const deploymentSummary = jobField(promotion.deploymentSummary) ?? {};
-  const verification = jobField(promotion.verificationSummary) ?? {};
+  // Re-load the promotion so the decision uses the persisted deploy/verify
+  // outcomes (the in-memory `promotion` object is stale: later stages only
+  // write to the DB). Without this, a recovery run would wrongly fail even
+  // when the deploy is live and the verification passed.
+  const fresh = await loadPromotion(promotion.id);
+  const deploymentSummary = fresh ? jobField(fresh.deploymentSummary) ?? {} : {};
+  const verification = fresh ? jobField(fresh.verificationSummary) ?? {} : {};
   const live = deploymentSummary.live === true;
   const verifyOk = verification.ok === true;
 
