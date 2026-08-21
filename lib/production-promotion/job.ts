@@ -29,6 +29,13 @@ import { getProductionPromotionPolicy } from "./policy";
 import { runProductionPromotionPreflight } from "./preflight";
 import { buildProductionPromotionSummary } from "./summary";
 import {
+  getProductionDeployConfig,
+  isProductionDeployViaCoolify,
+  resolveProductionApplication,
+  triggerProductionDeployment,
+} from "@/lib/coolify/production";
+import { isCoolifyConfigured } from "@/lib/coolify/client";
+import {
   createJobRun,
   startJobRun,
   updateJobStage,
@@ -44,12 +51,20 @@ import { runJobInBackground } from "@/lib/jobs/runner";
 const STAGE_PROGRESS: Record<string, number> = {
   preflight: 10,
   merge: 35,
-  deploy_wait: 60,
-  verify: 85,
+  trigger_deploy: 50,
+  deploy_wait: 70,
+  verify: 90,
   complete: 100,
 };
 
-const STAGE_ORDER = ["preflight", "merge", "deploy_wait", "verify", "complete"];
+const STAGE_ORDER = [
+  "preflight",
+  "merge",
+  "trigger_deploy",
+  "deploy_wait",
+  "verify",
+  "complete",
+];
 
 function jobField(v: unknown): Record<string, unknown> | null {
   if (!v || typeof v !== "object") return null;
@@ -274,6 +289,8 @@ export async function runProductionPromotionJob(
         await runPreflightStage(promotion, job);
       } else if (stage === "merge") {
         await runMergeStage(promotion, job, repositoryFullName, policy.mergeMethod);
+      } else if (stage === "trigger_deploy") {
+        await runTriggerDeployStage(promotion, job);
       } else if (stage === "deploy_wait") {
         await runDeployWaitStage(promotion, job, expectedEndpoint);
       } else if (stage === "verify") {
@@ -440,6 +457,133 @@ async function runMergeStage(
   });
 }
 
+async function runTriggerDeployStage(
+  promotion: NonNullable<Awaited<ReturnType<typeof loadPromotion>>>,
+  job: JobRunRow
+): Promise<void> {
+  const policy = getProductionPromotionPolicy();
+  const mode = policy.deployMode;
+
+  // manual_wait: no Coolify call; deploy_wait will poll the endpoints.
+  if (mode !== "coolify_api" || !isCoolifyConfigured()) {
+    await updateSummary(promotion.id, {
+      status: "deploying",
+      deploymentSummary: { mode: "manual_wait", triggered: false },
+    });
+    return;
+  }
+
+  // coolify_api: resolve the app + trigger the deploy.
+  await logActivity({
+    projectId: promotion.projectId,
+    type: "promotion.deploy_trigger_started",
+    message: "Iniciando el disparo del despliegue de producción vía Coolify API...",
+    metadata: {
+      productionPromotionId: promotion.id,
+      jobRunId: job.id,
+      productionReadinessReviewId: promotion.productionReadinessReviewId ?? undefined,
+      workSessionId: promotion.workSessionId ?? undefined,
+      taskId: promotion.taskId ?? undefined,
+      prNumber: promotion.prNumber ?? undefined,
+      mode: "coolify_api",
+      status: "deploying",
+    },
+  });
+
+  let resolved;
+  try {
+    resolved = await resolveProductionApplication();
+  } catch (err) {
+    const error =
+      err instanceof Error ? err.message : "No se pudo resolver la app principal de producción.";
+    await logActivity({
+      projectId: promotion.projectId,
+      type: "promotion.deploy_trigger_failed",
+      message: `No se pudo resolver la app de producción: ${error}`,
+      metadata: {
+        productionPromotionId: promotion.id,
+        jobRunId: job.id,
+        productionReadinessReviewId: promotion.productionReadinessReviewId ?? undefined,
+        workSessionId: promotion.workSessionId ?? undefined,
+        taskId: promotion.taskId ?? undefined,
+        prNumber: promotion.prNumber ?? undefined,
+        mode: "coolify_api",
+        status: "failed",
+      },
+    });
+    await markPromotionFailed(promotion, "failed", error);
+    throw new Error(error);
+  }
+
+  await updateSummary(promotion.id, {
+    status: "deploying",
+    deploymentSummary: {
+      mode: "coolify_api",
+      applicationUuid: resolved.applicationUuid,
+      resolvedBy: resolved.method,
+      triggered: false,
+    },
+  });
+
+  let trigger;
+  try {
+    trigger = await triggerProductionDeployment();
+  } catch (err) {
+    const error =
+      err instanceof Error
+        ? err.message
+        : "El disparo del despliegue de producción vía Coolify falló.";
+    await logActivity({
+      projectId: promotion.projectId,
+      type: "promotion.deploy_trigger_failed",
+      message: `El disparo del deploy vía Coolify falló: ${error}`,
+      metadata: {
+        productionPromotionId: promotion.id,
+        jobRunId: job.id,
+        productionReadinessReviewId: promotion.productionReadinessReviewId ?? undefined,
+        workSessionId: promotion.workSessionId ?? undefined,
+        taskId: promotion.taskId ?? undefined,
+        prNumber: promotion.prNumber ?? undefined,
+        applicationUuid: resolved.applicationUuid,
+        mode: "coolify_api",
+        status: "failed",
+      },
+    });
+    await markPromotionFailed(promotion, "failed", error);
+    throw new Error(error);
+  }
+
+  await updateSummary(promotion.id, {
+    status: "deploying",
+    deploymentSummary: {
+      mode: "coolify_api",
+      applicationUuid: trigger.applicationUuid,
+      triggered: true,
+      deploymentUuid: trigger.deploymentUuid ?? undefined,
+      status: trigger.status ?? undefined,
+      triggeredAt: trigger.triggeredAt,
+    },
+  });
+
+  await logActivity({
+    projectId: promotion.projectId,
+    type: "promotion.deploy_triggered",
+    message: `Despliegue de producción lanzado vía Coolify API${trigger.deploymentUuid ? ` (deployment ${trigger.deploymentUuid.slice(0, 8)})` : ""}.`,
+    metadata: {
+      productionPromotionId: promotion.id,
+      jobRunId: job.id,
+      productionReadinessReviewId: promotion.productionReadinessReviewId ?? undefined,
+      workSessionId: promotion.workSessionId ?? undefined,
+      taskId: promotion.taskId ?? undefined,
+      prNumber: promotion.prNumber ?? undefined,
+      applicationUuid: trigger.applicationUuid,
+      deploymentUuid: trigger.deploymentUuid ?? undefined,
+      mode: "coolify_api",
+      status: "deploying",
+    },
+  });
+}
+
 async function runDeployWaitStage(
   promotion: NonNullable<Awaited<ReturnType<typeof loadPromotion>>>,
   job: JobRunRow,
@@ -461,11 +605,21 @@ async function runDeployWaitStage(
   });
 
   const { live, deploymentSummary } = await waitForProductionDeploy(expectedEndpoint);
-  // Persist the deploy outcome (including `live`) so recovery can resume and
-  // the complete stage can decide without re-running the wait.
+  // Persist the deploy outcome (including `live` and the mode) so recovery can
+  // resume and the complete stage can decide without re-running the wait.
+  const prevDeployment = jobField(promotion.deploymentSummary) ?? {};
   await updateSummary(promotion.id, {
     status: "verifying",
-    deploymentSummary: { ...deploymentSummary, live },
+    deploymentSummary: {
+      ...deploymentSummary,
+      live,
+      mode: prevDeployment.mode ?? "manual_wait",
+      triggered: prevDeployment.triggered === true,
+      deploymentUuid:
+        typeof prevDeployment.deploymentUuid === "string"
+          ? prevDeployment.deploymentUuid
+          : undefined,
+    },
   });
 }
 
@@ -532,6 +686,11 @@ async function runCompleteStage(
       endpointOk: verification.expectedEndpoint
         ? jobField(verification.expectedEndpoint)?.ok === true
         : undefined,
+      deployMode:
+        typeof deploymentSummary.mode === "string"
+          ? deploymentSummary.mode
+          : undefined,
+      deployTriggered: deploymentSummary.triggered === true,
     });
     await updateSummary(promotion.id, { status: "completed", summary });
     await completeJobRun(job.id, {
@@ -666,34 +825,67 @@ export async function recoverProductionPromotionJob(
 
   await markJobRecovered(jobRunId);
 
-  if (prMerged) {
+  // Already completed → nothing to recover (never re-merge, never re-trigger).
+  if (promotion.status === "completed") {
     await logActivity({
       projectId: promotion.projectId,
       type: "job.recovered",
-      message: `Recuperación del job de promoción (${jobRunId}): la PR #${promotion.prNumber} ya está mergeada; se reanuda desde la espera de despliegue sin repetir el merge.`,
+      message: `Recuperación del job de promoción (${jobRunId}): la promoción ya está completada; no se requiere ninguna acción.`,
       metadata: {
         jobRunId: job.id,
         type: job.type,
         resourceType: job.resourceType ?? undefined,
         resourceId: job.resourceId ?? undefined,
-        stage: "deploy_wait",
+        stage: "complete",
+        status: "recovered",
+        requestedBy: opts?.humanEmail ?? undefined,
+      },
+    });
+    return {
+      recovered: false,
+      jobRunId,
+      message: "La promoción ya está completada. No se requiere recuperación.",
+    };
+  }
+
+  if (prMerged) {
+    // Decide where to resume. If the deploy was not triggered yet in
+    // coolify_api mode, resume from trigger_deploy; otherwise from
+    // deploy_wait. NEVER repeat the merge.
+    const prevDeployment = jobField(promotion.deploymentSummary) ?? {};
+    const deployTriggered = prevDeployment.triggered === true;
+    const resumeStage =
+      prevDeployment.mode === "coolify_api" && !deployTriggered
+        ? "trigger_deploy"
+        : "deploy_wait";
+
+    await logActivity({
+      projectId: promotion.projectId,
+      type: "job.recovered",
+      message: `Recuperación del job de promoción (${jobRunId}): la PR #${promotion.prNumber} ya está mergeada; se reanuda desde ${resumeStage} sin repetir el merge.`,
+      metadata: {
+        jobRunId: job.id,
+        type: job.type,
+        resourceType: job.resourceType ?? undefined,
+        resourceId: job.resourceId ?? undefined,
+        stage: resumeStage,
         status: "recovered",
         requestedBy: opts?.humanEmail ?? undefined,
       },
     });
     runJobInBackground(job, ({ jobRunId: jid }) =>
-      runProductionPromotionJob(jid, { fromStage: "deploy_wait" })
+      runProductionPromotionJob(jid, { fromStage: resumeStage })
     );
     await logActivity({
       projectId: promotion.projectId,
       type: "job.recovery_completed",
-      message: `Job de promoción (${jobRunId}) reanudado desde deploy_wait (PR ya mergeada).`,
+      message: `Job de promoción (${jobRunId}) reanudado desde ${resumeStage} (PR ya mergeada).`,
       metadata: {
         jobRunId: job.id,
         type: job.type,
         resourceType: job.resourceType ?? undefined,
         resourceId: job.resourceId ?? undefined,
-        stage: "deploy_wait",
+        stage: resumeStage,
         status: "running",
       },
     });
@@ -701,7 +893,9 @@ export async function recoverProductionPromotionJob(
       recovered: true,
       jobRunId,
       message:
-        "La PR ya está mergeada. El job se ha reanudado desde la espera de despliegue (no se repite el merge).",
+        resumeStage === "trigger_deploy"
+          ? "La PR ya está mergeada y el deploy no se había lanzado. El job se ha reanudado para disparar el deploy (no se repite el merge)."
+          : "La PR ya está mergeada. El job se ha reanudado desde la espera de despliegue (no se repite el merge).",
     };
   }
 

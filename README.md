@@ -1527,6 +1527,77 @@ Regla central: **una vez la PR está merged, el recovery NO repite el merge.**
 - Mover el runner a una cola real (Redis/BullMQ) y workers distribuidos.
 - Telemetría/retry programado y cleanup de jobs.
 
+## Fase 4.2 — Production Deploy Trigger via Coolify API
+
+### Por qué existe
+
+Fase 4.1 detectó que **Coolify no auto-despliega `main` tras el merge de una
+PR** (la app Forge es de deploy manual). El job async mergeaba la PR pero el
+deploy de producción había que lanzarlo a mano, y el `deploy_wait` (180s) podía
+expirar dejando la promoción `failed` hasta un recovery manual.
+
+Fase 4.2 cierra ese hueco: tras el merge, el propio job lanza el deploy de la
+app principal vía la API de Coolify.
+
+### Variables de entorno
+
+```
+PRODUCTION_DEPLOY_MODE="manual_wait"          # manual_wait | coolify_api
+PRODUCTION_COOLIFY_APPLICATION_UUID=""        # UUID de la app de producción
+PRODUCTION_DEPLOY_TRIGGER_TIMEOUT_MS="30000"  # timeout del trigger
+PRODUCTION_DEPLOY_WAIT_MS="180000"            # ventana de espera
+PRODUCTION_DEPLOY_POLL_INTERVAL_MS="10000"    # polling
+```
+
+- `manual_wait` (por defecto): NO llama a Coolify; espera/pollea los endpoints.
+  El deploy lo lanza un humano. Comportamiento de Fase 4.1.
+- `coolify_api`: el job resuelve la app principal y llama
+  `POST /api/v1/applications/{uuid}/start` (action_deploy) tras el merge.
+
+### Cómo descubrir / configurar la app UUID
+
+1. Si `PRODUCTION_COOLIFY_APPLICATION_UUID` está seteado, se usa directamente.
+2. Si no, Forge lista las apps de Coolify y la descubre por dominio
+   (`PRODUCTION_BASE_URL` → coincide con el campo `domains` de la app).
+3. Si no se puede resolver, error claro y la promoción queda `failed` recuperable
+   (sin tocar nada).
+
+### Flujo del job
+
+```
+preflight(10) → merge(35) → trigger_deploy(50) → deploy_wait(70) → verify(90) → complete(100)
+```
+
+- `trigger_deploy` en modo `coolify_api`: resuelve app → trigger → guarda
+  `deploymentSummary` con `{ mode, applicationUuid, triggered, deploymentUuid,
+  triggeredAt, status }` → `promotion.deploy_triggered`.
+- `deploy_wait`: espera a que `/api/health` + endpoint esperado respondan.
+- `complete`: `completed` | `failed` (sin rollback).
+
+### Recovery
+
+- PR ya mergeada + deploy no lanzado (modo `coolify_api`) → reanuda desde
+  `trigger_deploy` (nunca re-mergea).
+- PR ya mergeada + deploy lanzado → reanuda desde `deploy_wait` / `verify`.
+- Promoción ya `completed` → recovery no hace nada peligroso.
+- Endpoint ya responde → `completed`.
+
+### Guardrails
+
+- No merge sin readiness approved · No execute sin `PROMOTE` · No repetir merge ·
+  No deploy fuera del flujo · No rollback automático · No se imprimen tokens ·
+  No se toca firewall/SSH/VPS · No se relaja safe-file-policy.
+
+### Troubleshooting
+
+- `401/403` → token Coolify incorrecto o allowlist de IPs de la API.
+- `missing application uuid` → configurar `PRODUCTION_COOLIFY_APPLICATION_UUID`
+  o revisar el dominio de la app en Coolify.
+- `trigger failed` → revisar el endpoint `POST /applications/{uuid}/start` y los
+  permisos del token.
+- `deploy timeout` → revisar los logs de Coolify del deployment lanzado.
+- `verification failed` → revisar la app principal (health/endpoint).
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.

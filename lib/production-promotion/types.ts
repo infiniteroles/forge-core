@@ -92,5 +92,7 @@ export interface ProductionPromotionSummaryData {
   mergeCommitSha?: string | null;
   healthOk?: boolean;
   endpointOk?: boolean;
+  deployMode?: string;
+  deployTriggered?: boolean;
   error?: string | null;
 }

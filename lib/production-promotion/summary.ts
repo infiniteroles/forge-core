@@ -27,6 +27,9 @@ export function buildProductionPromotionSummary(
     if (data.mergeCommitSha) {
       lines.push(`Merge commit: ${data.mergeCommitSha.slice(0, 12)}.`);
     }
+    if (data.deployTriggered && data.deployMode === "coolify_api") {
+      lines.push("Deploy principal lanzado vía Coolify API.");
+    }
     const statuses: string[] = [];
     if (data.healthOk !== undefined) {
       statuses.push(

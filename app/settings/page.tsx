@@ -23,6 +23,7 @@ import {
   PRODUCTION_READINESS_LABELS,
 } from "@/lib/production-readiness/policy";
 import { getJobPolicy } from "@/lib/jobs/policy";
+import { getProductionDeployConfig } from "@/lib/coolify/production";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,7 @@ export default async function SettingsPage() {
   const coolifyConfigured = isCoolifyConfigured();
   const previewEnv = getPreviewEnvConfig();
   const productionPolicy = getProductionReadinessPolicy();
+  const prodDeploy = getProductionDeployConfig();
 
   const previewEnvAvailability = PREVIEW_ENV_DEFAULT_ALLOWED_KEYS.map((key) => {
     if (key === "APP_URL" || key === "NEXT_PUBLIC_APP_URL") {
@@ -250,6 +252,14 @@ export default async function SettingsPage() {
     { label: "Promotion execution", value: "Async" },
     { label: "Job polling", value: "Enabled" },
     { label: "Background queue", value: "Inline runner" },
+    { label: "Production deploy mode", value: prodDeploy.mode },
+    {
+      label: "Production Coolify app UUID",
+      value: prodDeploy.applicationUuid ? "Set" : "Missing",
+    },
+    { label: "Production base URL", value: prodDeploy.productionBaseUrl },
+    { label: "Production deploy wait (ms)", value: String(prodDeploy.deployWaitMs) },
+    { label: "Production deploy poll (ms)", value: String(prodDeploy.deployPollIntervalMs) },
     { label: "Recovery", value: "Manual" },
     { label: "Telegram bot", value: "Not configured" },
   ];

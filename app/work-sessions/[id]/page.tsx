@@ -160,6 +160,7 @@ function productionPromotionData(promotion: {
   mergeCommitSha: string | null;
   mergeMethod: string | null;
   preflightSummary: unknown;
+  deploymentSummary: unknown;
   verificationSummary: unknown;
   requestedBy: string | null;
   requestedAt: Date | null;
@@ -169,6 +170,7 @@ function productionPromotionData(promotion: {
   createdAt: Date;
 }): ProductionPromotionData {
   const pre = promotion.preflightSummary as Record<string, unknown> | null;
+  const dep = promotion.deploymentSummary as Record<string, unknown> | null;
   const ver = promotion.verificationSummary as Record<string, unknown> | null;
   return {
     id: promotion.id,
@@ -190,6 +192,27 @@ function productionPromotionData(promotion: {
             ? (pre.blockingReasons as string[])
             : [],
           warnings: Array.isArray(pre.warnings) ? (pre.warnings as string[]) : [],
+        }
+      : null,
+    deploymentSummary: dep
+      ? {
+          mode: typeof dep.mode === "string" ? dep.mode : undefined,
+          applicationUuid:
+            typeof dep.applicationUuid === "string"
+              ? dep.applicationUuid
+              : undefined,
+          resolvedBy:
+            typeof dep.resolvedBy === "string" ? dep.resolvedBy : undefined,
+          triggered:
+            typeof dep.triggered === "boolean" ? dep.triggered : undefined,
+          deploymentUuid:
+            typeof dep.deploymentUuid === "string"
+              ? dep.deploymentUuid
+              : undefined,
+          status: typeof dep.status === "string" ? dep.status : undefined,
+          triggeredAt:
+            typeof dep.triggeredAt === "string" ? dep.triggeredAt : undefined,
+          live: typeof dep.live === "boolean" ? dep.live : undefined,
         }
       : null,
     verificationSummary: ver

@@ -33,6 +33,7 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 export const JOB_STAGES = [
   "preflight",
   "merge",
+  "trigger_deploy",
   "deploy_wait",
   "verify",
   "complete",
@@ -90,6 +91,7 @@ export const JOB_STAGE_LABELS: Record<string, string> = {
   queued: "Encolado",
   preflight: "Running preflight",
   merge: "Merging PR",
+  trigger_deploy: "Triggering production deploy",
   deploy_wait: "Waiting for deployment",
   verify: "Verifying production",
   complete: "Completed",

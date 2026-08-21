@@ -30,6 +30,16 @@ export interface ProductionPromotionData {
   mergeCommitSha: string | null;
   mergeMethod: string | null;
   preflightSummary: PromotionPreflightSummaryData | null;
+  deploymentSummary: {
+    mode?: string;
+    applicationUuid?: string;
+    resolvedBy?: string;
+    triggered?: boolean;
+    deploymentUuid?: string;
+    status?: string;
+    triggeredAt?: string;
+    live?: boolean;
+  } | null;
   verificationSummary: {
     ok: boolean;
     prMerged?: boolean;
@@ -374,6 +384,54 @@ export function ProductionPromotionPanel({
             </div>
           ) : null}
         </dl>
+      ) : null}
+
+      {promotion?.deploymentSummary ? (
+        <div className="mt-3 rounded-lg border border-border bg-background p-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            Deploy
+          </h3>
+          <dl className="mt-1 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Mode</dt>
+              <dd className="font-mono text-neutral-200">
+                {promotion.deploymentSummary.mode ?? "—"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Production app</dt>
+              <dd className={`font-mono ${promotion.deploymentSummary.applicationUuid ? "text-emerald-300" : "text-amber-300"}`}>
+                {promotion.deploymentSummary.applicationUuid
+                  ? promotion.deploymentSummary.resolvedBy === "discovered"
+                    ? "discovered"
+                    : "configured"
+                  : "missing"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Deploy trigger</dt>
+              <dd className={`font-mono ${promotion.deploymentSummary.triggered ? "text-emerald-300" : "text-amber-300"}`}>
+                {promotion.deploymentSummary.triggered ? "triggered" : "pending"}
+              </dd>
+            </div>
+            {promotion.deploymentSummary.deploymentUuid ? (
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-text-dim">Deployment UUID</dt>
+                <dd className="font-mono text-neutral-200">
+                  {promotion.deploymentSummary.deploymentUuid.slice(0, 12)}
+                </dd>
+              </div>
+            ) : null}
+            {promotion.deploymentSummary.status ? (
+              <div className="flex items-baseline justify-between gap-2">
+                <dt className="text-text-dim">Deploy status</dt>
+                <dd className="font-mono text-neutral-200">
+                  {promotion.deploymentSummary.status}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
       ) : null}
 
       {promotion?.summary ? (
