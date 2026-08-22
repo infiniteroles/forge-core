@@ -246,11 +246,13 @@ export async function enqueueProductionPromotionExecution(input: {
 }
 
 /**
- * Dispatches a promotion JobRun for execution.
+ * Dispatches a promotion JobRun for execution (Fase 4.3).
  *
- * With the detached worker the job stays `queued` and the worker loop claims
- * it. When this process IS the worker, nothing else is needed (the loop picks
- * it up). There is intentionally no inline dispatch from the web.
+ * With a detached worker the job stays `queued` and the worker loop claims it.
+ * The web enqueues and does NOT run inline when a worker is deployed (active
+ * heartbeat in WorkerState). While NO worker is deployed yet, the web falls
+ * back to the legacy inline runner so the promotion flow keeps working — once
+ * forge-worker is running, the web automatically stops running inline.
  */
 async function dispatchProductionPromotionJob(
   job: Pick<
@@ -263,8 +265,14 @@ async function dispatchProductionPromotionJob(
     // This process is the worker itself; its loop will claim the job.
     return;
   }
-  // Web: leave the job queued for the detached worker.
-  void job;
+  // Web: if a detached worker is active, leave the job queued for it.
+  if (await isWorkerActive()) {
+    return;
+  }
+  // No worker deployed: legacy inline fallback (keeps the flow working).
+  runJobInBackground(job, ({ jobRunId }) =>
+    runProductionPromotionJob(jobRunId)
+  );
 }
 
 /**
