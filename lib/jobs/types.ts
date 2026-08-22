@@ -78,6 +78,8 @@ export interface JobRunPublicData {
   summary: string | null;
   error: string | null;
   result: Record<string, unknown> | null;
+  lockedAt: string | null;
+  lockedBy: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   failedAt: string | null;

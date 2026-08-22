@@ -17,6 +17,9 @@ import {
 } from "@/components/ProductionPromotionPanel";
 import type { JobRunPublicData } from "@/lib/jobs/types";
 import { getProductionDeployConfig } from "@/lib/coolify/production";
+import { getJobPolicy } from "@/lib/jobs/policy";
+import { getJobWorkerConfig } from "@/lib/jobs/worker-policy";
+import { isWorkerActive } from "@/lib/jobs/service";
 
 export const dynamic = "force-dynamic";
 
@@ -266,6 +269,8 @@ function jobRunData(job: {
   failedAt: Date | null;
   cancelledAt: Date | null;
   lastHeartbeatAt: Date | null;
+  lockedAt: Date | null;
+  lockedBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): JobRunPublicData {
@@ -293,6 +298,8 @@ function jobRunData(job: {
     lastHeartbeatAt: job.lastHeartbeatAt
       ? job.lastHeartbeatAt.toISOString()
       : null,
+    lockedAt: job.lockedAt ? job.lockedAt.toISOString() : null,
+    lockedBy: job.lockedBy,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
   };
@@ -302,6 +309,19 @@ export default async function WorkSessionPage({ params }: Props) {
   if (!(await getSession())) redirect("/login");
 
   const { id } = await params;
+
+  // Fase 4.3 — detached worker signal for the promotion panel.
+  const [workerActive, workerCfg, jobPolicy] = await Promise.all([
+    isWorkerActive(),
+    Promise.resolve(getJobWorkerConfig()),
+    Promise.resolve(getJobPolicy()),
+  ]);
+  const runnerMode: "detached" | "inline" | "unknown" = workerActive
+    ? "detached"
+    : jobPolicy.runner === "inline"
+      ? "inline"
+      : "unknown";
+  const workerExpected = workerActive || workerCfg.enabled;
 
   const session = await prisma.workSession.findUnique({
     where: { id },
@@ -435,6 +455,8 @@ export default async function WorkSessionPage({ params }: Props) {
               ? jobRunData(session.productionPromotions[0].jobRun)
               : null
           }
+          runnerMode={runnerMode}
+          workerExpected={workerExpected}
         />
 
         {session.requestedChanges || session.iterationNumber > 1 ? (

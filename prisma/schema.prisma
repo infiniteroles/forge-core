@@ -369,3 +369,11 @@ model JobRun {
 
   productionPromotion ProductionPromotion?
 }
+
+model WorkerState {
+  id          String   @id @default("forge-worker")
+  workerId    String?
+  enabled     Boolean  @default(true)
+  heartbeatAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

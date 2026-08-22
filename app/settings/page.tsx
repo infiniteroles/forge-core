@@ -23,6 +23,8 @@ import {
   PRODUCTION_READINESS_LABELS,
 } from "@/lib/production-readiness/policy";
 import { getJobPolicy } from "@/lib/jobs/policy";
+import { getJobWorkerConfig } from "@/lib/jobs/worker-policy";
+import { isWorkerActive } from "@/lib/jobs/service";
 import { getProductionDeployConfig } from "@/lib/coolify/production";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
@@ -50,6 +52,8 @@ export default async function SettingsPage() {
   const previewEnv = getPreviewEnvConfig();
   const productionPolicy = getProductionReadinessPolicy();
   const prodDeploy = getProductionDeployConfig();
+const workerCfg = getJobWorkerConfig();
+const workerActive = await isWorkerActive();
 
   const previewEnvAvailability = PREVIEW_ENV_DEFAULT_ALLOWED_KEYS.map((key) => {
     if (key === "APP_URL" || key === "NEXT_PUBLIC_APP_URL") {
@@ -251,7 +255,35 @@ export default async function SettingsPage() {
     { label: "Async Jobs", value: getJobPolicy().available ? "Available" : "Disabled" },
     { label: "Promotion execution", value: "Async" },
     { label: "Job polling", value: "Enabled" },
-    { label: "Background queue", value: "Inline runner" },
+    {
+      label: "Background queue",
+      value: workerCfg.enabled ? "Detached worker" : "Web enqueues (worker)",
+    },
+    {
+      label: "Worker mode",
+      value: workerActive ? "Detached" : "Inline fallback",
+    },
+    { label: "Worker enabled", value: workerCfg.enabled ? "true" : "false" },
+    {
+      label: "Worker poll interval",
+      value: `${workerCfg.pollIntervalMs}ms`,
+    },
+    {
+      label: "Worker lock timeout",
+      value: `${workerCfg.lockTimeoutMs}ms`,
+    },
+    {
+      label: "Worker heartbeat",
+      value: `${workerCfg.heartbeatMs}ms`,
+    },
+    {
+      label: "Worker max concurrency",
+      value: String(workerCfg.maxConcurrentJobs),
+    },
+    {
+      label: "Worker job types",
+      value: workerCfg.types.join(", "),
+    },
     { label: "Production deploy mode", value: prodDeploy.mode },
     {
       label: "Production Coolify app UUID",

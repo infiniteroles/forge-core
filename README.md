@@ -1655,6 +1655,102 @@ Durante `deploy_wait` se consulta, en este orden:
   → `verify` → `complete`.
 - Promoción `completed` → recovery no-op seguro.
 
+## Fase 4.3 — Detached Job Runner
+
+### Qué problema resuelve
+
+Fase 4.2B confirmó que el runner inline muere cuando Forge dispara el deploy de
+su propia app: Coolify reemplaza el contenedor y mata el proceso donde corría el
+job, dejándolo `running`/`stale` hasta un `Recover` manual (aunque el endpoint ya
+estuviera live).
+
+Fase 4.3 separa la ejecución de jobs largos de la web:
+
+```
+forge-web      sirve UI/API, ENCOLA JobRuns (nunca los ejecuta inline)
+forge-worker   proceso separado: poll JobRuns queued/stale/reclaimable,
+               lock + heartbeat en BD, ejecuta las stages, completed/failed
+```
+
+El worker sobrevive al redeploy de la web porque vive en su propio contenedor.
+Sin Redis todavía: **polling + locks con UPDATE condicional en Postgres**.
+
+### Variables de entorno
+
+```
+JOB_WORKER_ENABLED="false"              # true solo en el proceso worker
+JOB_WORKER_ID="forge-worker"
+JOB_WORKER_POLL_INTERVAL_MS="5000"
+JOB_WORKER_LOCK_TIMEOUT_MS="120000"
+JOB_WORKER_HEARTBEAT_MS="10000"
+JOB_WORKER_MAX_CONCURRENT_JOBS="1"
+JOB_WORKER_TYPES="production_promotion"
+```
+
+Por defecto: **web** `JOB_WORKER_ENABLED=false` (solo encola) · **worker**
+`JOB_WORKER_ENABLED=true` (procesa la cola).
+
+### Cómo arrancar el worker
+
+```
+npm run worker        # tsx scripts/job-worker.ts — mantiene vivo el proceso
+```
+
+`tsx` está en `dependencies` (se necesita en producción). Logs mínimos y sin
+secretos: `[worker] started`, `[worker] picked job ...`, `[worker] completed
+job ...`, `[worker] failed job ...`.
+
+### Cómo crear el servicio `forge-worker` en Coolify
+
+1. Crear una nueva app/servicio desde el **mismo repo** `infiniteroles/forge-core`.
+2. Nombre: `forge-worker` (puede ser un servicio auxiliar, no una app web).
+3. Comando de arranque: `npm run worker`.
+4. Mismas env vars seguras necesarias que Forge web (al menos `DATABASE_URL`,
+   `AUTH_SECRET` si hiciera falta, y las de GitHub/Coolify que usa la promoción:
+   `GITHUB_TOKEN`, `COOLIFY_API_TOKEN`, `COOLIFY_BASE_URL`, `COOLIFY_PROJECT_UUID`,
+   `COOLIFY_SERVER_UUID`, `PRODUCTION_*`, `DEEPSEEK_*` si aplica).
+5. `JOB_WORKER_ENABLED=true`.
+6. **No exponer dominio público** · **No abrir puertos** · No `NEXT_PUBLIC_*`.
+
+### Modelo de worker
+
+- `WorkerState` (nueva tabla): el worker hace `upsert` de su heartbeat cada poll;
+  la web usa `isWorkerActive()` para saber si hay worker y decidir el dispatch.
+- `lib/jobs/worker.ts`: `startJobWorker()`, `runWorkerLoop()`, `tickWorker()`,
+  `findNextRunnableJob()`, `claimJobRun()`, `heartbeatJobRun()`, `releaseJobRun()`.
+- Claim atómico: `updateMany` con predicado `queued|stale|(running/waiting con
+  heartbeat expirado)` — solo un worker gana. Heartbeat refresca el lock mientras
+  corre la stage (cubre `deploy_wait` de 600s).
+- El worker reutiliza `runProductionPromotionJob(jobRunId, { fromStage })` — sin
+  duplicar lógica de stages (preflight → merge → trigger_deploy → deploy_wait →
+  verify → complete), que siguen actualizando `JobRun` + `ProductionPromotion` +
+  `ActivityLog`.
+
+### Execute / Recovery
+
+- `POST /execute` → valida `PROMOTE`, crea `JobRun` `queued`, enlaza
+  `promotion.jobRunId`, devuelve `{ ok, promotionId, jobRunId, status: "queued" }`.
+  La web **nunca ejecuta inline**.
+- `POST /jobs/[id]/recover` → si hay worker activo (`isWorkerActive()`), marca el
+  job `queued` con el stage de reanudación (`recoveryFromStage`) para que el
+  worker lo procese; si no hay worker, ejecuta el recovery inline como fallback
+  manual. Nunca repite el merge si la PR ya está mergeada.
+
+### Limitaciones
+
+- Sin Redis todavía: el poll es por intervalos (5s) y el lock es de base de datos
+  (suficiente para 1 worker / 1 job concurrente). No es una cola distribuida.
+- `JOB_WORKER_MAX_CONCURRENT_JOBS` limita el claim por poll; el worker actual
+  procesa un job por tick (secuencial).
+- Si no hay worker desplegado, los jobs quedan `queued` hasta que exista uno (o
+  se use el recovery inline manual).
+
+### Guardrails
+
+- No merge sin readiness approved · No execute sin `PROMOTE` · No repetir merge ·
+  No deploy fuera del flujo · No cerrar issues · No borrar previews/branches ·
+  No imprimir tokens · No tocar firewall/SSH/VPS · No relajar policies.
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.

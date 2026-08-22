@@ -11,6 +11,11 @@
  *   GET /jobs/[id] ->  live job progress (stage, percent, error)
  *   POST /jobs/[id]/recover -> resumes from the correct stage
  *
+ * Fase 4.3 moves execution to a DETACHED worker (`npm run worker`, separate
+ * container). The web only enqueues; the worker claims the JobRun with a DB
+ * lock + heartbeat and runs the stages, so a promotion survives a redeploy of
+ * the web container.
+ *
  * Central idempotency rule: once the PR is merged, recovery NEVER repeats the
  * merge — it resumes from deploy_wait / verify.
  */
@@ -42,10 +47,13 @@ import {
   completeJobRun,
   failJobRun,
   markJobRecovered,
+  markJobQueuedForWorker,
+  isWorkerActive,
   getJobRun,
   touchJobHeartbeat,
   type JobRunRow,
 } from "@/lib/jobs/service";
+import { getJobWorkerConfig } from "@/lib/jobs/worker-policy";
 import { runJobInBackground } from "@/lib/jobs/runner";
 
 const STAGE_PROGRESS: Record<string, number> = {
@@ -223,10 +231,11 @@ export async function enqueueProductionPromotionExecution(input: {
     },
   });
 
-  // Kick off the background pipeline. The request returns right away.
-  runJobInBackground(job, ({ jobRunId }) =>
-    runProductionPromotionJob(jobRunId)
-  );
+  // Fase 4.3: enqueue only. The job is left `queued` and a detached worker
+  // (forge-worker, JOB_WORKER_ENABLED=true) picks it up and runs the stages.
+  // The web NEVER runs promotion jobs inline anymore, so a long deploy_wait
+  // is not killed when Coolify redeploys the web container.
+  await dispatchProductionPromotionJob(job);
 
   return {
     ok: true,
@@ -234,6 +243,49 @@ export async function enqueueProductionPromotionExecution(input: {
     jobRunId: job.id,
     status: "queued",
   };
+}
+
+/**
+ * Dispatches a promotion JobRun for execution.
+ *
+ * With the detached worker the job stays `queued` and the worker loop claims
+ * it. When this process IS the worker, nothing else is needed (the loop picks
+ * it up). There is intentionally no inline dispatch from the web.
+ */
+async function dispatchProductionPromotionJob(
+  job: Pick<
+    JobRunRow,
+    "id" | "type" | "projectId" | "resourceType" | "resourceId"
+  >
+): Promise<void> {
+  const workerCfg = getJobWorkerConfig();
+  if (workerCfg.enabled) {
+    // This process is the worker itself; its loop will claim the job.
+    return;
+  }
+  // Web: leave the job queued for the detached worker.
+  void job;
+}
+
+/**
+ * Resumes a promotion job after recovery. When a detached worker is active
+ * the job is re-queued (with the resume stage) for the worker; otherwise it
+ * falls back to the legacy inline runner (manual recovery, no worker).
+ */
+async function resumeProductionPromotionJob(
+  job: Pick<
+    JobRunRow,
+    "id" | "type" | "projectId" | "resourceType" | "resourceId"
+  >,
+  fromStage: string
+): Promise<void> {
+  if (await isWorkerActive()) {
+    await markJobQueuedForWorker(job.id, { fromStage });
+    return;
+  }
+  runJobInBackground(job, ({ jobRunId }) =>
+    runProductionPromotionJob(jobRunId, { fromStage })
+  );
 }
 
 /**
@@ -252,7 +304,10 @@ export async function runProductionPromotionJob(
   }
   if (job.status === "completed") return;
 
-  await startJobRun(jobRunId, { lockedBy: "production_promotion" });
+  await startJobRun(jobRunId, {
+    // Preserve the detached worker's lock identity if one claimed the job.
+    lockedBy: job.lockedBy ?? "production_promotion",
+  });
   await logJobEvent(job, "job.started", {
     stage: "preflight",
     progressPercent: 0,
@@ -902,9 +957,7 @@ export async function recoverProductionPromotionJob(
         requestedBy: opts?.humanEmail ?? undefined,
       },
     });
-    runJobInBackground(job, ({ jobRunId: jid }) =>
-      runProductionPromotionJob(jid, { fromStage: resumeStage })
-    );
+    await resumeProductionPromotionJob(job, resumeStage);
     await logActivity({
       projectId: promotion.projectId,
       type: "job.recovery_completed",
@@ -944,9 +997,7 @@ export async function recoverProductionPromotionJob(
       requestedBy: opts?.humanEmail ?? undefined,
     },
   });
-  runJobInBackground(job, ({ jobRunId: jid }) =>
-    runProductionPromotionJob(jid, { fromStage: "preflight" })
-  );
+  await resumeProductionPromotionJob(job, "preflight");
   await logActivity({
     projectId: promotion.projectId,
     type: "job.recovery_completed",

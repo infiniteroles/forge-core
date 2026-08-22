@@ -116,11 +116,15 @@ export function ProductionPromotionPanel({
   review,
   promotion,
   job,
+  runnerMode = "unknown",
+  workerExpected = false,
 }: {
   workSessionId: string;
   review?: ProductionReadinessData | null;
   promotion?: ProductionPromotionData | null;
   job?: JobRunPublicData | null;
+  runnerMode?: "detached" | "inline" | "unknown";
+  workerExpected?: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -252,6 +256,8 @@ export function ProductionPromotionPanel({
             failedAt: null,
             cancelledAt: null,
             lastHeartbeatAt: null,
+            lockedAt: null,
+            lockedBy: null,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           });
@@ -587,6 +593,42 @@ export function ProductionPromotionPanel({
               <dt className="text-text-dim">Progress</dt>
               <dd className="font-mono text-neutral-200">
                 {jobState.progressPercent ?? 0}%
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Runner</dt>
+              <dd className="font-mono text-neutral-200">
+                {runnerMode === "detached"
+                  ? "detached"
+                  : runnerMode === "inline"
+                    ? "inline fallback"
+                    : "unknown"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Worker expected</dt>
+              <dd className={`font-mono ${workerExpected ? "text-emerald-300" : "text-amber-300"}`}>
+                {workerExpected ? "yes" : "no"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Job locked by</dt>
+              <dd className="font-mono text-neutral-200">
+                {jobState.lockedBy ?? "—"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Last heartbeat</dt>
+              <dd className="font-mono text-neutral-200">
+                {jobState.lastHeartbeatAt
+                  ? new Date(jobState.lastHeartbeatAt).toLocaleString()
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Stale</dt>
+              <dd className={`font-mono ${jobState.status === "stale" ? "text-red-300" : "text-neutral-200"}`}>
+                {jobState.status === "stale" ? "yes" : "no"}
               </dd>
             </div>
           </dl>

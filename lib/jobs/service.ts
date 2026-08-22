@@ -173,6 +173,67 @@ export function markJobRecovered(jobRunId: string) {
   });
 }
 
+/**
+ * Marks a job `queued` for the detached worker (Fase 4.3) and stores the
+ * stage it should resume from. Used by recovery when a worker is active:
+ * the worker picks the job up and passes `fromStage` to the handler.
+ */
+export function markJobQueuedForWorker(
+  jobRunId: string,
+  opts?: { fromStage?: string }
+) {
+  return prisma.jobRun.update({
+    where: { id: jobRunId },
+    data: {
+      status: "queued",
+      error: null,
+      failedAt: null,
+      lockedAt: null,
+      lockedBy: null,
+      lastHeartbeatAt: null,
+      metadata:
+        opts?.fromStage && opts.fromStage !== "preflight"
+          ? jsonField({ recoveryFromStage: opts.fromStage })
+          : Prisma.DbNull,
+    },
+  });
+}
+
+/**
+ * Registers this worker's liveness in `WorkerState` so the web can tell
+ * whether a detached worker is active (recovery dispatch + UI signal).
+ */
+export function upsertWorkerHeartbeat(cfg: {
+  workerId: string;
+}): Promise<unknown> {
+  const now = new Date();
+  return prisma.workerState.upsert({
+    where: { id: cfg.workerId },
+    create: {
+      id: cfg.workerId,
+      workerId: cfg.workerId,
+      enabled: true,
+      heartbeatAt: now,
+    },
+    update: { workerId: cfg.workerId, enabled: true, heartbeatAt: now },
+  });
+}
+
+/**
+ * True when a detached worker reported a heartbeat recently. Used by the web
+ * to decide whether recovery should re-queue for the worker or fall back to
+ * an inline run, and by the UI to show the runner mode.
+ */
+export async function isWorkerActive(staleAfterMs = 240000): Promise<boolean> {
+  const states = await prisma.workerState.findMany({
+    orderBy: { heartbeatAt: "desc" },
+    take: 1,
+  });
+  const s = states[0];
+  if (!s) return false;
+  return s.heartbeatAt.getTime() > Date.now() - staleAfterMs;
+}
+
 export function getJobRun(jobRunId: string) {
   return prisma.jobRun.findUnique({ where: { id: jobRunId } });
 }
@@ -204,6 +265,8 @@ export function toJobRunPublicData(job: JobRunRow): JobRunPublicData {
     summary: job.summary,
     error: job.error,
     result: result && typeof result === "object" ? result : null,
+    lockedAt: job.lockedAt ? job.lockedAt.toISOString() : null,
+    lockedBy: job.lockedBy,
     startedAt: job.startedAt ? job.startedAt.toISOString() : null,
     finishedAt: job.finishedAt ? job.finishedAt.toISOString() : null,
     failedAt: job.failedAt ? job.failedAt.toISOString() : null,
