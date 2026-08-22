@@ -24,7 +24,13 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --from=builder /app/prisma ./prisma
+# Fase 4.3 — detached worker runtime (tsx scripts/job-worker.ts reads lib/ + tsconfig paths).
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 3000
 
+# Web: migrate + Next.js server. The forge-worker service overrides the start
+# command to `npm run worker` (tsx scripts/job-worker.ts).
 CMD ["sh", "-c", "npx prisma migrate deploy && node_modules/.bin/next start -H 0.0.0.0 -p 3000"]
