@@ -31,6 +31,7 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 3000
 
-# Web: migrate + Next.js server. The forge-worker service overrides the start
-# command to `npm run worker` (tsx scripts/job-worker.ts).
-CMD ["sh", "-c", "npx prisma migrate deploy && node_modules/.bin/next start -H 0.0.0.0 -p 3000"]
+# The same image runs either role depending on JOB_WORKER_ENABLED:
+#   web    (JOB_WORKER_ENABLED unset/false) -> migrate + Next.js server
+#   worker (JOB_WORKER_ENABLED=true)        -> npm run worker (tsx scripts/job-worker.ts)
+CMD ["sh", "-c", "if [ \"$JOB_WORKER_ENABLED\" = \"true\" ]; then npm run worker; else npx prisma migrate deploy && node_modules/.bin/next start -H 0.0.0.0 -p 3000; fi"]
