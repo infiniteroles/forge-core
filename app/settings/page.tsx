@@ -24,7 +24,7 @@ import {
 } from "@/lib/production-readiness/policy";
 import { getJobPolicy } from "@/lib/jobs/policy";
 import { getJobWorkerConfig } from "@/lib/jobs/worker-policy";
-import { isWorkerActive } from "@/lib/jobs/service";
+import { getWorkerStateInfo, isWorkerActive } from "@/lib/jobs/service";
 import { getProductionDeployConfig } from "@/lib/coolify/production";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
@@ -54,6 +54,7 @@ export default async function SettingsPage() {
   const prodDeploy = getProductionDeployConfig();
 const workerCfg = getJobWorkerConfig();
 const workerActive = await isWorkerActive();
+const workerState = await getWorkerStateInfo();
 
   const previewEnvAvailability = PREVIEW_ENV_DEFAULT_ALLOWED_KEYS.map((key) => {
     if (key === "APP_URL" || key === "NEXT_PUBLIC_APP_URL") {
@@ -262,6 +263,16 @@ const workerActive = await isWorkerActive();
     {
       label: "Worker mode",
       value: workerActive ? "Detached" : "Inline fallback",
+    },
+    { label: "Worker active", value: workerState.active ? "Yes" : "No" },
+    { label: "Worker ID", value: workerState.workerId ?? "\u2014" },
+    {
+      label: "Worker last heartbeat",
+      value: workerState.heartbeatAt
+        ? new Date(workerState.heartbeatAt).toLocaleString("es-ES", {
+            timeZone: "UTC",
+          }) + " UTC"
+        : "\u2014",
     },
     { label: "Worker enabled", value: workerCfg.enabled ? "true" : "false" },
     {

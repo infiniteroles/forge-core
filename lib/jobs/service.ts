@@ -234,6 +234,32 @@ export async function isWorkerActive(staleAfterMs = 240000): Promise<boolean> {
   return s.heartbeatAt.getTime() > Date.now() - staleAfterMs;
 }
 
+/**
+ * Returns the latest worker liveness facts for the UI (Fase 4.3B Part B.1).
+ * Shape: { active, workerId, heartbeatAt, enabled } — heartbeatAt is the ISO
+ * string of the last heartbeat (or null when no worker has ever reported).
+ */
+export async function getWorkerStateInfo(): Promise<{
+  active: boolean;
+  workerId: string | null;
+  heartbeatAt: string | null;
+  enabled: boolean;
+}> {
+  const states = await prisma.workerState.findMany({
+    orderBy: { heartbeatAt: "desc" },
+    take: 1,
+  });
+  const s = states[0];
+  if (!s) return { active: false, workerId: null, heartbeatAt: null, enabled: false };
+  const active = s.heartbeatAt.getTime() > Date.now() - 240000;
+  return {
+    active,
+    workerId: s.workerId,
+    heartbeatAt: s.heartbeatAt.toISOString(),
+    enabled: s.enabled,
+  };
+}
+
 export function getJobRun(jobRunId: string) {
   return prisma.jobRun.findUnique({ where: { id: jobRunId } });
 }
