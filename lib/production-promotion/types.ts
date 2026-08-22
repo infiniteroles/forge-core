@@ -77,8 +77,12 @@ export interface ProductionDeploymentSummary {
   mode: string;
   waitedMs?: number;
   pollCount?: number;
+  deploymentUuid?: string | null;
+  coolifyStatus?: string | null;
   health?: ProductionHealthProbe | null;
   expectedEndpoint?: ProductionHealthProbe | null;
+  healthOk?: boolean;
+  endpointOk?: boolean;
   message?: string;
 }
 

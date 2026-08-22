@@ -16,6 +16,7 @@ import {
   type ProductionPromotionData,
 } from "@/components/ProductionPromotionPanel";
 import type { JobRunPublicData } from "@/lib/jobs/types";
+import { getProductionDeployConfig } from "@/lib/coolify/production";
 
 export const dynamic = "force-dynamic";
 
@@ -213,6 +214,14 @@ function productionPromotionData(promotion: {
           triggeredAt:
             typeof dep.triggeredAt === "string" ? dep.triggeredAt : undefined,
           live: typeof dep.live === "boolean" ? dep.live : undefined,
+          coolifyStatus:
+            typeof dep.coolifyStatus === "string"
+              ? dep.coolifyStatus
+              : undefined,
+          healthOk:
+            typeof dep.healthOk === "boolean" ? dep.healthOk : undefined,
+          endpointOk:
+            typeof dep.endpointOk === "boolean" ? dep.endpointOk : undefined,
         }
       : null,
     verificationSummary: ver
@@ -234,6 +243,7 @@ function productionPromotionData(promotion: {
     completedAt: promotion.completedAt ? promotion.completedAt.toISOString() : null,
     failedAt: promotion.failedAt ? promotion.failedAt.toISOString() : null,
     createdAt: promotion.createdAt.toISOString(),
+    deployWaitMs: getProductionDeployConfig().deployWaitMs,
   };
 }
 

@@ -604,13 +604,21 @@ async function runDeployWaitStage(
     },
   });
 
-  const { live, deploymentSummary } = await waitForProductionDeploy(expectedEndpoint);
-  // Persist the deploy outcome (including `live` and the mode) so recovery can
-  // resume and the complete stage can decide without re-running the wait.
-  // NOTE: re-load the promotion so `deploymentSummary` reflects what the
-  // trigger_deploy stage persisted (the in-memory `promotion` object is stale).
+  // Re-load the promotion first so we can hand the Coolify deployment UUID to
+  // the wait loop (the in-memory `promotion` object is stale).
   const fresh = await loadPromotion(promotion.id);
   const prevDeployment = fresh ? jobField(fresh.deploymentSummary) ?? {} : {};
+  const deploymentUuid =
+    typeof prevDeployment.deploymentUuid === "string"
+      ? prevDeployment.deploymentUuid
+      : null;
+
+  const { live, deploymentSummary } = await waitForProductionDeploy(
+    expectedEndpoint,
+    { deploymentUuid }
+  );
+  // Persist the deploy outcome (including `live` and the mode) so recovery can
+  // resume and the complete stage can decide without re-running the wait.
   await updateSummary(promotion.id, {
     status: "verifying",
     deploymentSummary: {
@@ -647,10 +655,15 @@ async function runVerifyStage(
     },
   });
 
+  // Re-load the promotion so the mergeCommitSha handed to the verification is
+  // the one the merge stage persisted (the in-memory `promotion` is stale).
+  const fresh = await loadPromotion(promotion.id);
+  const mergeCommitSha = fresh?.mergeCommitSha ?? promotion.mergeCommitSha;
+
   const verification = await verifyProductionPromotion({
-    prNumber: promotion.prNumber,
+    prNumber: fresh?.prNumber ?? promotion.prNumber,
     repositoryFullName,
-    mergeCommitSha: promotion.mergeCommitSha,
+    mergeCommitSha,
     expectedEndpoint,
   });
 
@@ -671,6 +684,7 @@ async function runCompleteStage(
   const verification = fresh ? jobField(fresh.verificationSummary) ?? {} : {};
   const live = deploymentSummary.live === true;
   const verifyOk = verification.ok === true;
+  const mergeCommitSha = fresh?.mergeCommitSha ?? promotion.mergeCommitSha;
 
   const finalOk = live && verifyOk;
   if (finalOk) {
@@ -688,7 +702,7 @@ async function runCompleteStage(
       status: "completed",
       prNumber: promotion.prNumber,
       prUrl: promotion.prUrl,
-      mergeCommitSha: promotion.mergeCommitSha,
+      mergeCommitSha,
       completed: true,
       healthOk: jobField(verification.health)?.ok === true,
       endpointOk: verification.expectedEndpoint
@@ -704,7 +718,7 @@ async function runCompleteStage(
     await completeJobRun(job.id, {
       verification,
       deploymentSummary,
-      mergeCommitSha: promotion.mergeCommitSha,
+      mergeCommitSha,
     });
     await logActivity({
       projectId: promotion.projectId,
@@ -857,13 +871,20 @@ export async function recoverProductionPromotionJob(
   }
 
   if (prMerged) {
-    // Decide where to resume. If the deploy was not triggered yet in
-    // coolify_api mode, resume from trigger_deploy; otherwise from
-    // deploy_wait. NEVER repeat the merge.
+    // Decide where to resume. NEVER repeat the merge.
+    //  - coolify_api and deploy NOT triggered yet        -> re-run trigger_deploy
+    //  - coolify_api, triggered but Coolify reported a FAILED deploy and the
+    //    user explicitly pressed Recover                 -> re-trigger
+    //  - otherwise (triggered, or manual_wait)           -> resume deploy_wait
     const prevDeployment = jobField(promotion.deploymentSummary) ?? {};
     const deployTriggered = prevDeployment.triggered === true;
+    const deployFailedOnCoolify =
+      prevDeployment.mode === "coolify_api" &&
+      (prevDeployment.coolifyStatus === "failed" ||
+        prevDeployment.coolifyStatus === "error");
     const resumeStage =
-      prevDeployment.mode === "coolify_api" && !deployTriggered
+      prevDeployment.mode === "coolify_api" &&
+      (!deployTriggered || deployFailedOnCoolify)
         ? "trigger_deploy"
         : "deploy_wait";
 
@@ -902,7 +923,9 @@ export async function recoverProductionPromotionJob(
       jobRunId,
       message:
         resumeStage === "trigger_deploy"
-          ? "La PR ya está mergeada y el deploy no se había lanzado. El job se ha reanudado para disparar el deploy (no se repite el merge)."
+          ? deployFailedOnCoolify
+            ? "La PR ya está mergeada y Coolify reportó que el deploy anterior falló. El job se ha reanudado para relanzar el deploy (no se repite el merge)."
+            : "La PR ya está mergeada y el deploy no se había lanzado. El job se ha reanudado para disparar el deploy (no se repite el merge)."
           : "La PR ya está mergeada. El job se ha reanudado desde la espera de despliegue (no se repite el merge).",
     };
   }

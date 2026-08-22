@@ -1598,6 +1598,63 @@ preflight(10) → merge(35) → trigger_deploy(50) → deploy_wait(70) → verif
 - `deploy timeout` → revisar los logs de Coolify del deployment lanzado.
 - `verification failed` → revisar la app principal (health/endpoint).
 
+## Fase 4.2B — Clean Production Deploy Job Completion
+
+### Por qué existe
+
+La validación real de Fase 4.2 destapó dos problemas en el camino feliz:
+
+1. El job usaba el objeto `ProductionPromotion` cargado UNA vez al inicio;
+   las etapas que dependen de `deploymentSummary` / `verificationSummary` /
+   `mergeCommitSha` leían datos obsoletos (fix original `a0c5440`, reforzado
+   aquí en `verify`/`complete`).
+2. La ventana `deploy_wait` (180s) es menor que un build real de Coolify
+   (~5-10 min) → el job expiraba y quedaba `failed` hasta un `Recover`/`Refresh`.
+
+El objetivo de 4.2B es que una promoción real termine en `completed` **sin**
+`Refresh` correctivo ni `Recover` manual ni deploy manual.
+
+### Recarga de Promotion fresca por etapa
+
+Regla: si una etapa depende de `deploymentSummary`, `verificationSummary`,
+`mergeCommitSha` o `status`, **recarga `ProductionPromotion` desde BD** antes de
+leer/escribir. Afecta a `runTriggerDeployStage`, `runDeployWaitStage`,
+`runVerifyStage`, `runCompleteStage`, `recoverProductionPromotionJob` y
+`refreshProductionPromotion`.
+
+### Timeout recomendado
+
+```
+PRODUCTION_DEPLOY_WAIT_MS="600000"   # 10 min, cubre builds reales de Coolify
+PRODUCTION_DEPLOY_POLL_INTERVAL_MS="10000"
+```
+
+### deploy_wait mejorado
+
+Durante `deploy_wait` se consulta, en este orden:
+
+```
+1. Estado del deployment en Coolify (si hay deploymentUuid) — getProductionDeploymentStatus
+2. Poll de /api/health
+3. Poll del endpoint esperado
+```
+
+- Un deploy de Coolify en `queued`/`in_progress` NO falla la espera (sigue
+  dentro de ventana).
+- Si Coolify reporta `failed`/`error` → falla rápido con mensaje claro.
+- Metadata segura guardada en `deploymentSummary`:
+  `{ deploymentUuid, coolifyStatus, healthOk, endpointOk }` (sin logs ni tokens).
+
+### Recovery idempotente
+
+- PR mergeada → **nunca re-mergea**.
+- Deploy no lanzado (modo `coolify_api`) → reanuda desde `trigger_deploy`.
+- Deploy lanzado pero Coolify lo reporta `failed` y el usuario pulsa `Recover`
+  → reanuda desde `trigger_deploy` (relanza, no re-mergea).
+- Deploy lanzado y en curso / endpoint ya responde → reanuda desde `deploy_wait`
+  → `verify` → `complete`.
+- Promoción `completed` → recovery no-op seguro.
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.

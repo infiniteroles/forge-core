@@ -39,6 +39,9 @@ export interface ProductionPromotionData {
     status?: string;
     triggeredAt?: string;
     live?: boolean;
+    coolifyStatus?: string | null;
+    healthOk?: boolean;
+    endpointOk?: boolean;
   } | null;
   verificationSummary: {
     ok: boolean;
@@ -52,6 +55,7 @@ export interface ProductionPromotionData {
   completedAt: string | null;
   failedAt: string | null;
   createdAt: string;
+  deployWaitMs?: number;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -430,6 +434,60 @@ export function ProductionPromotionPanel({
                 </dd>
               </div>
             ) : null}
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Coolify status</dt>
+              <dd className={`font-mono ${
+                promotion.deploymentSummary.coolifyStatus === "failed" ||
+                promotion.deploymentSummary.coolifyStatus === "error"
+                  ? "text-red-300"
+                  : promotion.deploymentSummary.coolifyStatus === "finished" ||
+                      promotion.deploymentSummary.coolifyStatus === "success"
+                    ? "text-emerald-300"
+                    : "text-neutral-200"
+              }`}>
+                {promotion.deploymentSummary.coolifyStatus ?? "—"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Deploy wait timeout</dt>
+              <dd className="font-mono text-neutral-200">
+                {promotion.deployWaitMs
+                  ? `${Math.round(promotion.deployWaitMs / 1000)}s`
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Health check</dt>
+              <dd className={`font-mono ${
+                promotion.deploymentSummary.healthOk === true
+                  ? "text-emerald-300"
+                  : promotion.deploymentSummary.healthOk === false
+                    ? "text-red-300"
+                    : "text-neutral-200"
+              }`}>
+                {promotion.deploymentSummary.healthOk === true
+                  ? "ok"
+                  : promotion.deploymentSummary.healthOk === false
+                    ? "failed"
+                    : "—"}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Expected endpoint</dt>
+              <dd className={`font-mono ${
+                promotion.deploymentSummary.endpointOk === true
+                  ? "text-emerald-300"
+                  : promotion.deploymentSummary.endpointOk === false
+                    ? "text-red-300"
+                    : "text-neutral-200"
+              }`}>
+                {promotion.deploymentSummary.endpointOk === true
+                  ? "ok"
+                  : promotion.deploymentSummary.endpointOk === false
+                    ? "failed"
+                    : "—"}
+              </dd>
+            </div>
           </dl>
         </div>
       ) : null}

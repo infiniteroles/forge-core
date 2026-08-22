@@ -72,7 +72,7 @@ export function getProductionDeployConfig(): ProductionDeployConfig {
     triggerTimeoutMs: Number(
       process.env.PRODUCTION_DEPLOY_TRIGGER_TIMEOUT_MS ?? "30000"
     ),
-    deployWaitMs: Number(process.env.PRODUCTION_DEPLOY_WAIT_MS ?? "180000"),
+    deployWaitMs: Number(process.env.PRODUCTION_DEPLOY_WAIT_MS ?? "600000"),
     deployPollIntervalMs: Number(
       process.env.PRODUCTION_DEPLOY_POLL_INTERVAL_MS ?? "10000"
     ),

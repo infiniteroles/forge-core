@@ -42,7 +42,7 @@ export function getProductionPromotionPolicy(): ProductionPromotionPolicy {
     productionBaseUrl:
       process.env.PRODUCTION_BASE_URL ?? "https://forge-app.dev.core01.io",
     deployWaitMs: Number(
-      process.env.PRODUCTION_DEPLOY_WAIT_MS ?? "180000"
+      process.env.PRODUCTION_DEPLOY_WAIT_MS ?? "600000"
     ),
     deployPollIntervalMs: Number(
       process.env.PRODUCTION_DEPLOY_POLL_INTERVAL_MS ?? "10000"

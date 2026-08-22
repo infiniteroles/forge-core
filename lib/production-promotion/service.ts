@@ -24,6 +24,7 @@ import {
 } from "@/lib/github/pull-requests";
 import { getJobPolicy } from "@/lib/jobs/policy";
 import { markJobStale } from "@/lib/jobs/service";
+import { getProductionDeploymentStatus } from "@/lib/coolify/production";
 import { getProductionPromotionPolicy } from "./policy";
 import { runProductionPromotionPreflight } from "./preflight";
 import { buildProductionPromotionSummary } from "./summary";
@@ -157,11 +158,15 @@ export async function verifyProductionPromotion(
 
 /**
  * Waits for the production deploy to pick up the merge by polling the
- * expected endpoint (and health). Returns the deploy summary and whether the
- * deploy looks live.
+ * expected endpoint (and health). When a Coolify `deploymentUuid` is
+ * available, the Coolify deployment status is checked first on each poll;
+ * a deployment still queued/running does NOT fail the wait (it is within
+ * the window), but a Coolify-reported failure fails fast with a clear error.
+ * Returns the deploy summary and whether the deploy looks live.
  */
 export async function waitForProductionDeploy(
-  expectedEndpoint: string | null
+  expectedEndpoint: string | null,
+  opts?: { deploymentUuid?: string | null }
 ): Promise<{ live: boolean; deploymentSummary: ProductionDeploymentSummary }> {
   const policy = getProductionPromotionPolicy();
   const baseUrl = policy.productionBaseUrl.replace(/\/$/, "");
@@ -169,12 +174,48 @@ export async function waitForProductionDeploy(
   const probeTimeout = Math.min(policy.deployPollIntervalMs, 8000);
 
   let pollCount = 0;
+  let coolifyStatus: string | null = null;
   let lastHealth: ProductionHealthProbe | null = null;
   let lastEndpoint: ProductionHealthProbe | null = null;
 
   while (Date.now() < deadline) {
     pollCount += 1;
+
+    // 1. Coolify deployment status (if we know the deployment UUID).
+    if (opts?.deploymentUuid) {
+      try {
+        const st = await getProductionDeploymentStatus(opts.deploymentUuid);
+        coolifyStatus = st.status;
+      } catch {
+        coolifyStatus = coolifyStatus ?? "unknown";
+      }
+      // A deploy that Coolify reports as failed is not going to pick the
+      // merge up; fail fast with a clear message instead of waiting out the
+      // whole window.
+      if (coolifyStatus === "failed" || coolifyStatus === "error") {
+        return {
+          live: false,
+          deploymentSummary: {
+            mode: policy.deployMode,
+            waitedMs: policy.deployWaitMs - Math.max(0, deadline - Date.now()),
+            pollCount,
+            deploymentUuid: opts.deploymentUuid,
+            coolifyStatus,
+            health: lastHealth,
+            expectedEndpoint: lastEndpoint ?? null,
+            healthOk: lastHealth?.ok === true,
+            endpointOk: lastEndpoint?.ok === true,
+            message:
+              "El despliegue de producción falló en Coolify (estado " +
+              `${coolifyStatus}). No se revierte nada automáticamente.`,
+          },
+        };
+      }
+    }
+
+    // 2. Production health.
     lastHealth = await probeUrl(`${baseUrl}/api/health`, probeTimeout);
+    // 3. Expected endpoint (task micro-feature).
     if (expectedEndpoint) {
       lastEndpoint = await probeUrl(
         `${baseUrl}${expectedEndpoint}`,
@@ -190,8 +231,12 @@ export async function waitForProductionDeploy(
           mode: policy.deployMode,
           waitedMs: policy.deployWaitMs - Math.max(0, deadline - Date.now()),
           pollCount,
+          deploymentUuid: opts?.deploymentUuid ?? undefined,
+          coolifyStatus,
           health: lastHealth,
           expectedEndpoint: lastEndpoint ?? null,
+          healthOk: lastHealth.ok,
+          endpointOk: lastEndpoint?.ok ?? undefined,
           message: "El despliegue de producción responde correctamente.",
         },
       };
@@ -205,8 +250,12 @@ export async function waitForProductionDeploy(
       mode: policy.deployMode,
       waitedMs: policy.deployWaitMs,
       pollCount,
+      deploymentUuid: opts?.deploymentUuid ?? undefined,
+      coolifyStatus,
       health: lastHealth,
       expectedEndpoint: lastEndpoint ?? null,
+      healthOk: lastHealth?.ok === true,
+      endpointOk: lastEndpoint?.ok === true,
       message:
         "El despliegue de producción no respondió dentro de la ventana de espera. No se revierte nada automáticamente.",
     },
