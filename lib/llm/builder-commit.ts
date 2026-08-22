@@ -46,6 +46,7 @@ export type BuilderCommitRunResult =
       raw: string;
       model: string;
       selectedPaths: string[];
+      usage?: { promptTokens?: number; completionTokens?: number };
     }
   | {
       status: "completed_with_warnings";
@@ -53,6 +54,7 @@ export type BuilderCommitRunResult =
       raw: string | null;
       model: string | null;
       violations?: string[];
+      usage?: { promptTokens?: number; completionTokens?: number };
     };
 
 // ── Context ─────────────────────────────────────────────────────────────────
@@ -456,6 +458,7 @@ export async function generateBuilderCommitChanges(
         "The model did not return valid JSON matching the Builder Commit schema. No changes were applied.",
       raw: result.content,
       model: result.model,
+      usage: result.usage,
     };
   }
 
@@ -467,6 +470,7 @@ export async function generateBuilderCommitChanges(
       raw: result.content,
       model: result.model,
       violations: ["safe_to_commit is false"],
+      usage: result.usage,
     };
   }
 
@@ -486,6 +490,7 @@ export async function generateBuilderCommitChanges(
       raw: result.content,
       model: result.model,
       violations: validation.violations,
+      usage: result.usage,
     };
   }
 
@@ -495,5 +500,6 @@ export async function generateBuilderCommitChanges(
     raw: result.content,
     model: result.model,
     selectedPaths: context.fileContents.map((f) => f.path),
+    usage: result.usage,
   };
 }

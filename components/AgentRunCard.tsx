@@ -11,6 +11,11 @@ type AgentRunProps = {
   startedAt: Date | null;
   finishedAt: Date | null;
   createdAt: Date;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  totalTokens?: number | null;
+  estimatedCostUsd?: number | null;
+  provider?: string | null;
 };
 
 const STATUS_TONES: Record<string, string> = {
@@ -71,6 +76,12 @@ export function AgentRunCard({
         {run.startedAt ? <span>Started {run.startedAt.toLocaleString()}</span> : null}
         {run.finishedAt ? (
           <span>Finished {run.finishedAt.toLocaleString()}</span>
+        ) : null}
+        {run.totalTokens ? (
+          <span>{run.totalTokens.toLocaleString()} tokens</span>
+        ) : null}
+        {run.estimatedCostUsd != null ? (
+          <span>${run.estimatedCostUsd.toFixed(4)}</span>
         ) : null}
       </div>
 

@@ -602,6 +602,24 @@ export default async function WorkSessionPage({ params }: Props) {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
               Agent runs
             </h2>
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-text-dim">
+              <span>LLM calls: {session.agentRuns.length}</span>
+              <span>
+                Tokens:{" "}
+                {session.agentRuns.reduce(
+                  (acc, r) => acc + (r.totalTokens ?? 0),
+                  0
+                ).toLocaleString()}
+              </span>
+              <span>
+                Est. cost:{" "}
+                {session.agentRuns.some((r) => r.estimatedCostUsd != null)
+                  ? `$${session.agentRuns
+                      .reduce((acc, r) => acc + (r.estimatedCostUsd ?? 0), 0)
+                      .toFixed(4)}`
+                  : "n/a"}
+              </span>
+            </div>
             <div className="mt-4 flex flex-col gap-3">
               {session.agentRuns.length === 0 ? (
                 <p className="text-sm text-text-dim">No agent runs yet.</p>
@@ -616,6 +634,16 @@ export default async function WorkSessionPage({ params }: Props) {
                       <span className="text-[11px] text-text-dim">
                         {run.createdAt.toLocaleString()}
                       </span>
+                      {run.totalTokens ? (
+                        <span className="text-[11px] text-text-dim">
+                          {run.totalTokens.toLocaleString()} tokens
+                        </span>
+                      ) : null}
+                      {run.estimatedCostUsd != null ? (
+                        <span className="text-[11px] text-text-dim">
+                          ${run.estimatedCostUsd.toFixed(4)}
+                        </span>
+                      ) : null}
                     </div>
                     {run.output ? (
                       <pre className="mt-2 max-h-40 overflow-auto rounded bg-background p-2 text-[11px] text-neutral-400">

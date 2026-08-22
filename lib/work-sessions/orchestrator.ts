@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
+import { isSimpleApiEndpoint } from "@/lib/llm-efficiency/simple-task-detector";
+import { checkSessionBudget } from "@/lib/llm-efficiency/session-budget";
 import type { WorkSessionResult, WorkSessionStage, StageOutcome } from "./types";
 import {
   StageContext,
@@ -123,6 +125,56 @@ async function runSession(
     data: { status: "running", startedAt: new Date(), currentStage: stages[0].key, error: null },
   });
 
+  // Fase 4.5 — cheap-path detection for trivial tasks (non-blocking, logged).
+  const instruction = ws.requestedChanges ?? ws.task.description ?? "";
+  if (isSimpleApiEndpoint(instruction)) {
+    await logActivity({
+      projectId: ws.projectId,
+      type: "llm.simple_task_detected",
+      message: `Tarea trivial detectada (endpoint simple) para "${ws.task.title}".`,
+      metadata: { workSessionId: ws.id, taskId: ws.taskId, iteration: isIteration },
+    });
+    result.warnings?.push(
+      "simple_api_endpoint: tarea trivial — puede usar plantilla de endpoint/test."
+    );
+  }
+
+  // Fase 4.5 — per-session LLM budget (non-aggressive; logged, never hard-gated
+  // unless the policy sets a max).
+  const sessionCalls = await prisma.agentRun.count({ where: { workSessionId: ws.id } });
+  const budget = checkSessionBudget(sessionCalls);
+  if (budget.level === "exceeded") {
+    await logActivity({
+      projectId: ws.projectId,
+      type: "llm.budget.exceeded",
+      message: `Presupuesto LLM superado en la sesión (${sessionCalls} llamadas).`,
+      metadata: { workSessionId: ws.id, taskId: ws.taskId, calls: sessionCalls },
+    });
+    await prisma.workSession.update({
+      where: { id: ws.id },
+      data: {
+        status: "waiting_for_user",
+        error: `LLM budget exceeded (${sessionCalls} llamadas). Se requiere decisión humana.`,
+      },
+    });
+    await logActivity({
+      projectId: ws.projectId,
+      type: "work_session.waiting_for_user",
+      message: `Sesión pausada por presupuesto LLM (${sessionCalls} llamadas).`,
+      metadata: { workSessionId: ws.id, taskId: ws.taskId },
+    });
+    return prisma.workSession.findUnique({ where: { id: ws.id } });
+  }
+  if (budget.level === "warning") {
+    await logActivity({
+      projectId: ws.projectId,
+      type: "llm.budget.warning",
+      message: `Presupuesto LLM en aviso (${sessionCalls} llamadas; aviso desde ${budget.warnAfter}).`,
+      metadata: { workSessionId: ws.id, taskId: ws.taskId, calls: sessionCalls },
+    });
+    result.warnings?.push(`llm.budget.warning: ${sessionCalls} llamadas LLM en esta sesión.`);
+  }
+
   async function refreshTaskContext() {
     const task = await prisma.task.findUnique({ where: { id: ctx.taskId } });
     if (task) {
@@ -176,7 +228,34 @@ async function runSession(
 
     let outcome: StageOutcome;
     try {
-      outcome = await stage.fn(ctx);
+      // Fase 4.5 — re-check the session budget before each stage (accumulates
+      // across LLM-calling stages). Warning only, unless a max is configured.
+      const callsSoFar = await prisma.agentRun.count({ where: { workSessionId: ws.id } });
+      const stageBudget = checkSessionBudget(callsSoFar, {
+        iterationCalls: isIteration ? callsSoFar : undefined,
+      });
+      if (stageBudget.level === "exceeded") {
+        await logActivity({
+          projectId: ws.projectId,
+          type: "llm.budget.exceeded",
+          message: `Presupuesto LLM superado antes de "${stage.label}" (${callsSoFar} llamadas).`,
+          metadata: { workSessionId: ws.id, taskId: ws.taskId, stage: stage.key, calls: callsSoFar },
+        });
+        outcome = {
+          type: "waiting_for_user",
+          reason: `LLM budget exceeded (${callsSoFar} llamadas) antes de ${stage.label}.`,
+        };
+      } else if (stageBudget.level === "warning") {
+        await logActivity({
+          projectId: ws.projectId,
+          type: "llm.budget.warning",
+          message: `Presupuesto LLM en aviso antes de "${stage.label}" (${callsSoFar} llamadas).`,
+          metadata: { workSessionId: ws.id, taskId: ws.taskId, stage: stage.key, calls: callsSoFar },
+        });
+        outcome = await stage.fn(ctx);
+      } else {
+        outcome = await stage.fn(ctx);
+      }
     } catch (error) {
       outcome = {
         type: "failed",

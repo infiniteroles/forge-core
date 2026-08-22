@@ -35,6 +35,7 @@ export interface GithubPullRequest {
   draft: boolean;
   baseBranch: string;
   headBranch: string;
+  headSha: string | null;
   created_at: string | null;
   updated_at: string | null;
   merged_at: string | null;

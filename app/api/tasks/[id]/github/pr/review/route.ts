@@ -6,12 +6,14 @@ import { isLLMConfigured, getLLMConfig } from "@/lib/llm/client";
 import { LLMError } from "@/lib/llm/types";
 import { getPullRequest } from "@/lib/github/pull-requests";
 import { runPrReviewAgent } from "@/lib/llm/pr-review";
+import { persistableUsage } from "@/lib/llm-efficiency/cost-policy";
+import { shouldReusePrReview } from "@/lib/llm-efficiency/pr-review-cache";
 
 export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function POST(_request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   if (!(await getSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -59,6 +61,49 @@ export async function POST(_request: NextRequest, { params }: Params) {
     );
   }
 
+  // Fase 4.5 — reuse the stored review when the PR head hasn't changed, unless
+  // the caller explicitly forces a re-run (?force=1).
+  const force = (request.nextUrl.searchParams.get("force") ?? "") === "1";
+  const cache = await shouldReusePrReview({
+    repositoryFullName: task.project.repositoryFullName,
+    prNumber: task.githubPrNumber,
+    taskId: task.id,
+    force,
+  });
+
+  if (cache.reuse) {
+    const lastRun = await prisma.agentRun.findFirst({
+      where: { taskId: task.id, agentName: "pr-review", status: { in: ["completed", "completed_with_warnings"] } },
+      orderBy: { createdAt: "desc" },
+    });
+    await logActivity({
+      projectId: task.projectId,
+      type: "pr_review.reused",
+      message: `PR review reutilizada para "${task.title}" (head SHA sin cambios).`,
+      metadata: {
+        taskId: task.id,
+        agentRunId: lastRun?.id,
+        prNumber: task.githubPrNumber,
+        prHeadSha: cache.prHeadSha,
+      },
+    });
+    return NextResponse.json({
+      ok: true,
+      reused: true,
+      reason: cache.reason,
+      prHeadSha: cache.prHeadSha,
+      agentRunId: lastRun?.id ?? null,
+      task: {
+        githubPrReviewStatus: task.githubPrReviewStatus,
+        githubPrReviewSummary: task.githubPrReviewSummary,
+        githubPrReviewRecommendation: task.githubPrReviewRecommendation,
+        githubPrReviewReadyForReview: task.githubPrReviewReadyForReview,
+      },
+    });
+  }
+
+  const prHeadSha = pr?.headSha ?? null;
+
   const run = await prisma.agentRun.create({
     data: {
       projectId: task.projectId,
@@ -67,6 +112,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       model: getLLMConfig().model,
       status: "running",
       startedAt: new Date(),
+      metadata: { prHeadSha },
     },
   });
 
@@ -103,6 +149,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
         output,
         model: result.model,
         finishedAt: now,
+        ...persistableUsage(result),
       },
     });
 

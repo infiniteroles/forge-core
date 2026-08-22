@@ -1878,6 +1878,104 @@ Esta fase **no** borra nada automáticamente: previews, branches, issues, JobRun
 antiguos ni promociones antiguas se conservan. El cleanup se documenta como
 trabajo futuro.
 
+## Fase 4.5 — Pragmatic LLM Cost & Context Efficiency
+
+Primera pasada de eficiencia de coste/contexto LLM. **No** cambia la
+arquitectura ni el flujo funcional (WorkSession / Preview / Readiness /
+Promotion / Worker intactos); solo reduce llamadas y contexto y añade
+visibilidad.
+
+### Qué se mide
+
+`AgentRun` (migración `20260831000000_add_agent_run_usage_metrics`) guarda, por
+llamada LLM (Builder Proposal, Builder Commit, PR Review, Planner):
+
+```
+promptTokens · completionTokens · totalTokens · estimatedCostUsd · provider
+```
+
+- `usage` se guarda **solo cuando el proveedor lo devuelve**; si no, queda
+  `null` (no se inventa nada).
+- `estimatedCostUsd` se calcula **solo si hay precios configurados**:
+  `LLM_DEEPSEEK_INPUT_COST_PER_1M` / `LLM_DEEPSEEK_OUTPUT_COST_PER_1M`
+  (USD por 1M tokens). Si no hay precios → `n/a`.
+- `LLM_COST_TRACKING_ENABLED="true"` (por defecto). Nunca bloquea nada.
+
+UI: `/work-sessions/[id]` muestra `LLM calls · Tokens · Est. cost` por sesión y
+tokens/coste por run; `AgentRunCard` muestra tokens/coste si existen; `/settings`
+muestra la config de eficiencia.
+
+### Qué se reutiliza
+
+- **PR Review por head SHA** (`lib/llm-efficiency/pr-review-cache.ts`): si la
+  última review se generó para el mismo `head` de la PR y no hay commits nuevos,
+  se **reutiliza** en vez de llamar al modelo. Evento `pr_review.reused`.
+  Aplicado en el endpoint de re-run y en la stage `analyze_pr`. Para forzar:
+  `POST /api/tasks/[id]/github/pr/review?force=1`. No marca `ready` si la review
+  existente no lo está.
+- **Builder Proposal**: si ya existe una `completed` con `safe_to_attempt_next`
+  y no es una iteración (nueva instrucción), se reutiliza. Evento
+  `builder.proposal.reused`. En iteraciones siempre se regenera.
+
+### Cuándo se re-ejecuta PR Review
+
+- Cambió el head de la PR (nuevo commit) → se re-ejecuta.
+- No hay review previa → se ejecuta.
+- `?force=1` → se ejecuta aunque no haya cambios.
+
+### Context budget (`lib/llm-efficiency/context-budget.ts`)
+
+Límites configurables y conservadores:
+
+```
+LLM_CONTEXT_MAX_FILES="8"                # archivos leídos del repo
+LLM_CONTEXT_MAX_FILE_BYTES="20000"       # bytes por archivo
+LLM_CONTEXT_MAX_TOTAL_BYTES="80000"      # bytes totales
+LLM_CONTEXT_INCLUDE_ACTIVITY_LIMIT="20"  # eventos de actividad incluidos
+```
+
+Se aplican a `getLimitedRepositoryContext` / `readRepoFiles` (GitHub) y a los
+sumarios embebidos en el contexto del Builder (ActivityLog y work-session
+summaries truncados). No incluye README entero salvo necesario, ni logs largos,
+ni output completo de AgentRuns (solo summary).
+
+### Simple task detection (`lib/llm-efficiency/simple-task-detector.ts`)
+
+Detección conservadora de tareas triviales ("Añadir endpoint GET /api/foo que
+devuelva {...}"). **Nunca** se aplica si la petición toca BD, auth, infra, env
+vars, pagos, seguridad, permisos o ficheros bloqueados. En esta fase solo
+detecta y lo registra en ActivityLog (`llm.simple_task_detected`) — la ruta
+barata no está automatizada al 100%.
+
+### Budget por WorkSession (`lib/llm-efficiency/session-budget.ts`)
+
+```
+LLM_MAX_CALLS_PER_WORK_SESSION="5"
+LLM_MAX_CALLS_PER_ITERATION="3"
+LLM_WARN_AFTER_CALLS="3"
+```
+
+No agresivo: por defecto sin límites. Si se supera `warn_after` → aviso
+(`llm.budget.warning`); si se supera el máximo → la sesión se pausa y pide
+decisión humana (`llm.budget.exceeded`).
+
+### Prompts compactos (`lib/llm/prompts/`)
+
+`guardrails.ts` (guardrails compactos reutilizables) y `compact-context.ts`
+(helpers para truncar summaries/actividad). Reducen verbosidad sin cambiar el
+comportamiento.
+
+### Micro-feature
+
+`GET /api/efficiency-lite` → `{ "efficiency": "lite" }` (+ test) para validar el
+deploy del modo eficiente. No es obligatorio promocionarla a producción.
+
+### Pendientes de optimización futura (NO en esta fase)
+
+Modelo de costes exacto por proveedor, dashboard financiero avanzado, caché
+semántica, RAG persistente / vector DB, fine-tuning, multi-model routing
+avanzado, colas/batching para LLM, y auto-selección de modelo por coste.
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.

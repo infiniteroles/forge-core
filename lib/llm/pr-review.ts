@@ -63,12 +63,14 @@ export type PrReviewRunResult =
       output: PrReviewOutput;
       raw: string;
       model: string;
+      usage?: { promptTokens?: number; completionTokens?: number };
     }
   | {
       status: "completed_with_warnings";
       reason: string;
       raw: string;
       model: string;
+      usage?: { promptTokens?: number; completionTokens?: number };
     };
 
 // ── Context ─────────────────────────────────────────────────────────────────
@@ -343,6 +345,7 @@ export async function runPrReviewAgent(
       output,
       raw: result.content,
       model: result.model,
+      usage: result.usage,
     };
   } catch {
     return {
@@ -351,6 +354,7 @@ export async function runPrReviewAgent(
         "The model did not return valid JSON matching the PR review schema. Raw output preserved.",
       raw: result.content,
       model: result.model,
+      usage: result.usage,
     };
   }
 }

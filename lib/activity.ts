@@ -117,6 +117,11 @@ export const ACTIVITY_TYPES = [
   "worker.heartbeat_seen",
   "worker.marked_inactive",
   "worker.fallback_used",
+  "pr_review.reused",
+  "builder.proposal.reused",
+  "llm.budget.warning",
+  "llm.budget.exceeded",
+  "llm.simple_task_detected",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

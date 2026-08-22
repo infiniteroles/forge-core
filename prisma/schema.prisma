@@ -98,25 +98,32 @@ model Instruction {
 }
 
 model AgentRun {
-  id            String       @id @default(cuid())
-  projectId     String
-  instructionId String?
-  taskId        String?
-  workSessionId String?
-  agentName     String?
-  model         String?
-  status        String       @default("queued")
-  input         String?
-  output        String?
-  costEstimate  String?
-  startedAt     DateTime?
-  finishedAt    DateTime?
-  createdAt     DateTime     @default(now())
-  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  instruction   Instruction? @relation(fields: [instructionId], references: [id], onDelete: SetNull)
-  task          Task?        @relation("TaskRuns", fields: [taskId], references: [id], onDelete: SetNull)
-  workSession   WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
-  tasks         Task[]       @relation("SourceAgentRuns")
+  id                String       @id @default(cuid())
+  projectId         String
+  instructionId     String?
+  taskId            String?
+  workSessionId     String?
+  agentName         String?
+  model             String?
+  status            String       @default("queued")
+  input             String?
+  output            String?
+  costEstimate      String?
+  // Fase 4.5 — LLM usage metrics (null when provider returns no usage).
+  promptTokens      Int?
+  completionTokens  Int?
+  totalTokens       Int?
+  estimatedCostUsd  Float?
+  provider          String?
+  metadata          Json?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  instruction       Instruction? @relation(fields: [instructionId], references: [id], onDelete: SetNull)
+  task              Task?        @relation("TaskRuns", fields: [taskId], references: [id], onDelete: SetNull)
+  workSession       WorkSession? @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  tasks             Task[]       @relation("SourceAgentRuns")
 }
 
 model ActivityLog {

@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/db";
 import { getLimitedRepositoryContext } from "@/lib/github/context";
+import { getContextBudget } from "@/lib/llm-efficiency/context-budget";
+import {
+  compactActivity,
+  compactLine,
+} from "@/lib/llm/prompts/compact-context";
 
 export interface BuilderContextLog {
   type: string;
@@ -129,13 +134,13 @@ export async function buildIterationContext(
       id: ws.id,
       mode: ws.mode,
       status: ws.status,
-      summary: ws.summary,
+      summary: compactLine(ws.summary, 160),
       requestedChanges: ws.requestedChanges,
       iterationNumber: ws.iterationNumber,
       createdAt: ws.createdAt,
     })),
-    lastReviewSummary,
-    lastBuilderCommitSummary,
+    lastReviewSummary: compactLine(lastReviewSummary, 160),
+    lastBuilderCommitSummary: compactLine(lastBuilderCommitSummary, 160),
   };
 }
 
@@ -153,7 +158,10 @@ export async function buildBuilderProposalContext(
     include: {
       project: {
         include: {
-          activityLogs: { orderBy: { createdAt: "desc" }, take: 15 },
+          activityLogs: {
+            orderBy: { createdAt: "desc" },
+            take: getContextBudget().includeActivityLimit,
+          },
         },
       },
       agentRuns: { orderBy: { createdAt: "desc" }, take: 5 },
@@ -170,10 +178,16 @@ export async function buildBuilderProposalContext(
   let githubContextWarning: string | null = null;
 
   if (project?.repositoryFullName && task.githubBranchName) {
+    const budget = getContextBudget();
     try {
       githubContext = await getLimitedRepositoryContext({
         repositoryFullName: project.repositoryFullName,
         branchName: task.githubBranchName,
+        limits: {
+          maxFiles: budget.maxFiles,
+          maxFileSize: budget.maxFileBytes,
+          maxTotalSize: budget.maxTotalBytes,
+        },
       });
     } catch (error) {
       githubContext = null;
@@ -212,7 +226,7 @@ export async function buildBuilderProposalContext(
     githubContextWarning,
     activityLogs: (project?.activityLogs ?? []).map((a) => ({
       type: a.type,
-      message: a.message,
+      message: compactActivity(a.type, a.message, 140),
       createdAt: a.createdAt,
     })),
     recentAgentRuns: task.agentRuns.map((run) => ({

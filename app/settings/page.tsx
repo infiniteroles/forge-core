@@ -26,6 +26,9 @@ import { getJobPolicy } from "@/lib/jobs/policy";
 import { getJobWorkerConfig } from "@/lib/jobs/worker-policy";
 import { getWorkerStateInfo, isWorkerActive } from "@/lib/jobs/service";
 import { getWorkerStateSummary } from "@/lib/jobs/worker-state";
+import { getCostPolicy } from "@/lib/llm-efficiency/cost-policy";
+import { getContextBudget } from "@/lib/llm-efficiency/context-budget";
+import { getSessionBudgetPolicy } from "@/lib/llm-efficiency/session-budget";
 import { getProductionDeployConfig } from "@/lib/coolify/production";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
@@ -57,6 +60,9 @@ const workerCfg = getJobWorkerConfig();
 const workerActive = await isWorkerActive();
 const workerState = await getWorkerStateInfo();
 const workerSummary = await getWorkerStateSummary();
+const costPolicy = getCostPolicy();
+const ctxBudget = getContextBudget();
+const sessionBudget = getSessionBudgetPolicy();
 
   const previewEnvAvailability = PREVIEW_ENV_DEFAULT_ALLOWED_KEYS.map((key) => {
     if (key === "APP_URL" || key === "NEXT_PUBLIC_APP_URL") {
@@ -327,6 +333,35 @@ const workerSummary = await getWorkerStateSummary();
     {
       label: "Worker job types",
       value: workerCfg.types.join(", "),
+    },
+    { label: "LLM cost tracking", value: costPolicy.enabled ? "Enabled" : "Disabled" },
+    {
+      label: "Context max files",
+      value: String(ctxBudget.maxFiles),
+    },
+    {
+      label: "Context max file bytes",
+      value: String(ctxBudget.maxFileBytes),
+    },
+    {
+      label: "Context max total bytes",
+      value: String(ctxBudget.maxTotalBytes),
+    },
+    {
+      label: "Context activity limit",
+      value: String(ctxBudget.includeActivityLimit),
+    },
+    {
+      label: "Session LLM max calls",
+      value: sessionBudget.maxCallsPerSession !== null ? String(sessionBudget.maxCallsPerSession) : "No limit",
+    },
+    {
+      label: "Iteration LLM max calls",
+      value: sessionBudget.maxCallsPerIteration !== null ? String(sessionBudget.maxCallsPerIteration) : "No limit",
+    },
+    {
+      label: "LLM warn after calls",
+      value: sessionBudget.warnAfterCalls !== null ? String(sessionBudget.warnAfterCalls) : "Off",
     },
     { label: "Production deploy mode", value: prodDeploy.mode },
     {

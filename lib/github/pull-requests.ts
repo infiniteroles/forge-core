@@ -107,7 +107,7 @@ interface PrPayload {
   title?: string;
   draft?: boolean;
   base?: { ref?: string } | null;
-  head?: { ref?: string } | null;
+  head?: { ref?: string; sha?: string } | null;
   created_at?: string | null;
   updated_at?: string | null;
   merged_at?: string | null;
@@ -127,6 +127,7 @@ function toGithubPullRequest(data: PrPayload | null): GithubPullRequest {
     draft: data.draft ?? false,
     baseBranch: data.base?.ref ?? "",
     headBranch: data.head?.ref ?? "",
+    headSha: data.head?.sha ?? null,
     created_at: data.created_at ?? null,
     updated_at: data.updated_at ?? null,
     merged_at: data.merged_at ?? null,

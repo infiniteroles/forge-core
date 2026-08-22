@@ -83,9 +83,14 @@ function truncate(content: string, limit: number): string {
 export async function getLimitedRepositoryContext(input: {
   repositoryFullName: string;
   branchName: string;
+  limits?: { maxFiles?: number; maxFileSize?: number; maxTotalSize?: number };
 }): Promise<LimitedRepositoryContext> {
   validateFullName(input.repositoryFullName);
   requireToken();
+
+  const maxFiles = input.limits?.maxFiles ?? MAX_FILES;
+  const maxFileSize = input.limits?.maxFileSize ?? MAX_FILE_SIZE;
+  const maxTotalSize = input.limits?.maxTotalSize ?? MAX_TOTAL_SIZE;
 
   const result: LimitedRepositoryContext = {
     rootEntries: [],
@@ -127,7 +132,7 @@ export async function getLimitedRepositoryContext(input: {
 
   let totalBytes = 0;
   for (const path of candidates) {
-    if (result.files.length >= MAX_FILES) {
+    if (result.files.length >= maxFiles) {
       result.warnings.push("Reached maximum file count; skipped remaining files.");
       break;
     }
@@ -149,7 +154,7 @@ export async function getLimitedRepositoryContext(input: {
         result.warnings.push(`Could not read ${path}.`);
         continue;
       }
-      if (file.size > MAX_FILE_SIZE) {
+      if (file.size > maxFileSize) {
         result.warnings.push(`Skipped ${path} (too large).`);
         continue;
       }
@@ -162,12 +167,12 @@ export async function getLimitedRepositoryContext(input: {
         result.warnings.push(`Skipped ${path} (empty).`);
         continue;
       }
-      if (totalBytes + raw.length > MAX_TOTAL_SIZE) {
+      if (totalBytes + raw.length > maxTotalSize) {
         result.warnings.push("Reached total context limit; skipped remaining files.");
         break;
       }
 
-      result.files.push({ path, content: truncate(raw, MAX_FILE_SIZE) });
+      result.files.push({ path, content: truncate(raw, maxFileSize) });
       totalBytes += raw.length;
     } catch (error) {
       if (error instanceof GithubError && error.code === "file_not_found") {

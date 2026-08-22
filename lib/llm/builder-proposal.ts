@@ -64,12 +64,14 @@ export type BuilderProposalRunResult =
       output: BuilderProposalOutput;
       raw: string;
       model: string;
+      usage?: { promptTokens?: number; completionTokens?: number };
     }
   | {
       status: "completed_with_warnings";
       raw: string;
       model: string;
       warning: string;
+      usage?: { promptTokens?: number; completionTokens?: number };
     };
 
 // ── Prompt ──────────────────────────────────────────────────────────────────
@@ -286,6 +288,7 @@ export async function runBuilderProposalAgent(
       output,
       raw: result.content,
       model: result.model,
+      usage: result.usage,
     };
   } catch {
     return {
@@ -294,6 +297,7 @@ export async function runBuilderProposalAgent(
       model: result.model,
       warning:
         "The model returned text that could not be parsed as the expected JSON schema. Raw output has been preserved.",
+      usage: result.usage,
     };
   }
 }

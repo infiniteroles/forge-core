@@ -16,6 +16,7 @@ import {
 import {
   createPullRequest,
   findOpenPullRequestForBranch,
+  getPullRequest,
 } from "@/lib/github/pull-requests";
 import {
   buildPullRequestTitle,
@@ -25,6 +26,8 @@ import { runBuilderProposalAgent } from "@/lib/llm/builder-proposal";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import { generateBuilderCommitChanges } from "@/lib/llm/builder-commit";
 import { runPrReviewAgent } from "@/lib/llm/pr-review";
+import { persistableUsage } from "@/lib/llm-efficiency/cost-policy";
+import { shouldReusePrReview } from "@/lib/llm-efficiency/pr-review-cache";
 import { runSessionChecks } from "./checks";
 import type { Prisma } from "@prisma/client";
 import type { StageOutcome, WorkSessionResult } from "./types";
@@ -365,6 +368,16 @@ export async function stageEnsureBuilderProposal(
     if (existing) {
       const parsed = parseBuilderProposalOutput(existing.output);
       if (parsed?.safe_to_attempt_next === true) {
+        await logActivity({
+          projectId: ctx.task.projectId,
+          type: "builder.proposal.reused",
+          message: `Builder proposal reutilizada para "${ctx.task.title}" (sin cambios).`,
+          metadata: {
+            taskId: ctx.task.id,
+            agentRunId: existing.id,
+            workSessionId: ctx.workSessionId,
+          },
+        });
         return { type: "continue" };
       }
       return {
@@ -407,7 +420,7 @@ export async function stageEnsureBuilderProposal(
 
   await prisma.agentRun.update({
     where: { id: run.id },
-    data: { status: result.status, output, model: result.model, finishedAt: new Date() },
+    data: { status: result.status, output, model: result.model, finishedAt: new Date(), ...persistableUsage(result) },
   });
 
   await logActivity({
@@ -498,6 +511,7 @@ export async function stageRunBuilderCommit(ctx: StageContext): Promise<StageOut
         }),
         model: result.model ?? undefined,
         finishedAt: new Date(),
+        ...persistableUsage(result),
       },
     });
 
@@ -561,6 +575,7 @@ export async function stageRunBuilderCommit(ctx: StageContext): Promise<StageOut
       }),
       model: result.model,
       finishedAt: new Date(),
+      ...persistableUsage(result),
     },
   });
 
@@ -590,6 +605,32 @@ export async function stageAnalyzePr(ctx: StageContext): Promise<StageOutcome> {
     return { type: "continue" };
   }
 
+  // Fase 4.5 — reuse the stored PR review when the PR head hasn't changed.
+  const cache = await shouldReusePrReview({
+    repositoryFullName: ctx.project.repositoryFullName,
+    prNumber: ctx.task.githubPrNumber,
+    taskId: ctx.task.id,
+  });
+  if (cache.reuse) {
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "pr_review.reused",
+      message: `PR review reutilizada para "${ctx.task.title}" (head SHA sin cambios).`,
+      metadata: {
+        taskId: ctx.task.id,
+        workSessionId: ctx.workSessionId,
+        prHeadSha: cache.prHeadSha,
+      },
+    });
+    return { type: "continue" };
+  }
+
+  const prHeadSha =
+    (await getPullRequest({
+      repositoryFullName: ctx.project.repositoryFullName,
+      prNumber: ctx.task.githubPrNumber,
+    }).catch(() => null))?.headSha ?? null;
+
   const run = await prisma.agentRun.create({
     data: {
       projectId: ctx.task.projectId,
@@ -599,6 +640,7 @@ export async function stageAnalyzePr(ctx: StageContext): Promise<StageOutcome> {
       model: getLLMConfig().model,
       status: "running",
       startedAt: new Date(),
+      metadata: { prHeadSha },
     },
   });
 
@@ -626,6 +668,7 @@ export async function stageAnalyzePr(ctx: StageContext): Promise<StageOutcome> {
         output: JSON.stringify({ status: "completed_with_warnings", reason: result.reason, raw: result.raw }),
         model: result.model,
         finishedAt: now,
+        ...persistableUsage(result),
       },
     });
     await prisma.task.update({
@@ -647,6 +690,7 @@ export async function stageAnalyzePr(ctx: StageContext): Promise<StageOutcome> {
         output: JSON.stringify(review),
         model: result.model,
         finishedAt: now,
+        ...persistableUsage(result),
       },
     });
     await prisma.task.update({
