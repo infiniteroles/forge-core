@@ -114,6 +114,9 @@ export const ACTIVITY_TYPES = [
   "job.recovered",
   "job.recovery_started",
   "job.recovery_completed",
+  "worker.heartbeat_seen",
+  "worker.marked_inactive",
+  "worker.fallback_used",
 ] as const;
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];

@@ -631,6 +631,12 @@ export function ProductionPromotionPanel({
                 {jobState.status === "stale" ? "yes" : "no"}
               </dd>
             </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-text-dim">Recover available</dt>
+              <dd className={`font-mono ${isJobRecoverableStatus(jobState.status) ? "text-emerald-300" : "text-neutral-200"}`}>
+                {isJobRecoverableStatus(jobState.status) ? "yes" : "no"}
+              </dd>
+            </div>
           </dl>
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-neutral-700/40">
             <div

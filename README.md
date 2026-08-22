@@ -1751,6 +1751,133 @@ job ...`, `[worker] failed job ...`.
   No deploy fuera del flujo · No cerrar issues · No borrar previews/branches ·
   No imprimir tokens · No tocar firewall/SSH/VPS · No relajar policies.
 
+## Fase 4.4 — Worker Operations Hardening
+
+Endurece la operación diaria del `forge-worker`: mejor visibilidad del estado,
+runbook operativo y checklist de rotación de tokens. **Sin** nuevas features
+grandes, sin Redis/BullMQ, sin cleanup automático.
+
+### Regla de ejecución (worker vs inline)
+
+```
+Worker activo  → la web SOLO encola; el worker procesa
+Worker no activo → la web puede usar fallback inline controlado
+```
+
+La UI lo refleja en el panel de job:
+
+```
+Runner: detached       ← worker activo (isWorkerActive())
+Runner: inline fallback ← sin worker activo (fallback controlado)
+Runner: unknown        ← modo desconocido
+```
+
+El fallback inline existe para no romper el flujo si el worker no está
+desplegado o se cae; cada vez que se usa se registra un evento
+`worker.fallback_used` (y `worker.marked_inactive` si el worker estaba activo y
+su heartbeat quedó stale). Cuando el worker vuelve a hacer heartbeat, la web
+vuelve a encolar y deja de ejecutar inline automáticamente.
+
+### Visibilidad del worker
+
+- **Settings**: `Worker active`, `Worker ID`, `Last heartbeat`, `Last heartbeat
+  age`, `Worker mode`, `Fallback inline`, `Poll interval`, `Lock timeout`,
+  `Heartbeat interval`, `Max concurrency`, `Job types`, `Last picked /
+  completed / failed job`.
+- **Panel de promoción/job**: `Runner`, `Worker expected`, `Job locked by`,
+  `Last heartbeat`, `Stale`, `Recover available`.
+- Helper seguro `lib/jobs/worker-state.ts` → `getWorkerStateSummary()` (sin
+  secretos: solo booleans/números/ids/fechas).
+
+### Runbook operativo
+
+#### Qué hacer si el worker cae
+
+1. Ver `Coolify → forge-worker → Runtime Logs`. Debe verse `[worker] started`.
+2. Si el contenedor está `Exited`/`Restarting`: mirar el log de arranque
+   (error de `DATABASE_URL`, migración, etc.), corregir env, redeploy del worker.
+3. Mientras no haya worker, la web usa el fallback inline (jobs queued → inline).
+4. Tras recuperarlo, Settings debe volver a `Worker active: Yes`.
+
+#### Qué hacer si un job queda stale
+
+1. Identificar el `JobRun` (panel de promoción → `Stale: yes`).
+2. Comprobar si el worker sigue vivo (Settings → `Worker active`).
+3. Si el worker está vivo: pulsar `Recover job` — re-encola con el stage de
+   reanudación para el worker (nunca repite merge).
+4. Si el worker está caído: recuperarlo primero y luego `Recover job` (usará
+   fallback inline si sigue sin worker).
+
+#### Qué hacer si falla la API de Coolify
+
+1. Ver el resumen de la stage `trigger_deploy`/`deploy_wait` en el job
+   (`deploymentSummary`: `coolifyStatus`, `error`).
+2. Comprobar `COOLIFY_API_TOKEN` (Settings → Coolify diagnostics → connection)
+   y que la IP del servidor esté en la allowlist de la API.
+3. Reintentar con `Refresh promotion` o `Recover job`; el job es idempotente
+   (no re-mergea una PR ya mergeada).
+
+#### Qué hacer si falla el token de GitHub
+
+1. `Settings` / logs del job → errores de la etapa `merge` (`401`,
+   `Bad credentials`).
+2. Regenerar `GITHUB_TOKEN`, actualizar web y worker, redeploy ambos.
+3. Reintentar con `Recover job`.
+
+#### Qué hacer si una promoción queda en `failed`
+
+1. Abrir el job y leer `error` + `verificationSummary`/`deploymentSummary`.
+2. Si la PR ya se mergeó pero falló el deploy/verify: tras arreglar el deploy
+   (manual o API), pulsar `Refresh promotion` o `Recover job` → reanuda desde
+   `deploy_wait`/`verify` sin repetir el merge.
+3. Si falló antes del merge: `Recover job` → reanuda desde `preflight`.
+
+#### Cómo recuperar un job
+
+```
+POST /api/jobs/[id]/recover      # o botón "Recover job" en el panel
+```
+
+- Worker activo → re-encola para el worker (`recoveryFromStage`).
+- Sin worker → fallback inline.
+- Nunca repite el merge de una PR ya mergeada.
+
+#### Cómo validar que el worker está activo
+
+- Settings → `Worker active: Yes` y `Last heartbeat age` < 60s.
+- `Coolify → forge-worker → Runtime Logs` → `[worker] started` y logs de pick.
+
+#### Cómo redeployar web y worker
+
+- **Web**: `Coolify → forge-web (forge-app.dev.core01.io) → Actions → Deploy`
+  (toma main, corre migraciones con `prisma migrate deploy` al arrancar).
+- **Worker**: `Coolify → forge-worker → Actions → Deploy` (misma imagen; el
+  Dockerfile arranca `npm run worker` cuando `JOB_WORKER_ENABLED=true`).
+- Validar tras deploy: `curl https://forge-app.dev.core01.io/api/health` →
+  `200`, y Settings → `Worker active: Yes`.
+
+### Rotación de tokens (checklist)
+
+> Manual, fuera de Copilot. **Nunca** pegar tokens en commits, logs, README,
+> ActivityLog ni respuestas.
+
+1. Crear un nuevo `COOLIFY_API_TOKEN` en Coolify (Keys & Tokens).
+2. Actualizar `COOLIFY_API_TOKEN` en **forge-web** (env vars).
+3. Actualizar `COOLIFY_API_TOKEN` en **forge-worker** (env vars).
+4. Redeploy de web y worker.
+5. Validar: Settings → Coolify diagnostics → connection OK.
+6. Revocar el token antiguo de Coolify.
+7. Si aplica, crear un nuevo `GITHUB_TOKEN` (PAT con scopes del repo).
+8. Actualizar `GITHUB_TOKEN` en forge-web y forge-worker.
+9. Validar: `gh` read/write OK y una operación de PR read (no hace falta una
+   promoción completa).
+
+### Cleanup (fase futura, NO en esta fase)
+
+Esta fase **no** borra nada automáticamente: previews, branches, issues, JobRuns
+antiguos ni promociones antiguas se conservan. El cleanup se documenta como
+trabajo futuro.
+
 ## Backlog (Planner → tasks)
 
 Planner output can be turned into a real, editable backlog.

@@ -54,6 +54,7 @@ import {
   type JobRunRow,
 } from "@/lib/jobs/service";
 import { getJobWorkerConfig } from "@/lib/jobs/worker-policy";
+import { workerWasActiveButNowStale } from "@/lib/jobs/worker-state";
 import { runJobInBackground } from "@/lib/jobs/runner";
 
 const STAGE_PROGRESS: Record<string, number> = {
@@ -269,10 +270,37 @@ async function dispatchProductionPromotionJob(
   if (await isWorkerActive()) {
     return;
   }
-  // No worker deployed: legacy inline fallback (keeps the flow working).
+  // No worker active: legacy inline fallback (keeps the flow working).
+  await logWorkerFallback(job.projectId, job.id);
   runJobInBackground(job, ({ jobRunId }) =>
     runProductionPromotionJob(jobRunId)
   );
+}
+
+/**
+ * Logs a `worker.fallback_used` event when the web runs a job inline because
+ * no detached worker is active. Also logs a single `worker.marked_inactive`
+ * event when the worker previously reported heartbeats and is now stale
+ * (state transition only — never per heartbeat).
+ */
+async function logWorkerFallback(
+  projectId: string | null,
+  jobRunId: string
+): Promise<void> {
+  const staleTransition = await workerWasActiveButNowStale();
+  await logActivity({
+    projectId,
+    type: "worker.fallback_used",
+    message: `Worker no activo: fallback inline para el job ${jobRunId}.`,
+  });
+  if (staleTransition) {
+    await logActivity({
+      projectId,
+      type: "worker.marked_inactive",
+      message:
+        "Worker marcado inactivo (heartbeat stale): se usará fallback inline hasta que vuelva a hacer heartbeat.",
+    });
+  }
 }
 
 /**
@@ -291,6 +319,7 @@ async function resumeProductionPromotionJob(
     await markJobQueuedForWorker(job.id, { fromStage });
     return;
   }
+  await logWorkerFallback(job.projectId, job.id);
   runJobInBackground(job, ({ jobRunId }) =>
     runProductionPromotionJob(jobRunId, { fromStage })
   );

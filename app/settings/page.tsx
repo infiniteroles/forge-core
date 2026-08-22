@@ -25,6 +25,7 @@ import {
 import { getJobPolicy } from "@/lib/jobs/policy";
 import { getJobWorkerConfig } from "@/lib/jobs/worker-policy";
 import { getWorkerStateInfo, isWorkerActive } from "@/lib/jobs/service";
+import { getWorkerStateSummary } from "@/lib/jobs/worker-state";
 import { getProductionDeployConfig } from "@/lib/coolify/production";
 import { CoolifyDiagnostics } from "@/components/CoolifyDiagnostics";
 
@@ -55,6 +56,7 @@ export default async function SettingsPage() {
 const workerCfg = getJobWorkerConfig();
 const workerActive = await isWorkerActive();
 const workerState = await getWorkerStateInfo();
+const workerSummary = await getWorkerStateSummary();
 
   const previewEnvAvailability = PREVIEW_ENV_DEFAULT_ALLOWED_KEYS.map((key) => {
     if (key === "APP_URL" || key === "NEXT_PUBLIC_APP_URL") {
@@ -272,6 +274,37 @@ const workerState = await getWorkerStateInfo();
         ? new Date(workerState.heartbeatAt).toLocaleString("es-ES", {
             timeZone: "UTC",
           }) + " UTC"
+        : "\u2014",
+    },
+    {
+      label: "Worker last heartbeat age",
+      value:
+        workerSummary.lastHeartbeatAgeMs === null
+          ? "\u2014"
+          : workerSummary.lastHeartbeatAgeMs < 60000
+          ? `${Math.round(workerSummary.lastHeartbeatAgeMs / 1000)}s`
+          : `${Math.round(workerSummary.lastHeartbeatAgeMs / 60000)}m`,
+    },
+    {
+      label: "Fallback inline",
+      value: workerSummary.fallbackInlineEnabled ? "Enabled" : "Disabled",
+    },
+    {
+      label: "Last picked job",
+      value: workerSummary.lastPickedJob
+        ? `${workerSummary.lastPickedJob.type} (${workerSummary.lastPickedJob.id})`
+        : "\u2014",
+    },
+    {
+      label: "Last completed job",
+      value: workerSummary.lastCompletedJob
+        ? `${workerSummary.lastCompletedJob.type} (${workerSummary.lastCompletedJob.id})`
+        : "\u2014",
+    },
+    {
+      label: "Last failed job",
+      value: workerSummary.lastFailedJob
+        ? `${workerSummary.lastFailedJob.type} (${workerSummary.lastFailedJob.id})`
         : "\u2014",
     },
     { label: "Worker enabled", value: workerCfg.enabled ? "true" : "false" },
