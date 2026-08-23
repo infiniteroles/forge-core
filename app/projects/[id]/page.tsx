@@ -12,6 +12,8 @@ import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
 import { RepositoryPanel } from "@/components/RepositoryPanel";
 import { IdeaForm } from "@/components/IdeaForm";
+import { MvpFlowPanel } from "@/components/mvp-flow/MvpFlowPanel";
+import { computeMvpFlow } from "@/lib/mvp-flow/flow-state";
 import type { LatestWorkSessionSummary } from "@/components/TaskCard";
 import type { TaskProductionReadinessData } from "@/components/TaskProductionReadiness";
 import type { TaskPromotionData } from "@/components/TaskProductionPromotion";
@@ -37,7 +39,16 @@ export default async function ProjectDetailPage({ params }: Props) {
         include: { _count: { select: { tasks: true } } },
       },
       activityLogs: { orderBy: { createdAt: "desc" }, take: 50 },
-      previewDeployments: { select: { id: true, status: true, previewUrl: true } },
+      previewDeployments: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          previewUrl: true,
+          error: true,
+          workSessionId: true,
+        },
+      },
       productionReadinessReviews: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -123,6 +134,66 @@ export default async function ProjectDetailPage({ params }: Props) {
       },
     });
   }
+
+  const latestWs = workSessions[0] ?? null;
+
+  const mvpFlow = computeMvpFlow({
+    project: {
+      id: project.id,
+      name: project.name,
+      productionUrl: project.productionUrl,
+    },
+    task: latestWs?.taskId
+      ? (() => {
+          const t = project.tasks.find((x) => x.id === latestWs.taskId);
+          return t
+            ? {
+                id: t.id,
+                title: t.title,
+                githubPrNumber: t.githubPrNumber,
+                githubPrUrl: t.githubPrUrl,
+                githubBranchName: t.githubBranchName,
+              }
+            : null;
+        })()
+      : null,
+    workSession: latestWs
+      ? {
+          id: latestWs.id,
+          status: latestWs.status,
+          summary: latestWs.summary,
+          error: latestWs.error,
+          requestedChanges: latestWs.requestedChanges,
+          iterationNumber: latestWs.iterationNumber,
+        }
+      : null,
+    preview: (() => {
+      const match = latestWs
+        ? project.previewDeployments.find((p) => p.workSessionId === latestWs.id)
+        : null;
+      const p = match ?? project.previewDeployments[0];
+      return p
+        ? { status: p.status, previewUrl: p.previewUrl, error: p.error }
+        : null;
+    })(),
+    readiness:
+      project.productionReadinessReviews[0] ?? null,
+    promotion: (() => {
+      const match = latestWs
+        ? project.productionPromotions.find((p) => p.workSessionId === latestWs.id)
+        : null;
+      const pr = match ?? project.productionPromotions[0];
+      return pr
+        ? {
+            status: pr.status,
+            error: pr.error,
+            jobStatus: pr.jobRun?.status ?? null,
+            prNumber: pr.prNumber,
+            mergeCommitSha: pr.mergeCommitSha,
+          }
+        : null;
+    })(),
+  });
 
   const linkedIssueCount = project.tasks.filter(
     (task) => task.githubIssueNumber != null
@@ -305,6 +376,8 @@ export default async function ProjectDetailPage({ params }: Props) {
             ) : null}
           </div>
         </div>
+
+        <MvpFlowPanel flow={mvpFlow} />
 
         {project.archivedAt ? (
           <div className="rounded-lg border border-neutral-700 bg-surface px-4 py-3 text-sm text-text-dim">

@@ -44,7 +44,7 @@ export function IdeaForm({ projectId }: { projectId: string }) {
         value={idea}
         onChange={(e) => setIdea(e.target.value)}
         rows={2}
-        placeholder="Describe what you want Forge to build or change…"
+        placeholder="Describe qué quieres que Forge construya o cambie…"
         className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-neutral-200 outline-none transition placeholder:text-text-dim focus:border-accent/60"
       />
       <button

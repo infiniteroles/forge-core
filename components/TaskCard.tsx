@@ -73,6 +73,33 @@ export type LatestWorkSessionSummary = {
   } | null;
 };
 
+/** Compact, human "next step" for a task card (Fase 5.0). */
+function nextStepLabel(opts: {
+  workSession?: LatestWorkSessionSummary | null;
+  production?: TaskProductionReadinessData | null;
+  promotion?: TaskPromotionData | null;
+}): string | null {
+  const { workSession: ws, production: r, promotion: p } = opts;
+  if (p?.status === "completed") return "En producción — ver resultado";
+  if (p?.status && ["promoting", "merged", "deploying", "verifying"].includes(p.status))
+    return "Forge está promocionando…";
+  if (p?.status === "ready_to_promote") return "Siguiente: promocionar a producción";
+  if (p?.status === "failed") return "La promoción falló — recuperar";
+  if (r?.status === "approved") return "Siguiente: preparar promoción";
+  if (r?.recommendation === "ready_for_production" || r?.status === "ready")
+    return "Siguiente: aprobar producción";
+  if (r?.status === "needs_changes" || r?.status === "blocked")
+    return "Pide cambios a Forge o revisa la PR";
+  if (ws?.result?.previewStatus === "ready" && ws?.result?.previewUrl)
+    return "Siguiente: abrir preview DEV";
+  if (ws?.result?.previewStatus === "failed") return "Reintenta el preview";
+  if (ws?.status === "running" || ws?.status === "queued")
+    return "Forge está trabajando…";
+  if (ws?.status === "waiting_for_user" || ws?.status === "completed_with_warnings")
+    return "Forge necesita tu atención";
+  return null;
+}
+
 export function TaskCard({
   task,
   repositoryLinked,
@@ -92,6 +119,7 @@ export function TaskCard({
     TASK_STATUS_TONES[task.status] ?? "bg-neutral-700/40 text-neutral-300";
   const done = task.status === "done";
   const cancelled = task.status === "cancelled";
+  const nextStep = nextStepLabel({ workSession, production, promotion });
 
   return (
     <div className="rounded-lg border border-border bg-background p-4">
@@ -109,6 +137,10 @@ export function TaskCard({
           {TASK_STATUS_LABELS[task.status] ?? task.status}
         </span>
       </div>
+
+      {nextStep ? (
+        <div className="mt-1.5 text-[11px] text-accent">→ {nextStep}</div>
+      ) : null}
 
       <WorkSessionButton taskId={task.id} />
 

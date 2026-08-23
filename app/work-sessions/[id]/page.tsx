@@ -15,6 +15,9 @@ import {
   ProductionPromotionPanel,
   type ProductionPromotionData,
 } from "@/components/ProductionPromotionPanel";
+import { MvpFlowPanel } from "@/components/mvp-flow/MvpFlowPanel";
+import { AdvancedSection } from "@/components/ui/AdvancedSection";
+import { computeMvpFlow } from "@/lib/mvp-flow/flow-state";
 import type { JobRunPublicData } from "@/lib/jobs/types";
 import { getProductionDeployConfig } from "@/lib/coolify/production";
 import { getJobPolicy } from "@/lib/jobs/policy";
@@ -364,6 +367,55 @@ export default async function WorkSessionPage({ params }: Props) {
 
   const tone = STATUS_TONE[session.status] ?? "bg-neutral-700/40 text-neutral-300";
 
+  const mvpFlow = computeMvpFlow({
+    project: {
+      id: session.project.id,
+      name: session.project.name,
+      productionUrl: session.project.productionUrl,
+    },
+    task: session.task
+      ? {
+          id: session.task.id,
+          title: session.task.title,
+          githubPrNumber: session.task.githubPrNumber,
+          githubPrUrl: session.task.githubPrUrl,
+          githubBranchName: session.task.githubBranchName,
+        }
+      : null,
+    workSession: {
+      id: session.id,
+      status: session.status,
+      summary: session.summary,
+      error: session.error,
+      requestedChanges: session.requestedChanges,
+      iterationNumber: session.iterationNumber,
+    },
+    preview: session.previewDeployments[0]
+      ? {
+          status: session.previewDeployments[0].status,
+          previewUrl: session.previewDeployments[0].previewUrl,
+          error: session.previewDeployments[0].error,
+        }
+      : null,
+    readiness: session.productionReadinessReviews[0]
+      ? {
+          status: session.productionReadinessReviews[0].status,
+          recommendation: session.productionReadinessReviews[0].recommendation,
+          summary: session.productionReadinessReviews[0].summary,
+        }
+      : null,
+    promotion: session.productionPromotions[0]
+      ? {
+          status: session.productionPromotions[0].status,
+          error: session.productionPromotions[0].error,
+          jobStatus: session.productionPromotions[0].jobRun?.status,
+          prNumber: session.productionPromotions[0].prNumber,
+          mergeCommitSha: session.productionPromotions[0].mergeCommitSha,
+        }
+      : null,
+    workerMode: runnerMode,
+  });
+
   return (
     <AppShell>
       <div className="flex flex-col gap-6">
@@ -389,6 +441,8 @@ export default async function WorkSessionPage({ params }: Props) {
             ← Back to project
           </Link>
         </div>
+
+        <MvpFlowPanel flow={mvpFlow} />
 
         {session.task ? (
           <div className="rounded-lg border border-border bg-surface px-4 py-3">
@@ -598,10 +652,7 @@ export default async function WorkSessionPage({ params }: Props) {
             </dl>
           </div>
 
-          <div className="rounded-xl border border-border bg-surface p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
-              Agent runs
-            </h2>
+          <AdvancedSection title="Agent runs · LLM usage">
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-text-dim">
               <span>LLM calls: {session.agentRuns.length}</span>
               <span>
@@ -655,7 +706,7 @@ export default async function WorkSessionPage({ params }: Props) {
                 ))
               )}
             </div>
-          </div>
+          </AdvancedSection>
         </div>
 
         {session.sessionChecks.length > 0 ? (
@@ -717,14 +768,11 @@ export default async function WorkSessionPage({ params }: Props) {
           </div>
         ) : null}
 
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
-            Activity
-          </h2>
+        <AdvancedSection title="Activity">
           <div className="mt-4">
             <ActivityTimeline activities={activity} />
           </div>
-        </div>
+        </AdvancedSection>
       </div>
     </AppShell>
   );
