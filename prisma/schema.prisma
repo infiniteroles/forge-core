@@ -54,6 +54,7 @@ model Project {
   previewDeployments   PreviewDeployment[]
   productionReadinessReviews ProductionReadinessReview[]
   productionPromotions ProductionPromotion[]
+  composerSessions         ComposerSession[]
 }
 
 model WorkSession {
@@ -383,4 +384,21 @@ model WorkerState {
   enabled     Boolean  @default(true)
   heartbeatAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model ComposerSession {
+  id        String   @id @default(cuid())
+  status    String   @default("discovering") // discovering|proposal|planning|building|preview|done|blocked
+  messages  Json     @default("[]")
+  spec      Json?
+  proposal  Json?
+  plan      Json?
+  projectId String?
+  logoUrl   String?
+  stylePref String?
+  palette   Json?
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 }

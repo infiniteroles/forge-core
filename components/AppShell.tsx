@@ -27,6 +27,12 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                 Dashboard
               </Link>
               <Link
+                href="/composer"
+                className="text-accent transition hover:text-neutral-100"
+              >
+                Composer
+              </Link>
+              <Link
                 href="/projects"
                 className="transition hover:text-neutral-100"
               >
