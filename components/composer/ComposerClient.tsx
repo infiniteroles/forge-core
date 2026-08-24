@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ComposerMessage,
@@ -18,6 +19,7 @@ type ChatResponse = {
   spec?: ComposerSpec | null;
   proposal?: ComposerProposal | null;
   plan?: ComposerPlan | null;
+  projectId?: string | null;
   messages?: ComposerMessage[];
 };
 
@@ -80,6 +82,7 @@ export function ComposerClient() {
   const [spec, setSpec] = useState<ComposerSpec | null>(null);
   const [proposal, setProposal] = useState<ComposerProposal | null>(null);
   const [plan, setPlan] = useState<ComposerPlan | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [logoName, setLogoName] = useState<string | null>(null);
@@ -99,6 +102,7 @@ export function ComposerClient() {
     if (res.spec) setSpec(res.spec);
     if (res.proposal) setProposal(res.proposal);
     if (res.plan) setPlan(res.plan);
+    if (res.projectId) setProjectId(res.projectId);
     setOptions(res.options ?? []);
   }, []);
 
@@ -375,9 +379,19 @@ export function ComposerClient() {
 
       {status === "building" ? (
         <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm text-emerald-200">
-          ✅ Plan aprobado. El desarrollo autónomo arrancará en la siguiente
-          iteración del Composer: repositorio, infraestructura y primer MVP
+          ✅ Plan aprobado. El desarrollo autónomo continuará desde el proyecto:
+          configuración de repositorio e infraestructura, y primer MVP
           previsualizable.
+          {projectId ? (
+            <div className="mt-3">
+              <Link
+                href={`/projects/${projectId}`}
+                className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90"
+              >
+                Abrir proyecto creado →
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

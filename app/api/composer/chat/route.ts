@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { runDiscoveryTurn } from "@/lib/composer/discovery";
 import { generateProposal } from "@/lib/composer/proposal";
 import { generatePlan } from "@/lib/composer/plan";
+import { createComposerProject } from "@/lib/composer/build";
 import type {
   ComposerMessage,
   ComposerMessageKind,
@@ -129,16 +130,33 @@ export async function POST(request: NextRequest) {
   let proposal: ComposerProposal | null =
     (session?.proposal as ComposerProposal | null) ?? null;
   let plan: ComposerPlan | null = (session?.plan as ComposerPlan | null) ?? null;
+  let projectId: string | null = session?.projectId ?? null;
   let reply = "";
   let kind: ComposerMessageKind = "text";
   let options: string[] | undefined;
   let messages: ComposerMessage[];
 
   if (prevStatus === "planning" && isAffirmative(message)) {
-    // Gate: plan approved → building.
+    // Gate: plan approved → building. Materialize the project.
     status = "building";
+    let createdProjectId: string | null = null;
+    let repoNote = "";
+    try {
+      if (spec && proposal) {
+        const built = await createComposerProject(spec, proposal, plan);
+        createdProjectId = built.projectId;
+        repoNote = built.repoFullName
+          ? ` He enlazado el repositorio ${built.repoFullName}.`
+          : "";
+      }
+    } catch (err) {
+      console.error("composer build failed:", err);
+    }
+    if (createdProjectId) projectId = createdProjectId;
     reply =
-      "✅ Plan aprobado. Pasamos a la fase de desarrollo autónomo: prepararé el repositorio, la infraestructura y construiré el MVP para que puedas previsualizarlo e iterar por chat.";
+      createdProjectId && spec
+        ? `✅ Plan aprobado y proyecto **${spec.name}** creado.${repoNote} El desarrollo autónomo continuará desde el proyecto: configuraré el repositorio, la infraestructura y construiré el primer MVP previsualizable para que iteres por chat.`
+        : "✅ Plan aprobado. Pasamos a la fase de desarrollo autónomo: prepararé el repositorio, la infraestructura y construiré el MVP para que puedas previsualizarlo e iterar por chat.";
     kind = "plan";
     messages = [...nextHistory, msg("assistant", "plan", reply)];
   } else if (prevStatus === "planning") {
@@ -201,6 +219,7 @@ export async function POST(request: NextRequest) {
       spec: toJson(spec) ?? toJson(session.spec),
       proposal: toJson(proposal) ?? toJson(session.proposal),
       plan: toJson(plan) ?? toJson(session.plan),
+      projectId: projectId ?? session.projectId,
       logoUrl: logo ? session.logoUrl ?? "uploaded" : session.logoUrl,
       palette: toJson(logo?.dominantColors ?? null) ?? toJson(session.palette),
     },
@@ -215,6 +234,7 @@ export async function POST(request: NextRequest) {
     spec,
     proposal,
     plan,
+    projectId,
     messages,
   });
 }
