@@ -112,7 +112,7 @@ export async function runDiscoveryTurn(
   if (kind === "spec") {
     const candidate = parsed?.spec as ComposerSpec | undefined;
     if (specLooksComplete(candidate)) {
-      spec = candidate;
+      spec = candidate ?? null;
       status = "proposal";
     } else {
       // Incomplete spec → keep asking.

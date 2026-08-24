@@ -147,19 +147,18 @@ export async function POST(request: NextRequest) {
       data: { status: "discovering", messages: [] as unknown as Prisma.InputJsonValue },
     }));
 
+  const toJson = (v: unknown): Prisma.InputJsonValue | undefined =>
+    v == null ? undefined : (v as unknown as Prisma.InputJsonValue);
+
   await prisma.composerSession.update({
     where: { id: session.id },
     data: {
       status,
       messages: messages as unknown as Prisma.InputJsonValue,
-      spec: spec ? (spec as unknown as Prisma.InputJsonValue) : session.spec,
-      proposal: proposal
-        ? (proposal as unknown as Prisma.InputJsonValue)
-        : session.proposal,
+      spec: toJson(spec) ?? toJson(session.spec),
+      proposal: toJson(proposal) ?? toJson(session.proposal),
       logoUrl: logo ? session.logoUrl ?? "uploaded" : session.logoUrl,
-      palette: logo
-        ? ((logo.dominantColors ?? []) as unknown as Prisma.InputJsonValue)
-        : session.palette,
+      palette: toJson(logo?.dominantColors ?? null) ?? toJson(session.palette),
     },
   });
 
