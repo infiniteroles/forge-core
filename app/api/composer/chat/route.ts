@@ -37,6 +37,21 @@ function asMessages(v: unknown): ComposerMessage[] {
   );
 }
 
+/** Retry once on empty LLM responses (DeepSeek hiccups) before giving up. */
+async function withLlmRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err as { code?: string }).code === "empty_response"
+    ) {
+      return await fn();
+    }
+    throw err;
+  }
+}
+
 export async function GET(request: NextRequest) {
   if (!(await getSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -137,6 +152,7 @@ export async function POST(request: NextRequest) {
   let options: string[] | undefined;
   let messages: ComposerMessage[];
 
+  try {
   if (prevStatus === "planning" && isAffirmative(message)) {
     // Gate: plan approved → building. Materialize the project.
     status = "building";
@@ -169,40 +185,46 @@ export async function POST(request: NextRequest) {
     messages = [...nextHistory, msg("assistant", "plan", reply)];
   } else if (prevStatus === "planning") {
     // Feedback → regenerate the plan incorporating it.
-    plan = await generatePlan(
-      spec ?? { name: "App", purpose: "", auth: "none", uiLibrary: "shadcn" },
-      proposal ?? {
-        summary: "",
-        stack: {
-          frontend: "Next.js",
-          backend: "Next.js",
-          database: "PostgreSQL",
-          auth: "Ninguno",
-          hosting: "Coolify",
+    plan = await withLlmRetry(() =>
+      generatePlan(
+        spec ?? { name: "App", purpose: "", auth: "none", uiLibrary: "shadcn" },
+        proposal ?? {
+          summary: "",
+          stack: {
+            frontend: "Next.js",
+            backend: "Next.js",
+            database: "PostgreSQL",
+            auth: "Ninguno",
+            hosting: "Coolify",
+          },
         },
-      },
-      message
+        message
+      )
     );
     reply = formatPlan(plan, true);
     kind = "plan";
     messages = [...nextHistory, msg("assistant", "plan", reply)];
   } else if (prevStatus === "proposal" && isAffirmative(message) && spec) {
     // Gate: proposal confirmed → planning (generate the plan).
-    plan = await generatePlan(spec, proposal ?? fallbackProposal());
+    plan = await withLlmRetry(() =>
+      generatePlan(spec, proposal ?? fallbackProposal())
+    );
     status = "planning";
     reply = formatPlan(plan);
     kind = "plan";
     messages = [...nextHistory, msg("assistant", "plan", reply)];
   } else {
     // Discovery turn (or proposal iteration).
-    const turn = await runDiscoveryTurn(history, latestUserText);
+    const turn = await withLlmRetry(() =>
+      runDiscoveryTurn(history, latestUserText)
+    );
     reply = turn.reply;
     kind = turn.kind;
     options = turn.options;
     messages = [...nextHistory, msg("assistant", turn.kind, turn.reply)];
     if (turn.spec) {
       spec = turn.spec;
-      proposal = await generateProposal(turn.spec);
+      proposal = await withLlmRetry(() => generateProposal(turn.spec));
       status = "proposal";
       messages.push(msg("assistant", "proposal", formatProposal(proposal)));
     } else {
@@ -246,6 +268,17 @@ export async function POST(request: NextRequest) {
     workSessionId,
     messages,
   });
+  } catch (err) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Error desconocido";
+    console.error("composer chat error:", err);
+    return NextResponse.json(
+      {
+        error: `El proveedor LLM devolvió una respuesta inválida (${errorMessage}). Inténtalo de nuevo en unos segundos.`,
+      },
+      { status: 502 }
+    );
+  }
 }
 
 function fallbackProposal(): ComposerProposal {
