@@ -50,6 +50,14 @@ export type ComposerProposal = {
   openQuestions?: string[];
 };
 
+export type ComposerPlan = {
+  summary: string;
+  phases: string[];
+  tasks: { title: string; description: string; kind: string }[];
+  testStrategy: string;
+  risks?: string[];
+};
+
 export type ComposerStatus =
   | "discovering"
   | "proposal"

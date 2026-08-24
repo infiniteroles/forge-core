@@ -4,11 +4,13 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { runDiscoveryTurn } from "@/lib/composer/discovery";
 import { generateProposal } from "@/lib/composer/proposal";
+import { generatePlan } from "@/lib/composer/plan";
 import type {
   ComposerMessage,
   ComposerMessageKind,
   ComposerSpec,
   ComposerProposal,
+  ComposerPlan,
   ComposerStatus,
 } from "@/lib/composer/types";
 
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
     messages: asMessages(session.messages),
     spec: (session.spec as ComposerSpec | null) ?? null,
     proposal: (session.proposal as ComposerProposal | null) ?? null,
+    plan: (session.plan as ComposerPlan | null) ?? null,
     logoUrl: session.logoUrl,
     stylePref: session.stylePref,
   });
@@ -89,14 +92,18 @@ export async function POST(request: NextRequest) {
   }
 
   const history = session ? asMessages(session.messages) : [];
-  const startedFromProposal = session?.status === "proposal";
-  if (session && !["discovering", "proposal"].includes(session.status)) {
+  const prevStatus: ComposerStatus =
+    (session?.status as ComposerStatus) ?? "discovering";
+  if (
+    session &&
+    !["discovering", "proposal", "planning"].includes(session.status)
+  ) {
     return NextResponse.json(
       {
         error:
           "La sesión ya está en fase " +
           session.status +
-          ". Crea una nueva o continúa desde el flujo de propuesta.",
+          ". Crea una nueva.",
       },
       { status: 409 }
     );
@@ -111,34 +118,70 @@ export async function POST(request: NextRequest) {
     : message;
   const nextHistory = [...history, userMsg].slice(-24);
 
-  const turn = await runDiscoveryTurn(history, latestUserText);
-  const assistantMsg = msg("assistant", turn.kind, turn.reply);
-  const messages = [...nextHistory, assistantMsg];
-
-  let spec: ComposerSpec | null = turn.spec ?? null;
-  let proposal: ComposerProposal | null = null;
-  let status: ComposerStatus = startedFromProposal ? "proposal" : turn.status;
-
-  if (turn.spec) {
-    proposal = await generateProposal(turn.spec);
-    status = "proposal";
-    // Add a proposal assistant message for visibility in the thread.
-    messages.push(
-      msg(
-        "assistant",
-        "proposal",
-        `✅ Propuesta inicial lista:\n\n${proposal.summary}\n\n` +
-          `**Frontend**: ${proposal.stack.frontend}\n` +
-          `**Backend**: ${proposal.stack.backend}\n` +
-          `**Base de datos**: ${proposal.stack.database}\n` +
-          `**Auth**: ${proposal.stack.auth}\n` +
-          `**Hosting**: ${proposal.stack.hosting}\n\n` +
-          (proposal.openQuestions?.length
-            ? `Antes de seguir: ${proposal.openQuestions.join("; ")}\n\n`
-            : "") +
-          `¿Confirmas la propuesta, o quieres ajustar algo?`
-      )
+  const isAffirmative = (m: string) =>
+    /(confirmo|confirmar|apruebo|aprobar|acepto|de acuerdo|perfecto|dale|adelante|vamos|ok|sí|si\b)/i.test(
+      m
     );
+
+  let status: ComposerStatus = prevStatus;
+  let spec: ComposerSpec | null =
+    (session?.spec as ComposerSpec | null) ?? null;
+  let proposal: ComposerProposal | null =
+    (session?.proposal as ComposerProposal | null) ?? null;
+  let plan: ComposerPlan | null = (session?.plan as ComposerPlan | null) ?? null;
+  let reply = "";
+  let kind: ComposerMessageKind = "text";
+  let options: string[] | undefined;
+  let messages: ComposerMessage[];
+
+  if (prevStatus === "planning" && isAffirmative(message)) {
+    // Gate: plan approved → building.
+    status = "building";
+    reply =
+      "✅ Plan aprobado. Pasamos a la fase de desarrollo autónomo: prepararé el repositorio, la infraestructura y construiré el MVP para que puedas previsualizarlo e iterar por chat.";
+    kind = "plan";
+    messages = [...nextHistory, msg("assistant", "plan", reply)];
+  } else if (prevStatus === "planning") {
+    // Feedback → regenerate the plan incorporating it.
+    plan = await generatePlan(
+      spec ?? { name: "App", purpose: "", auth: "none", uiLibrary: "shadcn" },
+      proposal ?? {
+        summary: "",
+        stack: {
+          frontend: "Next.js",
+          backend: "Next.js",
+          database: "PostgreSQL",
+          auth: "Ninguno",
+          hosting: "Coolify",
+        },
+      },
+      message
+    );
+    reply = formatPlan(plan, true);
+    kind = "plan";
+    messages = [...nextHistory, msg("assistant", "plan", reply)];
+  } else if (prevStatus === "proposal" && isAffirmative(message) && spec) {
+    // Gate: proposal confirmed → planning (generate the plan).
+    plan = await generatePlan(spec, proposal ?? fallbackProposal());
+    status = "planning";
+    reply = formatPlan(plan);
+    kind = "plan";
+    messages = [...nextHistory, msg("assistant", "plan", reply)];
+  } else {
+    // Discovery turn (or proposal iteration).
+    const turn = await runDiscoveryTurn(history, latestUserText);
+    reply = turn.reply;
+    kind = turn.kind;
+    options = turn.options;
+    messages = [...nextHistory, msg("assistant", turn.kind, turn.reply)];
+    if (turn.spec) {
+      spec = turn.spec;
+      proposal = await generateProposal(turn.spec);
+      status = "proposal";
+      messages.push(msg("assistant", "proposal", formatProposal(proposal)));
+    } else {
+      status = prevStatus === "proposal" ? "proposal" : "discovering";
+    }
   }
 
   session =
@@ -157,6 +200,7 @@ export async function POST(request: NextRequest) {
       messages: messages as unknown as Prisma.InputJsonValue,
       spec: toJson(spec) ?? toJson(session.spec),
       proposal: toJson(proposal) ?? toJson(session.proposal),
+      plan: toJson(plan) ?? toJson(session.plan),
       logoUrl: logo ? session.logoUrl ?? "uploaded" : session.logoUrl,
       palette: toJson(logo?.dominantColors ?? null) ?? toJson(session.palette),
     },
@@ -165,11 +209,57 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     id: session.id,
     status,
-    reply: turn.reply,
-    kind: turn.kind,
-    options: turn.options,
+    reply,
+    kind,
+    options,
     spec,
     proposal,
+    plan,
     messages,
   });
+}
+
+function fallbackProposal(): ComposerProposal {
+  return {
+    summary: "",
+    stack: {
+      frontend: "Next.js",
+      backend: "Next.js",
+      database: "PostgreSQL",
+      auth: "Ninguno",
+      hosting: "Coolify",
+    },
+  };
+}
+
+function formatProposal(proposal: ComposerProposal): string {
+  return (
+    `✅ Propuesta inicial lista:\n\n${proposal.summary}\n\n` +
+    `**Frontend**: ${proposal.stack.frontend}\n` +
+    `**Backend**: ${proposal.stack.backend}\n` +
+    `**Base de datos**: ${proposal.stack.database}\n` +
+    `**Auth**: ${proposal.stack.auth}\n` +
+    `**Hosting**: ${proposal.stack.hosting}\n\n` +
+    (proposal.openQuestions?.length
+      ? `Antes de seguir: ${proposal.openQuestions.join("; ")}\n\n`
+      : "") +
+    `¿Confirmas la propuesta, o quieres ajustar algo?`
+  );
+}
+
+function formatPlan(plan: ComposerPlan, withFeedback = false): string {
+  const tasks = plan.tasks
+    .map((t, i) => `${i + 1}. ${t.title} — ${t.description}`)
+    .join("\n");
+  return (
+    (withFeedback
+      ? "🔄 He ajustado el plan con tu feedback.\n\n"
+      : "✅ Plan de desarrollo y pruebas listo:\n\n") +
+    `${plan.summary}\n\n` +
+    `**Fases**: ${plan.phases.join(" · ")}\n\n` +
+    `**Tareas**:\n${tasks}\n\n` +
+    `**Estrategia de pruebas**: ${plan.testStrategy}\n` +
+    (plan.risks?.length ? `\n**Riesgos**: ${plan.risks.join("; ")}\n` : "") +
+    `\n¿Apruebas el plan para empezar a construir, o quieres ajustar algo?`
+  );
 }

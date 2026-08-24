@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ComposerMessage,
+  ComposerPlan,
   ComposerProposal,
   ComposerSpec,
   ComposerStatus,
@@ -16,6 +17,7 @@ type ChatResponse = {
   options?: string[];
   spec?: ComposerSpec | null;
   proposal?: ComposerProposal | null;
+  plan?: ComposerPlan | null;
   messages?: ComposerMessage[];
 };
 
@@ -77,10 +79,10 @@ export function ComposerClient() {
   const [status, setStatus] = useState<ComposerStatus>("discovering");
   const [spec, setSpec] = useState<ComposerSpec | null>(null);
   const [proposal, setProposal] = useState<ComposerProposal | null>(null);
+  const [plan, setPlan] = useState<ComposerPlan | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [logoName, setLogoName] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
   const [options, setOptions] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -96,6 +98,7 @@ export function ComposerClient() {
     if (res.messages) setMessages(res.messages);
     if (res.spec) setSpec(res.spec);
     if (res.proposal) setProposal(res.proposal);
+    if (res.plan) setPlan(res.plan);
     setOptions(res.options ?? []);
   }, []);
 
@@ -164,7 +167,6 @@ export function ComposerClient() {
   );
 
   const confirmProposal = useCallback(async () => {
-    setConfirmed(true);
     await post({
       sessionId,
       message:
@@ -172,7 +174,15 @@ export function ComposerClient() {
     });
   }, [sessionId, post]);
 
-  const isBlocked = status !== "discovering" && status !== "proposal";
+  const approvePlan = useCallback(async () => {
+    await post({
+      sessionId,
+      message: "Apruebo el plan. Empezad a construir el MVP.",
+    });
+  }, [sessionId, post]);
+
+  const isBlocked =
+    status !== "discovering" && status !== "proposal" && status !== "planning";
   const step = stepIndex(status);
 
   return (
@@ -266,7 +276,7 @@ export function ComposerClient() {
       ) : null}
 
       {/* Proposal card */}
-      {proposal && !confirmed ? (
+      {proposal && !plan && status === "proposal" ? (
         <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-neutral-100">
@@ -312,10 +322,62 @@ export function ComposerClient() {
         </div>
       ) : null}
 
-      {confirmed ? (
-        <div className="mt-4 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4 text-sm text-sky-200">
-          ✅ Propuesta confirmada. El siguiente paso es generar el plan de
-          desarrollo y pruebas (llegará en la siguiente iteración del Composer).
+      {/* Plan card */}
+      {plan && status === "planning" ? (
+        <div className="mt-4 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-neutral-100">
+              Plan de desarrollo y pruebas
+            </h3>
+            <button
+              onClick={approvePlan}
+              disabled={loading}
+              className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+            >
+              Aprobar plan y construir
+            </button>
+          </div>
+          <p className="mt-2 text-sm text-neutral-300">{plan.summary}</p>
+          <p className="mt-3 text-xs uppercase tracking-wide text-text-dim">
+            Fases
+          </p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {plan.phases.map((ph) => (
+              <span
+                key={ph}
+                className="rounded-full bg-neutral-800/70 px-2 py-0.5 text-[11px] text-neutral-300"
+              >
+                {ph}
+              </span>
+            ))}
+          </div>
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-neutral-300">
+            {plan.tasks.map((t) => (
+              <li key={t.title}>
+                <span className="text-neutral-100">{t.title}</span>
+                {t.description ? (
+                  <span className="text-text-dim"> — {t.description}</span>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-3 text-xs text-text-dim">
+            <span className="font-medium text-neutral-300">Pruebas:</span>{" "}
+            {plan.testStrategy}
+          </p>
+          {plan.risks?.length ? (
+            <p className="mt-2 text-xs text-amber-300">
+              Riesgos: {plan.risks.join("; ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {status === "building" ? (
+        <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm text-emerald-200">
+          ✅ Plan aprobado. El desarrollo autónomo arrancará en la siguiente
+          iteración del Composer: repositorio, infraestructura y primer MVP
+          previsualizable.
         </div>
       ) : null}
 
