@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
     status,
     reply: turn.reply,
     kind: turn.kind,
+    options: turn.options,
     spec,
     proposal,
     messages,

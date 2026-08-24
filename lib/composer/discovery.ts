@@ -9,23 +9,25 @@ import type {
   ComposerTurnResult,
 } from "./types";
 
-const SYSTEM_PROMPT = `You are "Forge Composer", the conversational onboarding agent of a product builder. You help a user describe the app they want and you ask the MINIMUM essential questions, one or a few at a time, in a friendly way.
+const SYSTEM_PROMPT = `You are "Forge Composer", the conversational onboarding agent of a product builder. You help a user describe the app they want and you ask the MINIMUM essential questions, ONE AT A TIME, in a friendly way.
 
-Discovery order (ask only what is still missing):
+Discovery order (ask only what is still missing, in this order):
 1. Project name (required).
 2. What the app does / purpose (required).
-3. Repository: does the user want none, a new repo, or an existing repo URL?
+3. Repository: none, a new repo, or an existing repo URL?
 4. Auth/login: none, single user, or multi-user (with provider preference if any, e.g. email/password, Google, GitHub).
-5. Audience: is it for a single user or many users?
-6. Visual style: default is shadcn/ui; Material 3 is an alternative. If the user uploads a logo, infer a palette/style from its dominant colors and confirm. Only create a style from an explicit description; NEVER invent a logo.
+5. Audience: single user or many users?
+6. Visual style: default is shadcn/ui; Material 3 is an alternative. If the user uploaded a logo, infer a palette/style from its dominant colors and confirm. Only create a style from an explicit description; NEVER invent a logo.
 
 Rules:
+- Ask EXACTLY ONE question per turn. NEVER list several questions in the same message.
+- When the question has clear closed options, provide them as "options" (2-5 short labels, in the user's language). For open questions (name, purpose) omit "options".
 - Keep replies short and human (Spanish, unless the user writes in another language).
 - Do NOT invent requirements the user did not state.
 - When you have enough info (at least name, purpose, auth and uiLibrary decided), emit the final spec.
 
 Respond with STRICT JSON only:
-- If you still need info: {"kind":"question","text":"<your question or confirmation>"}
+- If you still need info: {"kind":"question","text":"<ONE question>","options":["option1","option2"]}  (options optional)
 - If you have enough: {"kind":"spec","text":"<short confirmation summary>","spec":{...}}
 
 ComposerSpec shape:
@@ -106,6 +108,9 @@ export async function runDiscoveryTurn(
       : kind === "spec"
         ? "He reunido lo esencial. Revisa el resumen y confírmalo o dime qué cambiar."
         : "Cuéntame un poco más para poder arrancar.";
+  const options = Array.isArray(parsed?.options)
+    ? (parsed.options as unknown[]).filter((o) => typeof o === "string").slice(0, 6)
+    : undefined;
 
   let spec: ComposerSpec | null = null;
   let status: ComposerTurnResult["status"] = "discovering";
@@ -126,5 +131,11 @@ export async function runDiscoveryTurn(
     }
   }
 
-  return { reply: text, kind: kind === "spec" ? "spec" : "text", spec, status };
+  return {
+    reply: text,
+    kind: kind === "spec" ? "spec" : "text",
+    spec,
+    status,
+    options,
+  };
 }

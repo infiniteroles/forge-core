@@ -64,4 +64,6 @@ export type ComposerTurnResult = {
   kind: ComposerMessageKind;
   spec?: ComposerSpec | null;
   status: ComposerStatus;
+  /** Clickable options for closed questions (optional). */
+  options?: string[];
 };

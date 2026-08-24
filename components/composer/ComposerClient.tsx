@@ -13,6 +13,7 @@ type ChatResponse = {
   status: ComposerStatus;
   reply: string;
   kind: string;
+  options?: string[];
   spec?: ComposerSpec | null;
   proposal?: ComposerProposal | null;
   messages?: ComposerMessage[];
@@ -80,6 +81,7 @@ export function ComposerClient() {
   const [loading, setLoading] = useState(false);
   const [logoName, setLogoName] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [options, setOptions] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
@@ -94,6 +96,7 @@ export function ComposerClient() {
     if (res.messages) setMessages(res.messages);
     if (res.spec) setSpec(res.spec);
     if (res.proposal) setProposal(res.proposal);
+    setOptions(res.options ?? []);
   }, []);
 
   const post = useCallback(
@@ -148,6 +151,14 @@ export function ComposerClient() {
         message: "",
         logo: { hasLogo: true, dominantColors: colors },
       });
+    },
+    [sessionId, post]
+  );
+
+  const pickOption = useCallback(
+    async (option: string) => {
+      setOptions([]);
+      await post({ sessionId, message: option });
     },
     [sessionId, post]
   );
@@ -237,6 +248,22 @@ export function ComposerClient() {
         ) : null}
         <div ref={bottomRef} />
       </div>
+
+      {/* Clickable options for closed questions */}
+      {options.length > 0 && !loading ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => void pickOption(opt)}
+              disabled={loading}
+              className="rounded-full border border-accent/40 bg-accent/10 px-3.5 py-1.5 text-sm text-neutral-100 transition hover:bg-accent/20 disabled:opacity-50"
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {/* Proposal card */}
       {proposal && !confirmed ? (
