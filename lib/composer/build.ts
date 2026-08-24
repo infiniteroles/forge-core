@@ -1,9 +1,13 @@
 // Fase 6.0 — Chat Composer: materialize the approved plan into a real project.
-// Creates a Forge Project (from the spec) + a build task (from the plan), and
-// links the repository when the spec provides one. The autonomous build then
-// continues from the project via the existing WorkSession machinery.
+// Creates a Forge Project (from the spec) + a build task (from the plan), links
+// the repository (existing URL or creates a new one via the GitHub API), and
+// kicks off the autonomous build (WorkSession) in the background.
 
 import { prisma } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
+import { runDevWorkSession } from "@/lib/work-sessions/orchestrator";
+import { isGithubConfigured } from "@/lib/github/client";
+import { createRepository } from "@/lib/github/create-repository";
 import type { ComposerPlan, ComposerProposal, ComposerSpec } from "./types";
 
 function slugify(name: string): string {
@@ -28,7 +32,12 @@ export async function createComposerProject(
   spec: ComposerSpec,
   proposal: ComposerProposal,
   plan: ComposerPlan | null
-): Promise<{ projectId: string; taskId: string; repoFullName: string | null }> {
+): Promise<{
+  projectId: string;
+  taskId: string;
+  repoFullName: string | null;
+  workSessionId: string | null;
+}> {
   const baseSlug = slugify(spec.name);
   let slug = baseSlug;
   let n = 2;
@@ -42,6 +51,21 @@ export async function createComposerProject(
     const parsed = repoFromUrl(spec.repo);
     repoUrl = parsed.repoUrl;
     repoFullName = parsed.fullName;
+  }
+
+  // Create a brand-new repository when the spec asks for one.
+  if (spec.repo === "new" && !repoFullName && isGithubConfigured()) {
+    try {
+      const created = await createRepository({
+        name: slug,
+        description: spec.purpose,
+        visibility: "private",
+      });
+      repoFullName = created.fullName;
+      repoUrl = created.htmlUrl;
+    } catch (err) {
+      console.error("composer repo creation failed:", err);
+    }
   }
 
   const stack = proposal.stack;
@@ -79,5 +103,44 @@ export async function createComposerProject(
     },
   });
 
-  return { projectId: project.id, taskId: task.id, repoFullName };
+  await logActivity({
+    projectId: project.id,
+    type: "composer.project_created",
+    message: `Composer creó el proyecto ${spec.name} con tarea MVP inicial`,
+    metadata: { taskId: task.id, repoFullName },
+  });
+
+  // Kick off the autonomous build in the background when a repo is linked.
+  let workSessionId: string | null = null;
+  if (repoFullName) {
+    const objective =
+      `Construir el MVP de ${spec.name}: ${spec.purpose}. ` +
+      (plan ? `Plan: ${plan.summary} ` : "") +
+      (plan ? `Fases: ${plan.phases.join(", ")}.` : "");
+    try {
+      const ws = await prisma.workSession.create({
+        data: {
+          projectId: project.id,
+          taskId: task.id,
+          mode: "dev",
+          status: "queued",
+          objective,
+        },
+      });
+      workSessionId = ws.id;
+      await logActivity({
+        projectId: project.id,
+        type: "work_session.started",
+        message: `Build autónomo iniciado desde el Composer: ${objective.slice(0, 120)}`,
+        metadata: { workSessionId: ws.id, taskId: task.id, mode: "dev" },
+      });
+      void runDevWorkSession(ws.id).catch((err) => {
+        console.error("composer autonomous build failed:", err);
+      });
+    } catch (err) {
+      console.error("composer work session kickoff failed:", err);
+    }
+  }
+
+  return { projectId: project.id, taskId: task.id, repoFullName, workSessionId };
 }

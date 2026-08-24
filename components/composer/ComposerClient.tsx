@@ -20,6 +20,7 @@ type ChatResponse = {
   proposal?: ComposerProposal | null;
   plan?: ComposerPlan | null;
   projectId?: string | null;
+  workSessionId?: string | null;
   messages?: ComposerMessage[];
 };
 
@@ -83,6 +84,7 @@ export function ComposerClient() {
   const [proposal, setProposal] = useState<ComposerProposal | null>(null);
   const [plan, setPlan] = useState<ComposerPlan | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [workSessionId, setWorkSessionId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [logoName, setLogoName] = useState<string | null>(null);
@@ -103,6 +105,7 @@ export function ComposerClient() {
     if (res.proposal) setProposal(res.proposal);
     if (res.plan) setPlan(res.plan);
     if (res.projectId) setProjectId(res.projectId);
+    if (res.workSessionId) setWorkSessionId(res.workSessionId);
     setOptions(res.options ?? []);
   }, []);
 
@@ -382,16 +385,24 @@ export function ComposerClient() {
           ✅ Plan aprobado. El desarrollo autónomo continuará desde el proyecto:
           configuración de repositorio e infraestructura, y primer MVP
           previsualizable.
-          {projectId ? (
-            <div className="mt-3">
+          <div className="mt-3 flex flex-wrap gap-2">
+            {projectId ? (
               <Link
                 href={`/projects/${projectId}`}
                 className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90"
               >
                 Abrir proyecto creado →
               </Link>
-            </div>
-          ) : null}
+            ) : null}
+            {workSessionId ? (
+              <Link
+                href={`/work-sessions/${workSessionId}`}
+                className="rounded-md border border-emerald-500/40 px-4 py-1.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
+              >
+                Ver build autónomo en curso →
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

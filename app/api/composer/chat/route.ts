@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
     (session?.proposal as ComposerProposal | null) ?? null;
   let plan: ComposerPlan | null = (session?.plan as ComposerPlan | null) ?? null;
   let projectId: string | null = session?.projectId ?? null;
+  let workSessionId: string | null = null;
   let reply = "";
   let kind: ComposerMessageKind = "text";
   let options: string[] | undefined;
@@ -140,22 +141,29 @@ export async function POST(request: NextRequest) {
     // Gate: plan approved → building. Materialize the project.
     status = "building";
     let createdProjectId: string | null = null;
+    let createdWorkSessionId: string | null = null;
     let repoNote = "";
     try {
       if (spec && proposal) {
         const built = await createComposerProject(spec, proposal, plan);
         createdProjectId = built.projectId;
+        createdWorkSessionId = built.workSessionId;
         repoNote = built.repoFullName
-          ? ` He enlazado el repositorio ${built.repoFullName}.`
+          ? ` He configurado el repositorio ${built.repoFullName}.`
           : "";
       }
     } catch (err) {
       console.error("composer build failed:", err);
     }
     if (createdProjectId) projectId = createdProjectId;
+    if (createdWorkSessionId) workSessionId = createdWorkSessionId;
     reply =
       createdProjectId && spec
-        ? `✅ Plan aprobado y proyecto **${spec.name}** creado.${repoNote} El desarrollo autónomo continuará desde el proyecto: configuraré el repositorio, la infraestructura y construiré el primer MVP previsualizable para que iteres por chat.`
+        ? `✅ Plan aprobado y proyecto **${spec.name}** creado.${repoNote}${
+            createdWorkSessionId
+              ? " El build autónomo ya está en marcha."
+              : ""
+          } Prepararé la infraestructura y construiré el primer MVP previsualizable para que iteres por chat.`
         : "✅ Plan aprobado. Pasamos a la fase de desarrollo autónomo: prepararé el repositorio, la infraestructura y construiré el MVP para que puedas previsualizarlo e iterar por chat.";
     kind = "plan";
     messages = [...nextHistory, msg("assistant", "plan", reply)];
@@ -235,6 +243,7 @@ export async function POST(request: NextRequest) {
     proposal,
     plan,
     projectId,
+    workSessionId,
     messages,
   });
 }
