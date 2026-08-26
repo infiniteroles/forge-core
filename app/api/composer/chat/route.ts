@@ -206,8 +206,9 @@ export async function POST(request: NextRequest) {
     messages = [...nextHistory, msg("assistant", "plan", reply)];
   } else if (prevStatus === "proposal" && isAffirmative(message) && spec) {
     // Gate: proposal confirmed → planning (generate the plan).
+    const confirmedSpec: ComposerSpec = spec;
     plan = await withLlmRetry(() =>
-      generatePlan(spec, proposal ?? fallbackProposal())
+      generatePlan(confirmedSpec, proposal ?? fallbackProposal())
     );
     status = "planning";
     reply = formatPlan(plan);
@@ -223,8 +224,9 @@ export async function POST(request: NextRequest) {
     options = turn.options;
     messages = [...nextHistory, msg("assistant", turn.kind, turn.reply)];
     if (turn.spec) {
-      spec = turn.spec;
-      proposal = await withLlmRetry(() => generateProposal(turn.spec));
+      const freshSpec: ComposerSpec = turn.spec;
+      spec = freshSpec;
+      proposal = await withLlmRetry(() => generateProposal(freshSpec));
       status = "proposal";
       messages.push(msg("assistant", "proposal", formatProposal(proposal)));
     } else {
