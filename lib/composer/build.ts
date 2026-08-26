@@ -5,7 +5,10 @@
 
 import { prisma } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
-import { runDevWorkSession } from "@/lib/work-sessions/orchestrator";
+import {
+  runDevWorkSession,
+  runIterationWorkSession,
+} from "@/lib/work-sessions/orchestrator";
 import { isGithubConfigured } from "@/lib/github/client";
 import { createRepository } from "@/lib/github/create-repository";
 import type { ComposerPlan, ComposerProposal, ComposerSpec } from "./types";
@@ -143,4 +146,62 @@ export async function createComposerProject(
   }
 
   return { projectId: project.id, taskId: task.id, repoFullName, workSessionId };
+}
+
+/**
+ * Fase 6.5 — iterate by chat. Treats a chat message on an already-building
+ * project as a change request: creates a new iteration WorkSession (reusing
+ * the task/branch/PR) and runs it in the background so the preview regenerates.
+ */
+export async function startComposerIteration(
+  projectId: string,
+  changeRequest: string
+): Promise<{ workSessionId: string | null; error?: string }> {
+  const task = await prisma.task.findFirst({
+    where: { projectId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+  if (!task) {
+    return {
+      workSessionId: null,
+      error: "El proyecto no tiene ninguna tarea de build para iterar.",
+    };
+  }
+
+  const lastSession = await prisma.workSession.findFirst({
+    where: { taskId: task.id },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const iterationNumber = (lastSession?.iterationNumber ?? 0) + 1;
+  const ws = await prisma.workSession.create({
+    data: {
+      projectId,
+      taskId: task.id,
+      mode: "iteration",
+      status: "queued",
+      objective: changeRequest,
+      requestedChanges: changeRequest,
+      parentWorkSessionId: lastSession?.id ?? null,
+      iterationNumber,
+    },
+  });
+
+  await logActivity({
+    projectId,
+    type: "work_session.iteration_started",
+    message: `Iteración desde el Composer: ${changeRequest.slice(0, 120)}`,
+    metadata: {
+      workSessionId: ws.id,
+      taskId: task.id,
+      iterationNumber,
+      mode: "iteration",
+    },
+  });
+
+  void runIterationWorkSession(ws.id).catch((err) => {
+    console.error("composer iteration failed:", err);
+  });
+
+  return { workSessionId: ws.id };
 }

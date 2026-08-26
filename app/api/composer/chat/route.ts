@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth";
 import { runDiscoveryTurn } from "@/lib/composer/discovery";
 import { generateProposal } from "@/lib/composer/proposal";
 import { generatePlan } from "@/lib/composer/plan";
-import { createComposerProject } from "@/lib/composer/build";
+import { createComposerProject, startComposerIteration } from "@/lib/composer/build";
 import type {
   ComposerMessage,
   ComposerMessageKind,
@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
     spec: (session.spec as ComposerSpec | null) ?? null,
     proposal: (session.proposal as ComposerProposal | null) ?? null,
     plan: (session.plan as ComposerPlan | null) ?? null,
+    projectId: session.projectId,
     logoUrl: session.logoUrl,
     stylePref: session.stylePref,
   });
@@ -112,7 +113,14 @@ export async function POST(request: NextRequest) {
     (session?.status as ComposerStatus) ?? "discovering";
   if (
     session &&
-    !["discovering", "proposal", "planning"].includes(session.status)
+    ![
+      "discovering",
+      "proposal",
+      "planning",
+      "building",
+      "preview",
+      "done",
+    ].includes(session.status)
   ) {
     return NextResponse.json(
       {
@@ -153,7 +161,35 @@ export async function POST(request: NextRequest) {
   let messages: ComposerMessage[];
 
   try {
-  if (prevStatus === "planning" && isAffirmative(message)) {
+  // Fase 6.5 — iterate by chat: on an already-building project, a chat message
+  // is a change request that triggers a new iteration (preview regenerates).
+  if (prevStatus !== "discovering" && prevStatus !== "proposal" && prevStatus !== "planning") {
+    if (!message) {
+      return NextResponse.json(
+        { error: "Escribe qué quieres cambiar para lanzar la iteración." },
+        { status: 400 }
+      );
+    }
+    if (!projectId) {
+      return NextResponse.json(
+        { error: "La sesión no tiene proyecto vinculado para iterar." },
+        { status: 409 }
+      );
+    }
+    const iterated = await startComposerIteration(projectId, message);
+    if (iterated.workSessionId) {
+      workSessionId = iterated.workSessionId;
+      reply =
+        `✅ He lanzado una iteración para: "${message.slice(0, 200)}". ` +
+        `Verás el resultado en el preview de la derecha cuando Forge termine (${workSessionId}).`;
+      kind = "text";
+      messages = [...nextHistory, msg("assistant", "text", reply)];
+    } else {
+      reply = `⚠️ No pude lanzar la iteración: ${iterated.error ?? "error desconocido"}.`;
+      kind = "system";
+      messages = [...nextHistory, msg("assistant", "system", reply)];
+    }
+  } else if (prevStatus === "planning" && isAffirmative(message)) {
     // Gate: plan approved → building. Materialize the project.
     status = "building";
     let createdProjectId: string | null = null;

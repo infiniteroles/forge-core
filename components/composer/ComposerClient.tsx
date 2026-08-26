@@ -222,11 +222,16 @@ export function ComposerClient() {
     });
   }, [sessionId, post]);
 
-  const isBlocked =
-    status !== "discovering" && status !== "proposal" && status !== "planning";
+  const isBlocked = false; // the chat stays usable: in building/preview it triggers iterations
   const step = stepIndex(status);
   const inWorkspace =
     ["building", "preview", "done"].includes(status) || !!preview;
+  const inputPlaceholder =
+    loading
+      ? "…"
+      : ["building", "preview", "done"].includes(status)
+        ? "Pide un cambio… (Enter para enviar)"
+        : "Describe tu aplicación… (Enter para enviar)";
 
   const previewPane = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
@@ -386,11 +391,7 @@ export function ComposerClient() {
           }}
           rows={1}
           disabled={loading || isBlocked}
-          placeholder={
-            isBlocked
-              ? "Sesión en fase " + status
-              : "Describe tu aplicación… (Enter para enviar)"
-          }
+          placeholder={inputPlaceholder}
           className="flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-neutral-200 outline-none transition placeholder:text-text-dim focus:border-accent/60 disabled:opacity-50"
         />
         <button
