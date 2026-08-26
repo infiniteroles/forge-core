@@ -28,6 +28,13 @@ review activity, and (later) connect Telegram, GitHub, Coolify and DeepSeek.
 
 Not implemented yet (planned for later phases): assigning tasks to real agents, GitHub App, Telegram, LiteLLM, Ollama, real test runner, automatic merge/deploy, automatic preview cleanup, preview auto-trigger at end of session.
 
+## Documentación
+
+- **`AGENTS.md`** — instrucciones para agentes IA / Copilot que trabajen en este repo (comandos, guardrails, arquitectura, trampas del entorno).
+- **`docs/current-state.md`** — estado actual completo (fases 2.x–6.0, entornos Coolify, endpoints, cómo validar/desplegar, limitaciones).
+- **`docs/roadmap.md`** — siguientes pasos (6.4c, 6.5, 6.6, ops pendientes).
+- **`docs/composer-vision.md`** — visión del Chat Composer (Fase 6.0).
+
 ## Stack
 
 - **Next.js 15** (App Router) + React 19 + TypeScript
