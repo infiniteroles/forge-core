@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `c8461da` (main), 2026-08-26. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `2e0b6c0` (main), 2026-08-26. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -9,10 +9,10 @@
 - Hacer que el **workspace** (chat + preview al lado) se actualice en vivo: cuando la WorkSession termina y hay preview `ready`, el iframe se carga automáticamente.
 - Mejorar el **plan del Composer**: tareas concretas por fase/capa (setup → modelo de datos → auth → backend → frontend → tests) en vez de una única tarea genérica.
 
-### 6.5 — Iterar por chat viendo los cambios
-- Reabrir el Composer sobre un proyecto en curso (aunque esté en `building`/`preview`): el chat debe aceptar peticiones de cambio → nueva iteración de la WorkSession → preview regenerado → el usuario ve el cambio al lado del chat.
-- Persistir `projectId` en la sesión del Composer y permitir `GET /api/composer/chat?id=…` para retomar.
-- Permitir **feedback en building** (pedir cambios sin esperar a que termine).
+### 6.5 — Iterar por chat viendo los cambios ✅ (desplegado, commit `2e0b6c0`)
+- Hecho: chat activo en `building`/`preview`/`done` → cada mensaje lanza una **WorkSession de iteración** (`startComposerIteration`) y el preview se regenera al lado del chat.
+- Hecho: `POST /api/composer/chat` acepta `building|preview|done`; `GET` devuelve `projectId`.
+- Pendiente de validación en pruebas: feedback en building mientras la iteración está en curso (múltiples iteraciones encoladas).
 
 ### 6.6 — Handoff a tu IDE
 - Generar `AGENTS.md` + `.github/copilot-instructions.md` por proyecto creado por el Composer, para que el usuario clone el repo y continúe con Copilot.
