@@ -76,7 +76,7 @@ async function extractPalette(file: File): Promise<string[]> {
   }
 }
 
-export function ComposerClient() {
+export function ComposerClient({ initialSessionId }: { initialSessionId?: string }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ComposerMessage[]>([]);
   const [status, setStatus] = useState<ComposerStatus>("discovering");
@@ -89,22 +89,31 @@ export function ComposerClient() {
   const [loading, setLoading] = useState(false);
   const [logoName, setLogoName] = useState<string | null>(null);
   const [options, setOptions] = useState<string[]>([]);
-  const [layout, setLayout] = useState<"side" | "bottom">("side");
   const [preview, setPreview] = useState<{ url: string; status: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
 
-  // Persist the chosen workspace layout.
+  // Load an existing session when navigating back from a work session link.
   useEffect(() => {
-    const saved = window.localStorage.getItem("composer.layout");
-    if (saved === "side" || saved === "bottom") setLayout(saved);
-  }, []);
-
-  const setWorkspaceLayout = (l: "side" | "bottom") => {
-    setLayout(l);
-    window.localStorage.setItem("composer.layout", l);
-  };
+    if (!initialSessionId) return;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/composer/chat?id=${initialSessionId}`);
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!data) return;
+        setSessionId(data.id as string);
+        setStatus(data.status as ComposerStatus);
+        if (Array.isArray(data.messages)) setMessages(data.messages as ComposerMessage[]);
+        if (data.spec) setSpec(data.spec as ComposerSpec);
+        if (data.proposal) setProposal(data.proposal as ComposerProposal);
+        if (data.plan) setPlan(data.plan as ComposerPlan);
+        if (data.projectId) setProjectId(data.projectId as string);
+      } catch { /* ignore */ }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSessionId]);
 
   // Poll the linked project for a ready preview once the build is running.
   useEffect(() => {
@@ -233,7 +242,126 @@ export function ComposerClient() {
         ? "Pide un cambio… (Enter para enviar)"
         : "Describe tu aplicación… (Enter para enviar)";
 
-  const previewPane = (
+  // ── Right panel — shows proposal, plan, or preview depending on phase ──────
+  const rightPanel = (() => {
+    if (inWorkspace) {
+      return (
+        <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-text-dim">Preview DEV</span>
+            <div className="flex items-center gap-3">
+              {loading ? (
+                <span className="flex items-center gap-1.5 text-xs text-accent">
+                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+                  Forge trabajando…
+                </span>
+              ) : null}
+              {preview ? (
+                <a href={preview.url} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+                  Abrir en pestaña ↗
+                </a>
+              ) : (
+                <span className="text-xs text-text-dim">en espera…</span>
+              )}
+            </div>
+          </div>
+          {preview ? (
+            <iframe src={preview.url} title="DEV Preview" className="h-full w-full flex-1 border-0 bg-white" />
+          ) : (
+            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
+              <div>
+                <div className="mb-3 flex justify-center gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <span key={i} className="inline-block h-2 w-2 animate-bounce rounded-full bg-accent/60"
+                      style={{ animationDelay: `${i * 0.15}s` }} />
+                  ))}
+                </div>
+                Forge está construyendo el MVP…<br />
+                el preview aparecerá aquí cuando esté listo.
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    if (plan && status === "planning") {
+      return (
+        <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-neutral-100">Plan de desarrollo y pruebas</h3>
+            <button onClick={approvePlan} disabled={loading}
+              className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50">
+              {loading ? "Procesando…" : "Aprobar plan y construir"}
+            </button>
+          </div>
+          <p className="mt-2 text-sm text-neutral-300">{plan.summary}</p>
+          <p className="mt-3 text-xs uppercase tracking-wide text-text-dim">Fases</p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {plan.phases.map((ph) => (
+              <span key={ph} className="rounded-full bg-neutral-800/70 px-2 py-0.5 text-[11px] text-neutral-300">{ph}</span>
+            ))}
+          </div>
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-neutral-300">
+            {plan.tasks.map((t) => (
+              <li key={t.title}>
+                <span className="text-neutral-100">{t.title}</span>
+                {t.description ? <span className="text-text-dim"> — {t.description}</span> : null}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-3 text-xs text-text-dim">
+            <span className="font-medium text-neutral-300">Pruebas:</span> {plan.testStrategy}
+          </p>
+          {plan.risks?.length ? <p className="mt-2 text-xs text-amber-300">Riesgos: {plan.risks.join("; ")}</p> : null}
+        </div>
+      );
+    }
+    if (proposal && (status === "proposal" || status === "planning")) {
+      return (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-neutral-100">Propuesta inicial</h3>
+            {status === "proposal" ? (
+              <button onClick={confirmProposal} disabled={loading}
+                className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50">
+                {loading ? "Procesando…" : "Confirmar propuesta"}
+              </button>
+            ) : null}
+          </div>
+          <p className="mt-2 text-sm text-neutral-300">{proposal.summary}</p>
+          <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+            {(["Frontend", "Backend", "Base de datos", "Auth", "Hosting"] as const).map((k) => {
+              const v = k === "Frontend" ? proposal.stack.frontend
+                : k === "Backend" ? proposal.stack.backend
+                : k === "Base de datos" ? proposal.stack.database
+                : k === "Auth" ? proposal.stack.auth
+                : proposal.stack.hosting;
+              return (
+                <div key={k} className="flex gap-2">
+                  <dt className="text-text-dim">{k}:</dt>
+                  <dd className="text-neutral-200">{v}</dd>
+                </div>
+              );
+            })}
+          </dl>
+          {proposal.structure?.length ? (
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-neutral-300">
+              {proposal.structure.map((s) => <li key={s}>{s}</li>)}
+            </ul>
+          ) : null}
+          {proposal.openQuestions?.length ? (
+            <p className="mt-3 text-xs text-amber-300">Antes de construir: {proposal.openQuestions.join("; ")}</p>
+          ) : null}
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-full min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-dim">
+        <p className="text-neutral-400">La propuesta de arquitectura aparecerá aquí</p>
+        <p className="mt-1 text-xs">una vez que Forge tenga suficiente contexto sobre tu app.</p>
+      </div>
+    );
+  })();
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="text-xs font-medium uppercase tracking-wide text-text-dim">
@@ -268,31 +396,35 @@ export function ComposerClient() {
     </div>
   );
 
-  const buildLinks = projectId || workSessionId ? (
-    <div className="mb-3 flex flex-wrap gap-2 text-sm">
-      {projectId ? (
-        <Link
-          href={`/projects/${projectId}`}
-          className="rounded-md bg-accent px-3.5 py-1.5 text-xs font-medium text-black transition hover:opacity-90"
-        >
-          Abrir proyecto creado →
-        </Link>
-      ) : null}
-      {workSessionId ? (
-        <Link
-          href={`/work-sessions/${workSessionId}`}
-          className="rounded-md border border-emerald-500/40 px-3.5 py-1.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/10"
-        >
-          Ver build autónomo en curso →
-        </Link>
-      ) : null}
-    </div>
-  ) : null;
+  const buildLinks =
+    projectId || workSessionId ? (
+      <div className="mb-3 flex flex-wrap gap-2 text-sm">
+        {projectId ? (
+          <Link href={`/projects/${projectId}`}
+            className="rounded-md bg-accent px-3.5 py-1.5 text-xs font-medium text-black transition hover:opacity-90">
+            Abrir proyecto creado →
+          </Link>
+        ) : null}
+        {workSessionId ? (
+          <Link href={`/work-sessions/${workSessionId}`} target="_blank" rel="noreferrer"
+            className="rounded-md border border-emerald-500/40 px-3.5 py-1.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/10">
+            Ver build autónomo en curso ↗
+          </Link>
+        ) : null}
+      </div>
+    ) : null;
 
   const chatColumn = (
     <div className="flex min-h-0 min-w-0 flex-col">
       {buildLinks}
-      {/* Chat thread */}
+      {/* Loading banner — always visible when Forge is working */}
+      {loading ? (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-accent">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+          Forge está trabajando…
+        </div>
+      ) : null}
+      {/* Chat thread */}}
       <div className="flex max-h-[46vh] min-h-[220px] flex-1 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface p-4">
         {messages.length === 0 ? (
           <div className="mx-auto my-auto max-w-md text-center text-sm text-text-dim">
@@ -336,8 +468,11 @@ export function ComposerClient() {
           ))
         )}
         {loading ? (
-          <div className="self-start text-sm text-text-dim">
-            Forge está pensando…
+          <div className="flex items-center gap-1.5 self-start">
+            {[0, 1, 2].map((i) => (
+              <span key={i} className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-text-dim"
+                style={{ animationDelay: `${i * 0.2}s` }} />
+            ))}
           </div>
         ) : null}
         <div ref={bottomRef} />
@@ -407,8 +542,8 @@ export function ComposerClient() {
 
   return (
     <div className="mt-6">
-      {/* Progress stepper */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      {/* Progress stepper + working indicator */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {STEPS.map((s, i) => (
           <div key={s.key} className="flex items-center gap-2">
             <span
@@ -428,166 +563,32 @@ export function ComposerClient() {
             ) : null}
           </div>
         ))}
+        {loading ? (
+          <span className="ml-auto flex items-center gap-1.5 text-xs text-accent">
+            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+            Forge trabajando…
+          </span>
+        ) : (
+          <span className="ml-auto text-xs capitalize text-text-dim">fase {status}</span>
+        )}
       </div>
 
-      {inWorkspace ? (
-        <>
-          {/* Workspace layout toggle */}
-          <div className="mb-3 flex items-center gap-2 text-sm">
-            <span className="text-text-dim">Layout:</span>
-            <button
-              onClick={() => setWorkspaceLayout("side")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                layout === "side"
-                  ? "bg-accent text-black"
-                  : "border border-border text-neutral-300 hover:text-neutral-100"
-              }`}
-            >
-              Chat lateral
-            </button>
-            <button
-              onClick={() => setWorkspaceLayout("bottom")}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                layout === "bottom"
-                  ? "bg-accent text-black"
-                  : "border border-border text-neutral-300 hover:text-neutral-100"
-              }`}
-            >
-              Chat inferior
-            </button>
-            <span className="ml-auto text-xs capitalize text-text-dim">
-              fase {status}
-            </span>
-          </div>
+      {/* Always-split layout: chat sidebar (5fr) + contextual panel (7fr) */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className="min-w-0">{chatColumn}</div>
+        <div className={inWorkspace ? "h-[68vh] min-h-[420px] min-w-0" : "min-w-0"}>
+          {rightPanel}
+        </div>
+      </div>
 
-          {layout === "side" ? (
-            <div className="mt-2 grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-              <div className="min-w-0">{chatColumn}</div>
-              <div className="h-[64vh] min-h-[340px] min-w-0">
-                {previewPane}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-2 flex flex-col gap-4">
-              <div className="h-[46vh] min-h-[260px]">{previewPane}</div>
-              <div className="min-w-0">{chatColumn}</div>
-            </div>
-          )}
-        </>
-      ) : (
-        <>{chatColumn}</>
-      )}
-
-      {!inWorkspace ? (
-        <>
-          {/* Proposal card */}
-          {proposal && !plan && status === "proposal" ? (
-            <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-neutral-100">
-                  Propuesta inicial
-                </h3>
-                <button
-                  onClick={confirmProposal}
-                  disabled={loading}
-                  className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
-                >
-                  Confirmar propuesta
-                </button>
-              </div>
-              <p className="mt-2 text-sm text-neutral-300">{proposal.summary}</p>
-              <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                {(
-                  [
-                    ["Frontend", proposal.stack.frontend],
-                    ["Backend", proposal.stack.backend],
-                    ["Base de datos", proposal.stack.database],
-                    ["Auth", proposal.stack.auth],
-                    ["Hosting", proposal.stack.hosting],
-                  ] as const
-                ).map(([k, v]) => (
-                  <div key={k} className="flex gap-2">
-                    <dt className="text-text-dim">{k}:</dt>
-                    <dd className="text-neutral-200">{v}</dd>
-                  </div>
-                ))}
-              </dl>
-              {proposal.structure?.length ? (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-neutral-300">
-                  {proposal.structure.map((s) => (
-                    <li key={s}>{s}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {proposal.openQuestions?.length ? (
-                <p className="mt-3 text-xs text-amber-300">
-                  Antes de construir: {proposal.openQuestions.join("; ")}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {/* Plan card */}
-          {plan && status === "planning" ? (
-            <div className="mt-4 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-neutral-100">
-                  Plan de desarrollo y pruebas
-                </h3>
-                <button
-                  onClick={approvePlan}
-                  disabled={loading}
-                  className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
-                >
-                  Aprobar plan y construir
-                </button>
-              </div>
-              <p className="mt-2 text-sm text-neutral-300">{plan.summary}</p>
-              <p className="mt-3 text-xs uppercase tracking-wide text-text-dim">
-                Fases
-              </p>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {plan.phases.map((ph) => (
-                  <span
-                    key={ph}
-                    className="rounded-full bg-neutral-800/70 px-2 py-0.5 text-[11px] text-neutral-300"
-                  >
-                    {ph}
-                  </span>
-                ))}
-              </div>
-              <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-neutral-300">
-                {plan.tasks.map((t) => (
-                  <li key={t.title}>
-                    <span className="text-neutral-100">{t.title}</span>
-                    {t.description ? (
-                      <span className="text-text-dim"> — {t.description}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-3 text-xs text-text-dim">
-                <span className="font-medium text-neutral-300">Pruebas:</span>{" "}
-                {plan.testStrategy}
-              </p>
-              {plan.risks?.length ? (
-                <p className="mt-2 text-xs text-amber-300">
-                  Riesgos: {plan.risks.join("; ")}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {spec ? (
-            <div className="mt-3 text-xs text-text-dim">
-              <span className="font-medium text-neutral-300">Spec:</span>{" "}
-              {spec.name} · {spec.purpose.slice(0, 90)}
-              {spec.purpose.length > 90 ? "…" : ""} · auth: {spec.auth} · UI:{" "}
-              {spec.uiLibrary}
-              {spec.palette?.length ? ` · paleta: ${spec.palette.join(" ")}` : ""}
-            </div>
-          ) : null}
-        </>
+      {spec ? (
+        <div className="mt-3 text-xs text-text-dim">
+          <span className="font-medium text-neutral-300">Spec:</span>{" "}
+          {spec.name} · {spec.purpose.slice(0, 90)}
+          {spec.purpose.length > 90 ? "…" : ""} · auth: {spec.auth} · UI:{" "}
+          {spec.uiLibrary}
+          {spec.palette?.length ? ` · paleta: ${spec.palette.join(" ")}` : ""}
+        </div>
       ) : null}
     </div>
   );

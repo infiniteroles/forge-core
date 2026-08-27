@@ -330,7 +330,15 @@ export default async function WorkSessionPage({ params }: Props) {
     where: { id },
     include: {
       task: true,
-      project: true,
+      project: {
+        include: {
+          composerSessions: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true },
+          },
+        },
+      },
       agentRuns: { orderBy: { createdAt: "desc" } },
       sessionChecks: { orderBy: { createdAt: "asc" } },
       previewDeployments: { orderBy: { createdAt: "desc" } },
@@ -434,12 +442,22 @@ export default async function WorkSessionPage({ params }: Props) {
               {session.objective}
             </p>
           </div>
-          <Link
-            href={`/projects/${session.projectId}`}
-            className="text-sm text-text-dim transition hover:text-neutral-100"
-          >
-            ← Back to project
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={`/projects/${session.projectId}`}
+              className="text-sm text-text-dim transition hover:text-neutral-100"
+            >
+              ← Back to project
+            </Link>
+            {session.project.composerSessions[0] ? (
+              <Link
+                href={`/composer?session=${session.project.composerSessions[0].id}`}
+                className="text-sm text-accent transition hover:opacity-80"
+              >
+                ← Volver al Composer
+              </Link>
+            ) : null}
+          </div>
         </div>
 
         <MvpFlowPanel flow={mvpFlow} />

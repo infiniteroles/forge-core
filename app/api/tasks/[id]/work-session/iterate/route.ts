@@ -77,34 +77,19 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
   });
 
-  try {
-    const updated = await runIterationWorkSession(workSession.id);
-    return NextResponse.json({ ok: true, workSession: updated });
-  } catch (error) {
+  // Run without await — avoids HTTP timeout on long sessions; client polls for status.
+  void runIterationWorkSession(workSession.id).catch(async (error) => {
     const message =
       error instanceof Error ? error.message : "Unknown iteration error";
-
-    await prisma.workSession.update({
-      where: { id: workSession.id },
-      data: { status: "failed", error: message, finishedAt: new Date() },
-    });
-
+    await prisma.workSession
+      .update({ where: { id: workSession.id }, data: { status: "failed", error: message, finishedAt: new Date() } })
+      .catch(() => undefined);
     await logActivity({
       projectId: task.projectId,
       type: "work_session.iteration_failed",
       message: `Iteration failed for task "${task.title}": ${message}`,
-      metadata: {
-        workSessionId: workSession.id,
-        parentWorkSessionId: lastSession?.id ?? null,
-        taskId: task.id,
-        iterationNumber,
-        status: "failed",
-      },
-    });
-
-    return NextResponse.json(
-      { ok: false, error: `Iteration failed: ${message}` },
-      { status: 502 }
-    );
-  }
+      metadata: { workSessionId: workSession.id, parentWorkSessionId: lastSession?.id ?? null, taskId: task.id, iterationNumber, status: "failed" },
+    }).catch(() => undefined);
+  });
+  return NextResponse.json({ ok: true, workSession });
 }
