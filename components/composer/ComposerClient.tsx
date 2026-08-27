@@ -362,39 +362,6 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       </div>
     );
   })();
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-text-dim">
-          Preview DEV
-        </span>
-        {preview ? (
-          <a
-            href={preview.url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-accent hover:underline"
-          >
-            Abrir en pestaña ↗
-          </a>
-        ) : (
-          <span className="text-xs text-text-dim">en espera…</span>
-        )}
-      </div>
-      {preview ? (
-        <iframe
-          src={preview.url}
-          title="DEV Preview"
-          className="h-full w-full flex-1 border-0 bg-white"
-        />
-      ) : (
-        <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
-          Forge está construyendo…
-          <br />
-          el preview aparecerá aquí cuando esté listo.
-        </div>
-      )}
-    </div>
-  );
 
   const buildLinks =
     projectId || workSessionId ? (
