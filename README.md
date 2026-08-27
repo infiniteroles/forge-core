@@ -31,8 +31,8 @@ Not implemented yet (planned for later phases): assigning tasks to real agents, 
 ## Documentación
 
 - **`AGENTS.md`** — instrucciones para agentes IA / Copilot que trabajen en este repo (comandos, guardrails, arquitectura, trampas del entorno).
-- **`docs/current-state.md`** — estado actual completo (fases 2.x–6.0, entornos Coolify, endpoints, cómo validar/desplegar, limitaciones).
-- **`docs/roadmap.md`** — siguientes pasos (6.4c, 6.5, 6.6, ops pendientes).
+- **`docs/current-state.md`** — estado actual completo (fases 2.x–6.6, entornos Coolify, endpoints, cómo validar/desplegar, limitaciones).
+- **`docs/roadmap.md`** — siguientes pasos (6.x, ops pendientes).
 - **`docs/composer-vision.md`** — visión del Chat Composer (Fase 6.0).
 
 ## Stack

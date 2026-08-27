@@ -11,6 +11,7 @@ import {
 } from "@/lib/work-sessions/orchestrator";
 import { isGithubConfigured } from "@/lib/github/client";
 import { createRepository } from "@/lib/github/create-repository";
+import { pushComposerHandoff } from "@/lib/composer/handoff";
 import type { ComposerPlan, ComposerProposal, ComposerSpec } from "./types";
 
 function slugify(name: string): string {
@@ -116,6 +117,21 @@ export async function createComposerProject(
   // Kick off the autonomous build in the background when a repo is linked.
   let workSessionId: string | null = null;
   if (repoFullName) {
+    // Fase 6.6 — handoff a IDE: sube README/AGENTS/copilot-instructions a main
+    // ANTES de que el builder cree su rama, para que la rama también las herede
+    // y el usuario pueda clonar y continuar con Copilot desde el minuto uno.
+    try {
+      const handoff = await pushComposerHandoff(repoFullName, spec, proposal, plan);
+      await logActivity({
+        projectId: project.id,
+        type: "composer.handoff_created",
+        message: `Handoff a IDE creado en ${repoFullName} (${handoff.pushed.join(", ")})`,
+        metadata: { repositoryFullName: repoFullName, files: handoff.pushed },
+      });
+    } catch (err) {
+      console.error("composer handoff push failed:", err);
+    }
+
     const objective =
       `Construir el MVP de ${spec.name}: ${spec.purpose}. ` +
       (plan ? `Plan: ${plan.summary} ` : "") +

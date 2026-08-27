@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `2e0b6c0` (main), 2026-08-26. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `5291c35` (main), 2026-08-27. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -14,9 +14,10 @@
 - Hecho: `POST /api/composer/chat` acepta `building|preview|done`; `GET` devuelve `projectId`.
 - Pendiente de validación en pruebas: feedback en building mientras la iteración está en curso (múltiples iteraciones encoladas).
 
-### 6.6 — Handoff a tu IDE
-- Generar `AGENTS.md` + `.github/copilot-instructions.md` por proyecto creado por el Composer, para que el usuario clone el repo y continúe con Copilot.
-- Añadir al proyecto generado un README inicial y estructura de carpetas sugerida (shadcn/Material 3 según spec).
+### 6.6 — Handoff a tu IDE ✅ (implementado, ver commit de la fase)
+- Hecho: al crear un repo nuevo, el Composer sube a `main` (antes del build) **`README.md` + `AGENTS.md` + `.github/copilot-instructions.md`** generados con la spec/propuesta/plan (`lib/composer/handoff.ts`, `pushComposerHandoff` con retry; `build.ts` lo llama antes de lanzar el build autónomo; evento `composer.handoff_created`; test `tests/composer/handoff.test.ts`).
+- Solo aplica a repos nuevos (no a URLs de repos existentes).
+- Pendiente de validación E2E en pruebas: crear un proyecto con repo nuevo y comprobar que los 3 ficheros aparecen en el repo y que el usuario puede clonarlo.
 
 ## A medio plazo
 

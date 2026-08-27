@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-26 · HEAD: `2e0b6c0` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-27 · HEAD: `5291c35` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -47,6 +47,7 @@ Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo as
   4. **Aprobar plan → build autónomo**: crea el **Proyecto** real, **crea el repo GitHub** (privado, `auto_init`, `main`) si el spec pide repo nuevo, lo enlaza, y **lanza la WorkSession autónoma** en segundo plano.
   5. **Workspace**: en fases build/preview muestra el **preview (iframe) al lado del chat** con toggle **Chat lateral / Chat inferior** (preferencia en `localStorage`).
   6. **Iterar por chat (Fase 6.5)**: en fases `building`/`preview`/`done` el chat sigue activo — cada mensaje se trata como un **cambio solicitado** y lanza una **WorkSession de iteración** (`startComposerIteration` en `lib/composer/build.ts`): crea una sesión `mode:"iteration"` sobre la primera tarea del proyecto (con `requestedChanges`, `parentWorkSessionId` y `iterationNumber+1`), la ejecuta en segundo plano vía `runIterationWorkSession`, y el **preview se regenera al lado del chat**. El `POST /api/composer/chat` acepta ahora `building|preview|done` y el `GET` devuelve `projectId` para retomar.
+  7. **Handoff a tu IDE (Fase 6.6)**: al crear un repo nuevo, el Composer sube a `main` (antes de que el builder cree su rama) **`README.md` + `AGENTS.md` + `.github/copilot-instructions.md`** (generados con la spec/propuesta/plan; ver `lib/composer/handoff.ts`). Así puedes clonar el repo y seguir desarrollando con GitHub Copilot desde el minuto uno.
 - **Reglas de producto**: logo **solo subida** (prohibida la generación desde la herramienta; de un logo se infiere paleta en cliente vía canvas); UI por defecto **shadcn/ui**, alternativa **Material 3**.
 
 ## Fase 6.5 — Iterar por chat (desplegado)
@@ -55,6 +56,12 @@ Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo as
 - `lib/composer/build.ts`: nueva función `startComposerIteration(projectId, changeRequest)` → crea WorkSession de iteración sobre la primera tarea del proyecto y la lanza en segundo plano.
 - `app/api/composer/chat/route.ts`: estados permitidos ampliados a `building|preview|done`; rama de iteración por chat; `GET` devuelve `projectId`.
 - `components/composer/ComposerClient.tsx`: input habilitado durante `building`/`preview` (placeholder *“Pide un cambio…”*); `isBlocked` desactivado para que el chat siga usable.
+
+## Fase 6.6 — Handoff a tu IDE (desplegado)
+
+- `lib/composer/handoff.ts`: `buildComposerHandoffFiles(spec, proposal, plan)` (puro, testeable) genera `README.md`, `AGENTS.md` y `.github/copilot-instructions.md` (stack, comandos, convenciones shadcn/Material 3, guardrails, respuestas en español); `pushComposerHandoff(repoFullName, …)` los sube a `main` vía Contents API con reintento (2 retries) por la rama de `auto_init`.
+- `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
+- Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
 ## Endpoints micro-feature (todos 200 en prod)
 
