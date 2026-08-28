@@ -6,6 +6,13 @@ import { runDiscoveryTurn } from "@/lib/composer/discovery";
 import { generateProposal } from "@/lib/composer/proposal";
 import { generatePlan } from "@/lib/composer/plan";
 import { createComposerProject, startComposerIteration } from "@/lib/composer/build";
+import {
+  evaluateComposerReadiness,
+  formatReadinessChecklist,
+  readinessOptions,
+  isRepoResolutionIntent,
+  githubUrlFromMessage,
+} from "@/lib/composer/readiness";
 import type {
   ComposerMessage,
   ComposerMessageKind,
@@ -63,6 +70,24 @@ export async function GET(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Composer session not found" }, { status: 404 });
   }
+
+  // Deriva la última WorkSession del proyecto para poder retomar el seguimiento
+  // (estado, decisiones, avisos de fin de build) tras recargar la página.
+  let workSessionId: string | null = null;
+  if (session.projectId) {
+    const task = await prisma.task.findFirst({
+      where: { projectId: session.projectId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+    if (task) {
+      const ws = await prisma.workSession.findFirst({
+        where: { taskId: task.id },
+        orderBy: { createdAt: "desc" },
+      });
+      workSessionId = ws?.id ?? null;
+    }
+  }
+
   return NextResponse.json({
     id: session.id,
     status: session.status,
@@ -71,6 +96,7 @@ export async function GET(request: NextRequest) {
     proposal: (session.proposal as ComposerProposal | null) ?? null,
     plan: (session.plan as ComposerPlan | null) ?? null,
     projectId: session.projectId,
+    workSessionId,
     logoUrl: session.logoUrl,
     stylePref: session.stylePref,
   });
@@ -189,65 +215,108 @@ export async function POST(request: NextRequest) {
       kind = "system";
       messages = [...nextHistory, msg("assistant", "system", reply)];
     }
-  } else if (prevStatus === "planning" && isAffirmative(message)) {
-    // Gate: plan approved → building. Materialize the project. Si la creación
-    // del repo/build falla, se le dice al usuario en el chat (sin proyecto
-    // muerto ni falso éxito) y puede reintentar o dar una URL.
-    if (spec && proposal) {
-      try {
-        const built = await createComposerProject(spec, proposal, plan);
-        projectId = built.projectId;
-        workSessionId = built.workSessionId;
-        status = "building";
-        const repoNote = built.repoFullName
-          ? ` He configurado el repositorio ${built.repoFullName}.`
-          : "";
+  } else if (prevStatus === "planning") {
+    // ── Resolver las necesidades del proyecto desde el chat ──
+    const url = githubUrlFromMessage(message);
+    const repoIntent = spec && (isRepoResolutionIntent(message) || !!url);
+    const wantsUrl =
+      /repo existente|url de repo|usar url/i.test(message) && !url;
+    if (repoIntent && spec) {
+      if (url) {
+        spec = { ...spec, repo: message.trim() };
+      } else if (
+        /repo nuevo|crear (un )?repo|crea un repo|crear repositorio|nuevo repositorio/i.test(
+          message
+        )
+      ) {
+        spec = { ...spec, repo: "new" };
+      }
+      const r = await evaluateComposerReadiness(spec);
+      if (r.ready) {
         reply =
-          `✅ Plan aprobado y proyecto **${spec.name}** creado.${repoNote}` +
-          (built.workSessionId
-            ? " El build autónomo ya está en marcha."
-            : "") +
-          " Prepararé la infraestructura y construiré el primer MVP previsualizable para que iteres por chat.";
-        kind = "plan";
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Error desconocido";
-        console.error("composer build failed:", err);
+          '✅ Repositorio configurado. Dime **"Confirmo el plan"** y empezaré a construir.';
+        kind = "text";
+        options = undefined;
+      } else {
+        reply = formatReadinessChecklist(r);
+        kind = "system";
+        options = readinessOptions(r, spec);
+      }
+      messages = [...nextHistory, msg("assistant", kind, reply)];
+    } else if (wantsUrl) {
+      reply =
+        "Perfecto. Pásame la **URL del repositorio** existente (formato: https://github.com/owner/repo).";
+      kind = "text";
+      messages = [...nextHistory, msg("assistant", "text", reply)];
+    } else if (isAffirmative(message)) {
+      // Gate: plan aprobado → check previo de necesidades ANTES de arrancar.
+      if (spec && proposal) {
+        const readiness = await evaluateComposerReadiness(spec);
+        const blockers = readiness.items.filter(
+          (i) => i.severity === "blocker"
+        );
+        if (blockers.length > 0) {
+          status = "planning";
+          reply = formatReadinessChecklist(readiness);
+          kind = "system";
+          options = readinessOptions(readiness, spec);
+        } else {
+          try {
+            const built = await createComposerProject(spec, proposal, plan);
+            projectId = built.projectId;
+            workSessionId = built.workSessionId;
+            status = "building";
+            const repoNote = built.repoFullName
+              ? ` He configurado el repositorio ${built.repoFullName}.`
+              : "";
+            reply =
+              `✅ Plan aprobado y proyecto **${spec.name}** creado.${repoNote}` +
+              (built.workSessionId
+                ? " El build autónomo ya está en marcha."
+                : "") +
+              " Prepararé la infraestructura y construiré el primer MVP previsualizable para que iteres por chat.";
+            kind = "plan";
+          } catch (err) {
+            const errorMessage =
+              err instanceof Error ? err.message : "Error desconocido";
+            console.error("composer build failed:", err);
+            status = "planning";
+            reply =
+              `⚠️ No pude crear el repositorio ni arrancar el build: ${errorMessage}. ` +
+              `Dime **"Reintentar"** para volver a intentarlo (buscaré otro nombre de repo) ` +
+              `o pásame la **URL de un repositorio existente**.`;
+            kind = "system";
+          }
+        }
+      } else {
         status = "planning";
         reply =
-          `⚠️ No pude crear el repositorio ni arrancar el build: ${errorMessage}. ` +
-          `Dime **"Reintentar"** para volver a intentarlo (buscaré otro nombre de repo) ` +
-          `o pásame la **URL de un repositorio existente**.`;
+          "⚠️ Aún no tengo la propuesta necesaria para construir. Confirma la propuesta primero.";
         kind = "system";
       }
+      messages = [...nextHistory, msg("assistant", kind, reply)];
     } else {
-      status = "planning";
-      reply =
-        "⚠️ Aún no tengo la propuesta necesaria para construir. Confirma la propuesta primero.";
-      kind = "system";
-    }
-    messages = [...nextHistory, msg("assistant", kind, reply)];
-  } else if (prevStatus === "planning") {
-    // Feedback → regenerate the plan incorporating it.
-    plan = await withLlmRetry(() =>
-      generatePlan(
-        spec ?? { name: "App", purpose: "", auth: "none", uiLibrary: "shadcn" },
-        proposal ?? {
-          summary: "",
-          stack: {
-            frontend: "Next.js",
-            backend: "Next.js",
-            database: "PostgreSQL",
-            auth: "Ninguno",
-            hosting: "Coolify",
+      // Feedback → regenerate the plan incorporating it.
+      plan = await withLlmRetry(() =>
+        generatePlan(
+          spec ?? { name: "App", purpose: "", auth: "none", uiLibrary: "shadcn" },
+          proposal ?? {
+            summary: "",
+            stack: {
+              frontend: "Next.js",
+              backend: "Next.js",
+              database: "PostgreSQL",
+              auth: "Ninguno",
+              hosting: "Coolify",
+            },
           },
-        },
-        message
-      )
-    );
-    reply = formatPlan(plan, true);
-    kind = "plan";
-    messages = [...nextHistory, msg("assistant", "plan", reply)];
+          message
+        )
+      );
+      reply = formatPlan(plan, true);
+      kind = "plan";
+      messages = [...nextHistory, msg("assistant", "plan", reply)];
+    }
   } else if (prevStatus === "proposal" && isAffirmative(message) && spec) {
     // Gate: proposal confirmed → planning (generate the plan).
     const confirmedSpec: ComposerSpec = spec;

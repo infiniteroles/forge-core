@@ -94,31 +94,126 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const [wsStatus, setWsStatus] = useState<string | null>(null);
   const [wsSummary, setWsSummary] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ summary: string } | null>(null);
+  const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
   const notifiedWsRef = useRef<string | null>(null);
 
-  // Load an existing session when navigating back from a work session link.
+  type SessionMeta = {
+    id: string;
+    status: string;
+    updatedAt: string;
+    projectId: string | null;
+    projectName: string | null;
+    projectSlug: string | null;
+  };
+
+  const loadSession = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/composer/chat?id=${id}`);
+      if (!res.ok) return false;
+      const data = await res.json().catch(() => null);
+      if (!data) return false;
+      setSessionId(data.id as string);
+      setStatus(data.status as ComposerStatus);
+      if (Array.isArray(data.messages)) setMessages(data.messages as ComposerMessage[]);
+      if (data.spec) setSpec(data.spec as ComposerSpec);
+      else setSpec(null);
+      if (data.proposal) setProposal(data.proposal as ComposerProposal);
+      else setProposal(null);
+      if (data.plan) setPlan(data.plan as ComposerPlan);
+      else setPlan(null);
+      if (data.projectId) setProjectId(data.projectId as string);
+      else setProjectId(null);
+      if (data.workSessionId) setWorkSessionId(data.workSessionId as string);
+      else setWorkSessionId(null);
+      setOptions([]);
+      setPreview(null);
+      setDecision(null);
+      notifiedWsRef.current = null;
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/composer/sessions");
+      const data = (await res.json().catch(() => null)) as {
+        sessions?: SessionMeta[];
+      } | null;
+      if (Array.isArray(data?.sessions)) setSessions(data.sessions);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // On mount: carga la lista de sesiones y retoma la última
+  // (URL > localStorage > sesión más reciente) para no perder el histórico.
   useEffect(() => {
-    if (!initialSessionId) return;
+    let cancelled = false;
     void (async () => {
+      let list: SessionMeta[] = [];
       try {
-        const res = await fetch(`/api/composer/chat?id=${initialSessionId}`);
-        if (!res.ok) return;
-        const data = await res.json().catch(() => null);
-        if (!data) return;
-        setSessionId(data.id as string);
-        setStatus(data.status as ComposerStatus);
-        if (Array.isArray(data.messages)) setMessages(data.messages as ComposerMessage[]);
-        if (data.spec) setSpec(data.spec as ComposerSpec);
-        if (data.proposal) setProposal(data.proposal as ComposerProposal);
-        if (data.plan) setPlan(data.plan as ComposerPlan);
-        if (data.projectId) setProjectId(data.projectId as string);
-      } catch { /* ignore */ }
+        const res = await fetch("/api/composer/sessions");
+        const data = (await res.json().catch(() => null)) as {
+          sessions?: SessionMeta[];
+        } | null;
+        if (Array.isArray(data?.sessions)) list = data.sessions;
+      } catch {
+        /* ignore */
+      }
+      if (cancelled) return;
+      setSessions(list);
+      const saved = localStorage.getItem("forge-composer-session");
+      const candidate =
+        initialSessionId ??
+        (saved && list.some((s) => s.id === saved) ? saved : list[0]?.id ?? null);
+      if (candidate) {
+        const ok = await loadSession(candidate);
+        if (ok && !cancelled) {
+          history.replaceState(null, "", `/composer?session=${candidate}`);
+          localStorage.setItem("forge-composer-session", candidate);
+        }
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSessionId]);
+  }, [loadSession, initialSessionId]);
+
+  const onSelectSession = useCallback(
+    async (id: string) => {
+      const ok = await loadSession(id);
+      if (ok) {
+        history.replaceState(null, "", `/composer?session=${id}`);
+        localStorage.setItem("forge-composer-session", id);
+      }
+    },
+    [loadSession]
+  );
+
+  const newConversation = useCallback(() => {
+    setSessionId(null);
+    setStatus("discovering");
+    setMessages([]);
+    setSpec(null);
+    setProposal(null);
+    setPlan(null);
+    setProjectId(null);
+    setWorkSessionId(null);
+    setOptions([]);
+    setPreview(null);
+    setDecision(null);
+    setWsStatus(null);
+    setWsSummary(null);
+    notifiedWsRef.current = null;
+    history.replaceState(null, "", "/composer");
+    localStorage.removeItem("forge-composer-session");
+  }, []);
 
   // Poll the linked project for a ready preview once the build is running.
   useEffect(() => {
@@ -273,17 +368,26 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const applyResponse = useCallback((res: ChatResponse) => {
-    setSessionId(res.id);
-    setStatus(res.status);
-    if (res.messages) setMessages(res.messages);
-    if (res.spec) setSpec(res.spec);
-    if (res.proposal) setProposal(res.proposal);
-    if (res.plan) setPlan(res.plan);
-    if (res.projectId) setProjectId(res.projectId);
-    if (res.workSessionId) setWorkSessionId(res.workSessionId);
-    setOptions(res.options ?? []);
-  }, []);
+  const applyResponse = useCallback(
+    (res: ChatResponse) => {
+      setSessionId(res.id);
+      setStatus(res.status);
+      if (res.messages) setMessages(res.messages);
+      if (res.spec) setSpec(res.spec);
+      if (res.proposal) setProposal(res.proposal);
+      if (res.plan) setPlan(res.plan);
+      if (res.projectId) setProjectId(res.projectId);
+      if (res.workSessionId) setWorkSessionId(res.workSessionId);
+      setOptions(res.options ?? []);
+      // Persistir para que recargar la página no pierda el chat/proyecto.
+      if (res.id) {
+        history.replaceState(null, "", `/composer?session=${res.id}`);
+        localStorage.setItem("forge-composer-session", res.id);
+        void refreshSessions();
+      }
+    },
+    [refreshSessions]
+  );
 
   const post = useCallback(
     async (payload: Record<string, unknown>) => {
@@ -715,6 +819,48 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
 
   return (
     <div className="flex h-full flex-col gap-3">
+      {/* Selector de proyecto/sesión — retomar el chat sin perder histórico */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label
+          htmlFor="composer-session-select"
+          className="text-[11px] font-medium uppercase tracking-wide text-text-dim"
+        >
+          Proyecto / conversación
+        </label>
+        <select
+          id="composer-session-select"
+          value={sessionId ?? "__new__"}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "__new__") newConversation();
+            else void onSelectSession(v);
+          }}
+          className="min-w-[260px] rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-neutral-100 outline-none transition focus:border-accent/60"
+        >
+          <option value="__new__">➕ Nueva conversación</option>
+          {sessions.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.projectName ?? `Sesión ${s.status}`} ·{" "}
+              {new Date(s.updatedAt).toLocaleString("es", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </option>
+          ))}
+        </select>
+        {sessionId ? (
+          <button
+            type="button"
+            onClick={newConversation}
+            className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-dim transition hover:text-neutral-100"
+          >
+            ➕ Nueva
+          </button>
+        ) : null}
+      </div>
+
       {/* Workspace: chat en sidebar ancha + contenido ocupa el resto */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         <aside className="flex min-h-0 w-full flex-col lg:w-[400px] lg:min-w-[360px] lg:max-w-[440px] lg:shrink-0">
