@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { InstructionForm } from "@/components/InstructionForm";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { ProjectArchiveButton } from "@/components/ProjectArchiveButton";
+import { ProjectDeleteButton } from "@/components/ProjectDeleteButton";
 import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
@@ -374,6 +375,10 @@ export default async function ProjectDetailPage({ params }: Props) {
                 projectName={project.name}
               />
             ) : null}
+            <ProjectDeleteButton
+              projectId={project.id}
+              projectName={project.name}
+            />
           </div>
         </div>
 

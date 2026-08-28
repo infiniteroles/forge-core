@@ -8,12 +8,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "#0b0b0f",
-        surface: "#14141b",
-        "surface-2": "#1b1b24",
-        border: "#262630",
-        "text-dim": "#8b8b98",
-        accent: "#ff6b57",
+        background: "rgb(var(--background) / <alpha-value>)",
+        surface: "rgb(var(--surface) / <alpha-value>)",
+        "surface-2": "rgb(var(--surface-2) / <alpha-value>)",
+        border: "rgb(var(--border) / <alpha-value>)",
+        "text-dim": "rgb(var(--text-dim) / <alpha-value>)",
+        accent: "rgb(var(--accent) / <alpha-value>)",
       },
     },
   },

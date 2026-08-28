@@ -90,6 +90,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const [logoName, setLogoName] = useState<string | null>(null);
   const [options, setOptions] = useState<string[]>([]);
   const [preview, setPreview] = useState<{ url: string; status: string } | null>(null);
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
@@ -242,6 +243,26 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
         ? "Pide un cambio… (Enter para enviar)"
         : "Describe tu aplicación… (Enter para enviar)";
 
+  function tipFor(s: ComposerStatus, loadingNow: boolean): string {
+    if (loadingNow) return "Forge está trabajando en ello…";
+    switch (s) {
+      case "discovering":
+        return "Haré una pregunta cada vez; las que tienen opciones puedes pulsarlas.";
+      case "proposal":
+        return "Revisa la propuesta de arquitectura y confírmala o pide cambios.";
+      case "planning":
+        return "Revisa el plan de desarrollo y pruebas antes de aprobarlo.";
+      case "building":
+        return "El build está en marcha; puedes pedir cambios por chat aunque no haya terminado.";
+      case "preview":
+        return "Alterna 🖥️/📱 en el preview para comprobar el responsive.";
+      case "done":
+        return "El MVP está listo: abre el proyecto y sigue iterando, o clónalo a tu IDE.";
+      default:
+        return "Enter para enviar · Shift+Enter para salto de línea.";
+    }
+  }
+
   // ── Right panel — shows proposal, plan, or preview depending on phase ──────
   const rightPanel = (() => {
     if (inWorkspace) {
@@ -249,7 +270,25 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
         <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-surface">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <span className="text-xs font-medium uppercase tracking-wide text-text-dim">Preview DEV</span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              {preview ? (
+                <div className="flex overflow-hidden rounded-md border border-border">
+                  <button
+                    onClick={() => setDevice("desktop")}
+                    title="Vista escritorio"
+                    className={`px-2 py-1 text-[11px] transition ${device === "desktop" ? "bg-accent text-black" : "bg-background text-text-dim hover:text-neutral-100"}`}
+                  >
+                    🖥️
+                  </button>
+                  <button
+                    onClick={() => setDevice("mobile")}
+                    title="Vista móvil"
+                    className={`px-2 py-1 text-[11px] transition ${device === "mobile" ? "bg-accent text-black" : "bg-background text-text-dim hover:text-neutral-100"}`}
+                  >
+                    📱
+                  </button>
+                </div>
+              ) : null}
               {loading ? (
                 <span className="flex items-center gap-1.5 text-xs text-accent">
                   <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
@@ -266,7 +305,18 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
             </div>
           </div>
           {preview ? (
-            <iframe src={preview.url} title="DEV Preview" className="h-full w-full flex-1 border-0 bg-white" />
+            device === "mobile" ? (
+              <div className="grid flex-1 place-items-center overflow-hidden bg-neutral-900 p-4">
+                <div className="flex h-full max-h-full w-[390px] max-w-full flex-col overflow-hidden rounded-[2rem] border-4 border-neutral-700 bg-black shadow-2xl">
+                  <div className="flex h-6 shrink-0 items-center justify-center gap-1.5 bg-neutral-800">
+                    <span className="h-1.5 w-12 rounded-full bg-neutral-600" />
+                  </div>
+                  <iframe src={preview.url} title="DEV Preview móvil" className="w-full flex-1 border-0 bg-white" />
+                </div>
+              </div>
+            ) : (
+              <iframe src={preview.url} title="DEV Preview" className="h-full w-full flex-1 border-0 bg-white" />
+            )
           ) : (
             <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
               <div>
@@ -391,8 +441,8 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
           Forge está trabajando…
         </div>
       ) : null}
-      {/* Chat thread */}
-      <div className="flex max-h-[46vh] min-h-[220px] flex-1 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface p-4">
+      {/* Chat thread — ocupa toda la altura de la sidebar */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface p-4">
         {messages.length === 0 ? (
           <div className="mx-auto my-auto max-w-md text-center text-sm text-text-dim">
             <p className="text-neutral-200">
@@ -404,7 +454,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
                 "una app para gestionar reservas de una peluquería, con login de
                 clientes"
               </em>
-              ). También puedes subir tu logo para que infiera el estilo.
+              ). Si tienes logo, te lo preguntaré y podrás adjuntarlo con 📎.
             </p>
           </div>
         ) : (
@@ -461,8 +511,8 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
         </div>
       ) : null}
 
-      {/* Input */}
-      <div className="mt-2 flex items-end gap-2">
+      {/* Input — alto y a todo el ancho de la sidebar */}
+      <div className="mt-2 flex items-end gap-2 rounded-xl border border-border bg-surface p-2">
         <input
           ref={fileRef}
           type="file"
@@ -477,10 +527,11 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
         <button
           onClick={() => fileRef.current?.click()}
           disabled={loading || isBlocked}
-          title="Subir logo (no se genera ningún logo)"
-          className="rounded-md border border-border bg-background px-3 py-2 text-sm text-text-dim transition hover:text-neutral-100 disabled:opacity-50"
+          title="Adjuntar logo"
+          aria-label="Adjuntar logo"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border bg-background text-base text-text-dim transition hover:text-neutral-100 disabled:opacity-50"
         >
-          {logoName ? "🖼️ " + logoName : "🎨 Subir logo"}
+          {logoName ? "🖼️" : "📎"}
         </button>
         <textarea
           value={input}
@@ -491,32 +542,46 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
               void sendMessage();
             }
           }}
-          rows={1}
+          rows={2}
           disabled={loading || isBlocked}
           placeholder={inputPlaceholder}
-          className="flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-neutral-200 outline-none transition placeholder:text-text-dim focus:border-accent/60 disabled:opacity-50"
+          className="min-h-[2.5rem] w-full flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-neutral-200 outline-none transition placeholder:text-text-dim focus:border-accent/60 disabled:opacity-50"
         />
         <button
           onClick={() => void sendMessage()}
           disabled={loading || !input.trim() || isBlocked}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+          className="h-11 shrink-0 rounded-md bg-accent px-4 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
         >
           Enviar
         </button>
       </div>
+      {logoName ? (
+        <p className="mt-1 text-[11px] text-text-dim">🖼️ {logoName} — paleta inferida y enviada a Forge.</p>
+      ) : null}
     </div>
   );
 
+  const tip = tipFor(status, loading);
+
   return (
-    <div className="mt-6">
-      {/* Progress stepper + working indicator */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="flex h-full flex-col gap-3">
+      {/* Workspace: chat en sidebar ancha + contenido ocupa el resto */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+        <aside className="flex min-h-0 w-full flex-col lg:w-[400px] lg:min-w-[360px] lg:max-w-[440px] lg:shrink-0">
+          {chatColumn}
+        </aside>
+        <div className="min-h-0 flex-1 overflow-hidden">{rightPanel}</div>
+      </div>
+
+      {/* Footer fijado al pie: pasos del Composer + tip */}
+      <footer className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-surface px-3 py-2">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-text-dim">Pasos</span>
         {STEPS.map((s, i) => (
-          <div key={s.key} className="flex items-center gap-2">
+          <div key={s.key} className="flex items-center gap-1.5">
             <span
-              className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                 i < step
-                  ? "bg-emerald-500/10 text-emerald-300"
+                  ? "bg-emerald-500/10 text-emerald-600"
                   : i === step
                     ? "bg-accent text-black"
                     : "bg-neutral-800/60 text-neutral-500"
@@ -526,30 +591,18 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
               {s.label}
             </span>
             {i < STEPS.length - 1 ? (
-              <span className="text-neutral-600">→</span>
+              <span className="text-text-dim">→</span>
             ) : null}
           </div>
         ))}
-        {loading ? (
-          <span className="ml-auto flex items-center gap-1.5 text-xs text-accent">
-            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-            Forge trabajando…
-          </span>
-        ) : (
-          <span className="ml-auto text-xs capitalize text-text-dim">fase {status}</span>
-        )}
-      </div>
-
-      {/* Always-split layout: chat sidebar (5fr) + contextual panel (7fr) */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <div className="min-w-0">{chatColumn}</div>
-        <div className={inWorkspace ? "h-[68vh] min-h-[420px] min-w-0" : "min-w-0"}>
-          {rightPanel}
-        </div>
-      </div>
+        <span className="ml-auto flex max-w-md items-center gap-1.5 text-[11px] text-text-dim">
+          <span aria-hidden>💡</span>
+          <span className="truncate">{tip}</span>
+        </span>
+      </footer>
 
       {spec ? (
-        <div className="mt-3 text-xs text-text-dim">
+        <div className="text-xs text-text-dim">
           <span className="font-medium text-neutral-300">Spec:</span>{" "}
           {spec.name} · {spec.purpose.slice(0, 90)}
           {spec.purpose.length > 90 ? "…" : ""} · auth: {spec.auth} · UI:{" "}

@@ -3,7 +3,25 @@
 @tailwind utilities;
 
 :root {
+  /* Tema oscuro (por defecto) */
+  --background: 11 11 15;
+  --surface: 20 20 27;
+  --surface-2: 27 27 36;
+  --border: 38 38 48;
+  --text-dim: 139 139 152;
+  --accent: 255 107 87;
   color-scheme: dark;
+}
+
+/* Modo claro */
+.light {
+  --background: 246 246 248;
+  --surface: 255 255 255;
+  --surface-2: 239 239 243;
+  --border: 224 224 230;
+  --text-dim: 100 100 112;
+  --accent: 234 88 62;
+  color-scheme: light;
 }
 
 html,
@@ -14,6 +32,32 @@ body {
 body {
   @apply bg-background text-neutral-100 antialiased;
 }
+
+/* En modo claro, los neutros hardcodeados pasan a colores oscuros */
+.light body {
+  color: #18181b;
+}
+.light .text-neutral-100 { color: #18181b; }
+.light .text-neutral-200 { color: #27272a; }
+.light .text-neutral-300 { color: #3f3f46; }
+.light .text-neutral-400 { color: #52525b; }
+.light .text-neutral-500 { color: #71717a; }
+.light .text-neutral-600 { color: #a1a1aa; }
+.light .bg-neutral-800\/50,
+.light .bg-neutral-800\/60,
+.light .bg-neutral-800\/70 {
+  background-color: rgb(0 0 0 / 0.07);
+}
+.light .bg-neutral-700 {
+  background-color: #e4e4e7;
+}
+.light .text-red-200 { color: #b91c1c; }
+.light .text-red-300 { color: #c0260d; }
+.light .text-amber-300 { color: #b45309; }
+.light .text-emerald-200 { color: #047857; }
+.light .text-emerald-300 { color: #059669; }
+.light .text-emerald-400 { color: #059669; }
+.light .text-sky-200 { color: #0369a1; }
 
 ::selection {
   background: rgba(255, 107, 87, 0.35);
@@ -27,6 +71,9 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #262630;
   border-radius: 9999px;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: #c9c9d1;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
