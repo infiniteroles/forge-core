@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `cb8be61` (main), 2026-08-28. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `64ffed7` (main), 2026-08-28. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -22,6 +22,10 @@
 ### 6.7 — UI/UX Composer + modo claro + borrado completo ✅ (desplegado)
 - Hecho: Composer a pantalla completa con chat en sidebar ancha; preview con toggle móvil/escritorio; pasos en footer con tips; input alto; logo como pregunta del discovery (adjunto con 📎); modo claro global con toggle persistente; borrado completo de proyectos (BD+repo+previews) con confirmación BORRAR.
 - Pendiente de validar en pruebas: flujo completo con la nueva UI (una iteración completa y borrado real de un proyecto de prueba).
+
+### 6.8 — Auto-continuar + decisiones en el chat ✅ (desplegado)
+- Hecho: el gate del Builder Proposal se auto-continúa (Forge avanza solo; safe-file-policy sigue activa); el Composer consulta la WorkSession y pregunta en el chat las decisiones reales (Continuar / Pedir un cambio) y avisa al terminar/fallar.
+- Pendiente de validar en pruebas: flujo completo con un proyecto nuevo (que ya no se quede en “Forge necesita tu decisión” por el Builder Proposal) y una decisión real que aparezca en el chat.
 
 ## A medio plazo
 

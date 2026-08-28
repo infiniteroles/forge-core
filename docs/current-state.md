@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-28 · HEAD: `cb8be61` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-28 · HEAD: `64ffed7` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -81,6 +81,14 @@ Commits `b3d9af2` + `cb8be61` (chore gitignore) → deploy `e3hb2yjehtbtmuga5odu
 - **Modo claro** para todo Forge Core: colores semánticos convertidos a CSS variables (`--background/surface/surface-2/border/text-dim/accent`) en `globals.css` con `.light`; `components/ThemeToggle.tsx` (toggle ☀️/🌙 en el header, persiste en `localStorage`); overrides `.light` para los neutros hardcodeados. `tailwind.config.ts` usa `rgb(var(--...) / <alpha-value>)`.
 - **Borrado completo de proyectos** (liberar recursos): `lib/projects/delete-project.ts` (`deleteProjectCompletely`) borra la BD (cascade: tasks/workSessions/previews/readiness/promotions/jobs/activity/composerSessions) + **repo de GitHub** (best-effort) + **apps preview de Coolify** (best-effort). Endpoint `POST /api/projects/[id]/delete` (requiere `{confirm:"BORRAR"}`). UI: `ProjectDeleteButton` en la página del proyecto (pide escribir BORRAR).
 - Validado en prod: `/api/health` 200; `/composer` renderiza sidebar+footer; toggle de tema aplica fondo claro `rgb(246,246,248)`.
+
+## 6.8 — Auto-continuar + decisiones en el chat (desplegado)
+
+Commit `64ffed7` → deploy `aoeydl27ozfkmcmsgelkimqn` **Success** (~5 min).
+- **Auto-continuar**: el gate del **Builder Proposal** (`safe_to_attempt_next=false` → “not safe to attempt yet”) ya **no detiene** la sesión: el orquestador lo marca `autoContinuable` y Forge **avanza solo** (el siguiente stage, builder commit, conserva su propia safe-file-policy → no se debilitan guardrails). Evento `work_session.auto_continued`.
+- **Decisiones reales en el chat**: el Composer ahora **consulta el estado de la WorkSession** (nuevo `GET /api/work-sessions/[id]`) y, si Forge necesita una decisión real (`waiting_for_user`), **pregunta en el chat** con el motivo y botones **▶️ Continuar** (llama al endpoint de continue) / **✏️ Pedir un cambio**.
+- **Fin de build visible**: cuando la sesión termina (`completed`/`completed_with_warnings`/`failed`) el chat muestra un mensaje ✅/⚠️/❌ con el resumen — sin stops silenciosos.
+- Ficheros: `lib/work-sessions/{types,stages,orchestrator}.ts`, `lib/activity.ts`, `app/api/work-sessions/[id]/route.ts` (nuevo), `components/composer/ComposerClient.tsx`.
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
