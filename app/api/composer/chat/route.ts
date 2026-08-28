@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
   const nextHistory = [...history, userMsg].slice(-24);
 
   const isAffirmative = (m: string) =>
-    /(confirmo|confirmar|apruebo|aprobar|acepto|de acuerdo|perfecto|dale|adelante|vamos|ok|sí|si\b)/i.test(
+    /(confirmo|confirmar|apruebo|aprobar|acepto|de acuerdo|perfecto|dale|adelante|vamos|ok|sí|si\b|reintent)/i.test(
       m
     );
 
@@ -190,35 +190,43 @@ export async function POST(request: NextRequest) {
       messages = [...nextHistory, msg("assistant", "system", reply)];
     }
   } else if (prevStatus === "planning" && isAffirmative(message)) {
-    // Gate: plan approved → building. Materialize the project.
-    status = "building";
-    let createdProjectId: string | null = null;
-    let createdWorkSessionId: string | null = null;
-    let repoNote = "";
-    try {
-      if (spec && proposal) {
+    // Gate: plan approved → building. Materialize the project. Si la creación
+    // del repo/build falla, se le dice al usuario en el chat (sin proyecto
+    // muerto ni falso éxito) y puede reintentar o dar una URL.
+    if (spec && proposal) {
+      try {
         const built = await createComposerProject(spec, proposal, plan);
-        createdProjectId = built.projectId;
-        createdWorkSessionId = built.workSessionId;
-        repoNote = built.repoFullName
+        projectId = built.projectId;
+        workSessionId = built.workSessionId;
+        status = "building";
+        const repoNote = built.repoFullName
           ? ` He configurado el repositorio ${built.repoFullName}.`
           : "";
+        reply =
+          `✅ Plan aprobado y proyecto **${spec.name}** creado.${repoNote}` +
+          (built.workSessionId
+            ? " El build autónomo ya está en marcha."
+            : "") +
+          " Prepararé la infraestructura y construiré el primer MVP previsualizable para que iteres por chat.";
+        kind = "plan";
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Error desconocido";
+        console.error("composer build failed:", err);
+        status = "planning";
+        reply =
+          `⚠️ No pude crear el repositorio ni arrancar el build: ${errorMessage}. ` +
+          `Dime **"Reintentar"** para volver a intentarlo (buscaré otro nombre de repo) ` +
+          `o pásame la **URL de un repositorio existente**.`;
+        kind = "system";
       }
-    } catch (err) {
-      console.error("composer build failed:", err);
+    } else {
+      status = "planning";
+      reply =
+        "⚠️ Aún no tengo la propuesta necesaria para construir. Confirma la propuesta primero.";
+      kind = "system";
     }
-    if (createdProjectId) projectId = createdProjectId;
-    if (createdWorkSessionId) workSessionId = createdWorkSessionId;
-    reply =
-      createdProjectId && spec
-        ? `✅ Plan aprobado y proyecto **${spec.name}** creado.${repoNote}${
-            createdWorkSessionId
-              ? " El build autónomo ya está en marcha."
-              : ""
-          } Prepararé la infraestructura y construiré el primer MVP previsualizable para que iteres por chat.`
-        : "✅ Plan aprobado. Pasamos a la fase de desarrollo autónomo: prepararé el repositorio, la infraestructura y construiré el MVP para que puedas previsualizarlo e iterar por chat.";
-    kind = "plan";
-    messages = [...nextHistory, msg("assistant", "plan", reply)];
+    messages = [...nextHistory, msg("assistant", kind, reply)];
   } else if (prevStatus === "planning") {
     // Feedback → regenerate the plan incorporating it.
     plan = await withLlmRetry(() =>

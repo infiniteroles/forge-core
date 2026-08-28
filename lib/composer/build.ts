@@ -57,18 +57,37 @@ export async function createComposerProject(
     repoFullName = parsed.fullName;
   }
 
-  // Create a brand-new repository when the spec asks for one.
+  // Create a brand-new repository when the spec asks for one. Los nombres de
+  // repo en GitHub son globales por org: si el slug ya existe (p. ej. de un
+  // intento anterior), se reintenta con slug-2, slug-3… hasta encontrar hueco.
+  // Si aun así falla, se LANZA un error claro (el route lo muestra en el chat)
+  // en lugar de crear un proyecto muerto sin build en silencio.
   if (spec.repo === "new" && !repoFullName && isGithubConfigured()) {
-    try {
-      const created = await createRepository({
-        name: slug,
-        description: spec.purpose,
-        visibility: "private",
-      });
-      repoFullName = created.fullName;
-      repoUrl = created.htmlUrl;
-    } catch (err) {
-      console.error("composer repo creation failed:", err);
+    const maxAttempts = 5;
+    let lastError: unknown = null;
+    for (let n = 0; n < maxAttempts; n++) {
+      const candidate = n === 0 ? slug : `${slug}-${n + 1}`;
+      try {
+        const created = await createRepository({
+          name: candidate,
+          description: spec.purpose,
+          visibility: "private",
+        });
+        repoFullName = created.fullName;
+        repoUrl = created.htmlUrl;
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (!repoFullName) {
+      throw new Error(
+        `No pude crear un repositorio nuevo para "${spec.name}" ` +
+          `(probé ${maxAttempts} nombres: ${slug}, ${slug}-2, …). ` +
+          (lastError instanceof Error
+            ? lastError.message
+            : "Error de GitHub.")
+      );
     }
   }
 
