@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `62297df` (main), 2026-08-28. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `cb8be61` (main), 2026-08-28. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -18,6 +18,10 @@
 - Hecho: al crear un repo nuevo, el Composer sube a `main` (antes del build) **`README.md` + `AGENTS.md` + `.github/copilot-instructions.md`** generados con la spec/propuesta/plan (`lib/composer/handoff.ts`, `pushComposerHandoff` con retry; `build.ts` lo llama antes de lanzar el build autónomo; evento `composer.handoff_created`; test `tests/composer/handoff.test.ts`).
 - Solo aplica a repos nuevos (no a URLs de repos existentes).
 - Pendiente de validación E2E en pruebas: crear un proyecto con repo nuevo y comprobar que los 3 ficheros aparecen en el repo y que el usuario puede clonarlo.
+
+### 6.7 — UI/UX Composer + modo claro + borrado completo ✅ (desplegado)
+- Hecho: Composer a pantalla completa con chat en sidebar ancha; preview con toggle móvil/escritorio; pasos en footer con tips; input alto; logo como pregunta del discovery (adjunto con 📎); modo claro global con toggle persistente; borrado completo de proyectos (BD+repo+previews) con confirmación BORRAR.
+- Pendiente de validar en pruebas: flujo completo con la nueva UI (una iteración completa y borrado real de un proyecto de prueba).
 
 ## A medio plazo
 

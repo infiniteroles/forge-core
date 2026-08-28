@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-28 · HEAD: `62297df` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-28 · HEAD: `cb8be61` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -70,6 +70,17 @@ Commits `dc1dd4b` (UX) + `a57f7e8`/`62297df` (fix build):
 - **Back-to-composer**: enlace para volver al Composer desde el workspace/proyecto.
 - **Fix build**: `a57f7e8` eliminó un `previewPane` huérfano en `ComposerClient.tsx`; `62297df` corrigió el narrowing de `previous.task` en `app/api/work-sessions/[id]/continue/route.ts` y una llave sobrante en `ComposerClient.tsx` (eran la causa de 2 deploys fallidos). `tsc` EXIT=0.
 - Deploy `yi9jnrv9alceqfonmqkz6hjs` → **Success**; `/api/health` 200 y `/api/composer/chat` → 401 (build vivo).
+
+## 6.7 — UI/UX Composer + modo claro + borrado completo (desplegado)
+
+Commits `b3d9af2` + `cb8be61` (chore gitignore) → deploy `e3hb2yjehtbtmuga5odu4vb8` **Success** (~4 min).
+- **Layout a pantalla completa**: Composer con `AppShell wide` (rompe el `max-w-6xl`); **chat en sidebar ancha** (~400px) a la izquierda y **el contenido ocupa el resto**; en móvil se apilan.
+- **Preview móvil**: toggle 🖥️/📱 en el panel de preview; en 📱 el iframe se muestra en un marco de teléfono (390px) centrado.
+- **Pasos en footer**: el stepper de fases se movió a un **footer fijado al pie** del Composer junto con un **tip contextual** (💡) según la fase.
+- **Campo de chat** más alto (2 líneas) y a todo el ancho de la sidebar; botón **📎** para adjuntar logo (el logo pasa a ser **una pregunta más del discovery**, no un control especial).
+- **Modo claro** para todo Forge Core: colores semánticos convertidos a CSS variables (`--background/surface/surface-2/border/text-dim/accent`) en `globals.css` con `.light`; `components/ThemeToggle.tsx` (toggle ☀️/🌙 en el header, persiste en `localStorage`); overrides `.light` para los neutros hardcodeados. `tailwind.config.ts` usa `rgb(var(--...) / <alpha-value>)`.
+- **Borrado completo de proyectos** (liberar recursos): `lib/projects/delete-project.ts` (`deleteProjectCompletely`) borra la BD (cascade: tasks/workSessions/previews/readiness/promotions/jobs/activity/composerSessions) + **repo de GitHub** (best-effort) + **apps preview de Coolify** (best-effort). Endpoint `POST /api/projects/[id]/delete` (requiere `{confirm:"BORRAR"}`). UI: `ProjectDeleteButton` en la página del proyecto (pide escribir BORRAR).
+- Validado en prod: `/api/health` 200; `/composer` renderiza sidebar+footer; toggle de tema aplica fondo claro `rgb(246,246,248)`.
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
