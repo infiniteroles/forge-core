@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `5291c35` (main), 2026-08-27. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `62297df` (main), 2026-08-28. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 

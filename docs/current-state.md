@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-27 · HEAD: `5291c35` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-28 · HEAD: `62297df` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -60,6 +60,16 @@ Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo as
 ## Fase 6.6 — Handoff a tu IDE (desplegado)
 
 - `lib/composer/handoff.ts`: `buildComposerHandoffFiles(spec, proposal, plan)` (puro, testeable) genera `README.md`, `AGENTS.md` y `.github/copilot-instructions.md` (stack, comandos, convenciones shadcn/Material 3, guardrails, respuestas en español); `pushComposerHandoff(repoFullName, …)` los sube a `main` vía Contents API con reintento (2 retries) por la rama de `auto_init`.
+
+## 6.x — Mejoras UX del Composer + fix de build (desplegado)
+
+Commits `dc1dd4b` (UX) + `a57f7e8`/`62297df` (fix build):
+- **Split layout del Composer**: workspace con chat y preview en columnas/chat inferior mejorado.
+- **Loading feedback** en el chat durante las llamadas al LLM.
+- **Continue fire-and-forget**: al aprobar plan / confirmar, no bloquea esperando la respuesta síncrona.
+- **Back-to-composer**: enlace para volver al Composer desde el workspace/proyecto.
+- **Fix build**: `a57f7e8` eliminó un `previewPane` huérfano en `ComposerClient.tsx`; `62297df` corrigió el narrowing de `previous.task` en `app/api/work-sessions/[id]/continue/route.ts` y una llave sobrante en `ComposerClient.tsx` (eran la causa de 2 deploys fallidos). `tsc` EXIT=0.
+- Deploy `yi9jnrv9alceqfonmqkz6hjs` → **Success**; `/api/health` 200 y `/api/composer/chat` → 401 (build vivo).
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
