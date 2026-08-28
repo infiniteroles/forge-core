@@ -61,6 +61,7 @@ export const ACTIVITY_TYPES = [
   "work_session.iteration_completed",
   "work_session.iteration_completed_with_warnings",
   "work_session.iteration_failed",
+  "work_session.auto_continued",
   "work_session.continued",
   "work_session.checks.started",
   "work_session.checks.completed",

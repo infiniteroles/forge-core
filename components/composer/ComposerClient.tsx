@@ -91,9 +91,13 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const [options, setOptions] = useState<string[]>([]);
   const [preview, setPreview] = useState<{ url: string; status: string } | null>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [wsStatus, setWsStatus] = useState<string | null>(null);
+  const [wsSummary, setWsSummary] = useState<string | null>(null);
+  const [decision, setDecision] = useState<{ summary: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
+  const notifiedWsRef = useRef<string | null>(null);
 
   // Load an existing session when navigating back from a work session link.
   useEffect(() => {
@@ -136,6 +140,134 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
     }, 15000);
     return () => clearInterval(id);
   }, [projectId, status]);
+
+  // Fase 6.8 — poll del estado de la WorkSession: si Forge necesita una decisión
+  // real se pregunta AQUÍ en el chat (con opciones), y si termina/falla se avisa.
+  useEffect(() => {
+    if (!workSessionId || !["building", "preview", "done"].includes(status)) return;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/work-sessions/${workSessionId}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          status: string;
+          summary?: string | null;
+          error?: string | null;
+        };
+        setWsStatus(data.status);
+        setWsSummary(data.summary ?? data.error ?? null);
+        const key = `${data.status}|${data.summary ?? data.error ?? ""}`;
+        if (notifiedWsRef.current === key) return;
+        if (data.status === "waiting_for_user") {
+          notifiedWsRef.current = key;
+          const summary = (data.summary ?? data.error ?? "Forge necesita tu decisión.").trim();
+          setDecision({ summary });
+          setMessages((m) => [
+            ...m,
+            {
+              id: `ws-decision-${Date.now()}`,
+              role: "assistant",
+              kind: "system",
+              content:
+                `🧭 **Forge necesita tu decisión**:\n\n${summary}\n\n` +
+                `Puedes **continuar** (Forge aplica el siguiente paso seguro) o **pedir un cambio**.`,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        } else if (
+          ["completed", "completed_with_warnings", "failed"].includes(data.status)
+        ) {
+          notifiedWsRef.current = key;
+          const summary = (data.summary ?? data.error ?? "El build ha terminado.").trim();
+          const emoji =
+            data.status === "failed"
+              ? "❌"
+              : data.status === "completed_with_warnings"
+                ? "⚠️"
+                : "✅";
+          const verb =
+            data.status === "failed"
+              ? "El build ha fallado"
+              : data.status === "completed_with_warnings"
+                ? "El build terminó con avisos"
+                : "El build ha terminado";
+          setMessages((m) => [
+            ...m,
+            {
+              id: `ws-end-${Date.now()}`,
+              role: "assistant",
+              kind: "text",
+              content: `${emoji} ${verb}. ${summary}`,
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      } catch {
+        // keep polling
+      }
+    }, 10000);
+    return () => clearInterval(id);
+  }, [workSessionId, status]);
+
+  const continueWorkSession = useCallback(async () => {
+    if (!workSessionId) return;
+    setDecision(null);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/work-sessions/${workSessionId}/continue`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction: "" }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        workSession?: { id?: string };
+      } | null;
+      if (res.ok && data?.workSession?.id) {
+        setWorkSessionId(data.workSession.id);
+        notifiedWsRef.current = null;
+        setMessages((m) => [
+          ...m,
+          {
+            id: `ws-continue-${Date.now()}`,
+            role: "assistant",
+            kind: "text",
+            content: "▶️ Forge continúa trabajando. Te aviso cuando haya novedades.",
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      } else {
+        setMessages((m) => [
+          ...m,
+          {
+            id: `ws-continue-err-${Date.now()}`,
+            role: "assistant",
+            kind: "system",
+            content:
+              "⚠️ No pude continuar la sesión automáticamente. Revisa el proyecto y vuelve a intentarlo.",
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [workSessionId]);
+
+  const askForChange = useCallback(() => {
+    setDecision(null);
+    setMessages((m) => [
+      ...m,
+      {
+        id: `ws-change-${Date.now()}`,
+        role: "assistant",
+        kind: "text",
+        content:
+          "✏️ Cuéntame qué quieres cambiar y lo aplico como una nueva iteración.",
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -508,6 +640,24 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
               {opt}
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {/* Forge needs a decision → ask in the chat */}
+      {decision && !loading ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            onClick={() => void continueWorkSession()}
+            className="rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+          >
+            ▶️ Continuar
+          </button>
+          <button
+            onClick={askForChange}
+            className="rounded-md border border-border bg-background px-3.5 py-1.5 text-sm text-neutral-100 transition hover:bg-surface-2 disabled:opacity-50"
+          >
+            ✏️ Pedir un cambio
+          </button>
         </div>
       ) : null}
 

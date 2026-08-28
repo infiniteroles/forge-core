@@ -60,6 +60,11 @@ export interface WorkSessionResult {
 
 export type StageOutcome =
   | { type: "continue" }
-  | { type: "waiting_for_user"; reason: string }
+  | {
+      type: "waiting_for_user";
+      reason: string;
+      /** Puntos de decisión conservadores que Forge puede resolver solo */
+      autoContinuable?: boolean;
+    }
   | { type: "completed_with_warnings"; reason: string }
   | { type: "failed"; error: string };

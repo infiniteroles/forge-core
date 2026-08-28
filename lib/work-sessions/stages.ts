@@ -384,6 +384,7 @@ export async function stageEnsureBuilderProposal(
         type: "waiting_for_user",
         reason:
           "The Builder Proposal says this is not safe to attempt yet. Review it before continuing.",
+        autoContinuable: true,
       };
     }
   }
@@ -446,6 +447,7 @@ export async function stageEnsureBuilderProposal(
       type: "waiting_for_user",
       reason:
         "The Builder Proposal says this is not safe to attempt yet. Review it before continuing.",
+      autoContinuable: true,
     };
   }
 

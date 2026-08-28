@@ -284,6 +284,24 @@ async function runSession(
     if (outcome.type === "continue") continue;
 
     if (outcome.type === "waiting_for_user") {
+      // Punto de decisión conservador (p. ej. Builder Proposal "no safe yet"):
+      // Forge avanza solo — el siguiente stage (builder commit) sigue teniendo
+      // su propia safe-file-policy, así que no se debilita ningún guardrail.
+      if (outcome.autoContinuable) {
+        result.warnings?.push(`auto-continued: ${outcome.reason}`);
+        await logActivity({
+          projectId: ws.task.projectId,
+          type: "work_session.auto_continued",
+          message: `Forge continuó automáticamente: ${outcome.reason}`,
+          metadata: {
+            workSessionId: ws.id,
+            taskId: ws.taskId,
+            stage: stage.key,
+            status: "running",
+          },
+        });
+        continue;
+      }
       finalStatus = "waiting_for_user";
       finalSummary = outcome.reason;
       result.warnings?.push(outcome.reason);
