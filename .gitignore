@@ -19,3 +19,6 @@ coverage/
 # OS & logs
 .DS_Store
 *.log
+
+# Build artifacts
+*.tsbuildinfo
