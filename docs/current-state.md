@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-28 · HEAD: `64ffed7` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-28 · HEAD: `d126b9f` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -89,6 +89,13 @@ Commit `64ffed7` → deploy `aoeydl27ozfkmcmsgelkimqn` **Success** (~5 min).
 - **Decisiones reales en el chat**: el Composer ahora **consulta el estado de la WorkSession** (nuevo `GET /api/work-sessions/[id]`) y, si Forge necesita una decisión real (`waiting_for_user`), **pregunta en el chat** con el motivo y botones **▶️ Continuar** (llama al endpoint de continue) / **✏️ Pedir un cambio**.
 - **Fin de build visible**: cuando la sesión termina (`completed`/`completed_with_warnings`/`failed`) el chat muestra un mensaje ✅/⚠️/❌ con el resumen — sin stops silenciosos.
 - Ficheros: `lib/work-sessions/{types,stages,orchestrator}.ts`, `lib/activity.ts`, `app/api/work-sessions/[id]/route.ts` (nuevo), `components/composer/ComposerClient.tsx`.
+
+## 6.8b — Fix: fallo silencioso al crear repo nuevo en el Composer (desplegado)
+
+Commit `d126b9f` → deploy `hz2c1h2olocdfy8uldmkctre` **Success** (~5 min).
+- **Problema**: si el usuario elegía "repo nuevo" y `createRepository` fallaba (p. ej. el slug ya existía como repo en la org, nombres globales), el error se tragaba en silencio → se creaba un **proyecto muerto** (repo=None, 0 work sessions, el chat decía "build en marcha" pero no hacía nada).
+- **Fix**: `lib/composer/build.ts` hace **dedup del nombre del repo** (prueba `slug`, `slug-2`, `slug-3`… hasta 5) y si aun así falla **lanza un error claro**; `app/api/composer/chat/route.ts` muestra ese error **en el chat** (⚠️ con opción de reintentar o dar una URL) en lugar de un falso éxito; `isAffirmative` incluye "reintentar".
+- **Nota**: el builder autónomo aún NO genera un scaffold real de la app (la PR de un MVP solo incluye el plan `.forge/…`); falta la capacidad de scaffold de la roadmap (6.4c).
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
