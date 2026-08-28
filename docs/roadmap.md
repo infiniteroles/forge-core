@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `d126b9f` (main), 2026-08-28. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `1e77958` (main), 2026-08-28. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -27,7 +27,11 @@
 - Hecho: el gate del Builder Proposal se auto-continúa (Forge avanza solo; safe-file-policy sigue activa); el Composer consulta la WorkSession y pregunta en el chat las decisiones reales (Continuar / Pedir un cambio) y avisa al terminar/fallar.
 - Pendiente de validar en pruebas: flujo completo con un proyecto nuevo (que ya no se quede en “Forge necesita tu decisión” por el Builder Proposal) y una decisión real que aparezca en el chat.
 
-### 6.4c — Scaffold real del MVP (PRIORITARIO)
+### 6.9 — Check previo de necesidades + histórico persistente ✅ (desplegado)
+- Hecho: check de readiness (nombre/repo verificados y solventables desde el chat) antes de arrancar; histórico del Composer persistente con desplegable de proyectos.
+- Pendiente de validar en pruebas: un flujo completo eligiendo "sin repo" (debe bloquear y pedir resolver) y retomar una conversación tras recargar.
+
+### 6.4c — Scaffold real del MVP (PRIORITARIO, pospuesto por decisión del usuario)
 - El build autónomo sobre un repo nuevo crea la rama/PR pero **solo sube el plan (`.forge/…`)**, no el código de la app. Falta que el builder genere un **scaffold real** (Next.js + shadcn/ui + Prisma según spec) en la rama para que el preview muestre una app de verdad.
 - Opciones: plantilla de scaffold determinista en el repo (sin LLM) + luego iteraciones LLM; o instruir al builder commit para crear los ficheros base.
 

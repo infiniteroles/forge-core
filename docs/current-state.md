@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-28 · HEAD: `d126b9f` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-28 · HEAD: `1e77958` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -96,6 +96,13 @@ Commit `d126b9f` → deploy `hz2c1h2olocdfy8uldmkctre` **Success** (~5 min).
 - **Problema**: si el usuario elegía "repo nuevo" y `createRepository` fallaba (p. ej. el slug ya existía como repo en la org, nombres globales), el error se tragaba en silencio → se creaba un **proyecto muerto** (repo=None, 0 work sessions, el chat decía "build en marcha" pero no hacía nada).
 - **Fix**: `lib/composer/build.ts` hace **dedup del nombre del repo** (prueba `slug`, `slug-2`, `slug-3`… hasta 5) y si aun así falla **lanza un error claro**; `app/api/composer/chat/route.ts` muestra ese error **en el chat** (⚠️ con opción de reintentar o dar una URL) en lugar de un falso éxito; `isAffirmative` incluye "reintentar".
 - **Nota**: el builder autónomo aún NO genera un scaffold real de la app (la PR de un MVP solo incluye el plan `.forge/…`); falta la capacidad de scaffold de la roadmap (6.4c).
+
+## 6.9 — Check previo de necesidades + histórico persistente del Composer (desplegado)
+
+Commit `1e77958` → deploy `mabiaogdgz7ipuyichhnyvt2` **Success** (~4 min).
+- **Check previo antes de construir**: nuevo `lib/composer/readiness.ts` (`evaluateComposerReadiness`, `formatReadinessChecklist`, `readinessOptions`, `isRepoResolutionIntent`, `githubUrlFromMessage`). Antes de aprobar el plan se valida nombre, propósito y repositorio (repo nuevo → verifica nombre libre en GitHub y que GitHub esté configurado; URL → valida formato y acceso; sin repo → bloquea). Si hay ❌ bloqueantes, **no arranca**: muestra la checklist en el chat con botones para solventar (**Crear repo nuevo** / **Usar URL de repo existente**) y se queda en `planning` hasta resolver.
+- **Histórico persistente**: nuevo `GET /api/composer/sessions` lista las sesiones (con proyecto). El Composer guarda la sesión en `localStorage` + URL (`?session=`), **retoma la última al recargar** y muestra un **desplegable arriba** para seleccionar proyecto/conversación (con "Nueva conversación"). `GET /api/composer/chat` ahora deriva `workSessionId` del proyecto para seguir el estado del build al retomar.
+- Validado en prod: `/api/composer/sessions` devuelve 11 sesiones (TengoYBusco con proyecto y status building).
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
