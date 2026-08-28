@@ -31,6 +31,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       { status: 409 }
     );
   }
+  // Capture before closures: TS does not keep property narrowing inside .catch().
+  const taskTitle = previous.task.title;
 
   const body = await request.json().catch(() => null);
   const rawInstruction =
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   await logActivity({
     projectId: previous.projectId,
     type: "work_session.continued",
-    message: `Work session continued (iteration #${iterationNumber}) for task "${previous.task.title}"`,
+    message: `Work session continued (iteration #${iterationNumber}) for task "${taskTitle}"`,
     metadata: {
       workSessionId: workSession.id,
       parentWorkSessionId: previous.id,
@@ -84,7 +86,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     await logActivity({
       projectId: previous.projectId,
       type: "work_session.iteration_failed",
-      message: `Iteration failed for task "${previous.task.title}": ${message}`,
+      message: `Iteration failed for task "${taskTitle}": ${message}`,
       metadata: { workSessionId: workSession.id, parentWorkSessionId: previous.id, taskId: previous.taskId, iterationNumber, status: "failed" },
     }).catch(() => undefined);
   });

@@ -391,7 +391,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
           Forge está trabajando…
         </div>
       ) : null}
-      {/* Chat thread */}}
+      {/* Chat thread */}
       <div className="flex max-h-[46vh] min-h-[220px] flex-1 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface p-4">
         {messages.length === 0 ? (
           <div className="mx-auto my-auto max-w-md text-center text-sm text-text-dim">
