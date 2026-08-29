@@ -9,6 +9,7 @@ import type {
   ComposerSpec,
   ComposerStatus,
 } from "@/lib/composer/types";
+import { agentRoleMeta } from "@/lib/agents/roles";
 
 type ChatResponse = {
   id: string;
@@ -617,12 +618,20 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
             ))}
           </div>
           <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-neutral-300">
-            {plan.tasks.map((t) => (
-              <li key={t.title}>
-                <span className="text-neutral-100">{t.title}</span>
-                {t.description ? <span className="text-text-dim"> — {t.description}</span> : null}
-              </li>
-            ))}
+            {plan.tasks.map((t) => {
+              const meta = agentRoleMeta(t.agent);
+              return (
+                <li key={t.title}>
+                  <span className="mr-1" title={meta.label}>
+                    {meta.icon}
+                  </span>
+                  <span className="text-neutral-100">{t.title}</span>
+                  {t.description ? (
+                    <span className="text-text-dim"> — {t.description}</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
           <p className="mt-3 text-xs text-text-dim">
             <span className="font-medium text-neutral-300">Pruebas:</span> {plan.testStrategy}

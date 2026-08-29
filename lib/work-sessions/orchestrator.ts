@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { isSimpleApiEndpoint } from "@/lib/llm-efficiency/simple-task-detector";
 import { checkSessionBudget } from "@/lib/llm-efficiency/session-budget";
+import type { AgentRole } from "@/lib/agents/roles";
 import type { WorkSessionResult, WorkSessionStage, StageOutcome } from "./types";
 import {
   StageContext,
@@ -30,32 +31,33 @@ export interface RunDevWorkSessionInput {
 interface StageFn {
   key: WorkSessionStage;
   label: string;
+  agent: AgentRole;
   fn: (ctx: StageContext) => Promise<StageOutcome>;
 }
 
 const DEV_STAGES: StageFn[] = [
-  { key: "ensure_issue", label: "Ensure GitHub issue", fn: stageEnsureIssue },
-  { key: "ensure_branch", label: "Ensure GitHub branch", fn: stageEnsureBranch },
-  { key: "ensure_scaffold", label: "Generate MVP scaffold", fn: stageEnsureScaffold },
-  { key: "ensure_plan_commit", label: "Ensure plan commit", fn: stageEnsurePlanCommit },
-  { key: "ensure_draft_pr", label: "Ensure draft pull request", fn: stageEnsureDraftPr },
-  { key: "ensure_builder_proposal", label: "Run Builder Proposal", fn: stageEnsureBuilderProposal },
-  { key: "run_builder_commit", label: "Run Builder Commit", fn: stageRunBuilderCommit },
-  { key: "run_session_checks", label: "Run lightweight session checks", fn: stageRunSessionChecks },
-  { key: "analyze_pr", label: "Analyze pull request", fn: stageAnalyzePr },
-  { key: "ensure_dev_preview", label: "Generate DEV preview", fn: stageEnsureDevPreview },
+  { key: "ensure_issue", label: "Ensure GitHub issue", agent: "dev", fn: stageEnsureIssue },
+  { key: "ensure_branch", label: "Ensure GitHub branch", agent: "dev", fn: stageEnsureBranch },
+  { key: "ensure_scaffold", label: "Generate MVP scaffold", agent: "infra", fn: stageEnsureScaffold },
+  { key: "ensure_plan_commit", label: "Ensure plan commit", agent: "planner", fn: stageEnsurePlanCommit },
+  { key: "ensure_draft_pr", label: "Ensure draft pull request", agent: "dev", fn: stageEnsureDraftPr },
+  { key: "ensure_builder_proposal", label: "Run Builder Proposal", agent: "dev", fn: stageEnsureBuilderProposal },
+  { key: "run_builder_commit", label: "Run Builder Commit", agent: "dev", fn: stageRunBuilderCommit },
+  { key: "run_session_checks", label: "Run lightweight session checks", agent: "qa", fn: stageRunSessionChecks },
+  { key: "analyze_pr", label: "Analyze pull request", agent: "qa", fn: stageAnalyzePr },
+  { key: "ensure_dev_preview", label: "Generate DEV preview", agent: "infra", fn: stageEnsureDevPreview },
 ];
 
 const ITERATION_STAGES: StageFn[] = [
-  { key: "refresh_context", label: "Refresh task context", fn: stageRefreshContext },
-  { key: "ensure_existing_task", label: "Ensure existing task", fn: stageEnsureExistingTask },
-  { key: "ensure_issue", label: "Ensure GitHub issue", fn: stageEnsureIssue },
-  { key: "ensure_branch", label: "Ensure GitHub branch", fn: stageEnsureBranch },
-  { key: "ensure_draft_pr", label: "Ensure draft pull request", fn: stageEnsureDraftPr },
-  { key: "run_iteration_builder_proposal", label: "Run Builder Proposal", fn: stageRunIterationBuilderProposal },
-  { key: "run_builder_commit", label: "Run Builder Commit", fn: stageRunBuilderCommit },
-  { key: "run_session_checks", label: "Run lightweight session checks", fn: stageRunSessionChecks },
-  { key: "analyze_pr", label: "Analyze pull request", fn: stageAnalyzePr },
+  { key: "refresh_context", label: "Refresh task context", agent: "dev", fn: stageRefreshContext },
+  { key: "ensure_existing_task", label: "Ensure existing task", agent: "dev", fn: stageEnsureExistingTask },
+  { key: "ensure_issue", label: "Ensure GitHub issue", agent: "dev", fn: stageEnsureIssue },
+  { key: "ensure_branch", label: "Ensure GitHub branch", agent: "dev", fn: stageEnsureBranch },
+  { key: "ensure_draft_pr", label: "Ensure draft pull request", agent: "dev", fn: stageEnsureDraftPr },
+  { key: "run_iteration_builder_proposal", label: "Run Builder Proposal", agent: "dev", fn: stageRunIterationBuilderProposal },
+  { key: "run_builder_commit", label: "Run Builder Commit", agent: "dev", fn: stageRunBuilderCommit },
+  { key: "run_session_checks", label: "Run lightweight session checks", agent: "qa", fn: stageRunSessionChecks },
+  { key: "analyze_pr", label: "Analyze pull request", agent: "qa", fn: stageAnalyzePr },
 ];
 
 /**
@@ -224,6 +226,7 @@ async function runSession(
         workSessionId: ws.id,
         taskId: ws.taskId,
         stage: stage.key,
+        agent: stage.agent,
         status: "running",
         iterationNumber: ws.iterationNumber,
         parentWorkSessionId: ws.parentWorkSessionId ?? undefined,

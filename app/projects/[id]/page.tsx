@@ -8,6 +8,7 @@ import { InstructionForm } from "@/components/InstructionForm";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { ProjectArchiveButton } from "@/components/ProjectArchiveButton";
 import { ProjectDeleteButton } from "@/components/ProjectDeleteButton";
+import { summarizeProjectAgents } from "@/lib/agents/summary";
 import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
@@ -237,6 +238,12 @@ export default async function ProjectDetailPage({ params }: Props) {
     (p) => p.status === "ready"
   ).length;
 
+  // Agentes especializados que han trabajado en este proyecto.
+  const agentSummary = summarizeProjectAgents(
+    project.activityLogs,
+    project.agentRuns
+  );
+
   // Production readiness: latest review per task.
   function readinessCause(review: {
     diagnostics: unknown;
@@ -383,6 +390,30 @@ export default async function ProjectDetailPage({ params }: Props) {
         </div>
 
         <MvpFlowPanel flow={mvpFlow} />
+
+        {agentSummary.length > 0 ? (
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+              Agentes del proyecto
+            </h2>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {agentSummary.map((a) => (
+                <div
+                  key={a.role}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
+                >
+                  <span>{a.icon}</span>
+                  <span className="text-neutral-100">{a.label}</span>
+                  <span className="text-text-dim">
+                    {a.stages > 0 ? `${a.stages} etapas` : ""}
+                    {a.stages > 0 && a.runs > 0 ? " · " : ""}
+                    {a.runs > 0 ? `${a.runs} análisis` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {project.archivedAt ? (
           <div className="rounded-lg border border-neutral-700 bg-surface px-4 py-3 text-sm text-text-dim">

@@ -18,7 +18,12 @@ PHASES (6 to 9, in this order when applicable):
 7. Tests de integración / E2E — flujos completos (API + UI), smoke test del arranque.
 8. QA y revisión — checklist manual para el usuario, revisión de la PR, ajustes finales.
 
-TASKS: al menos 2-3 tareas CONCRETAS por fase, pequeñas y accionables, con descripción clara. Cada tarea lleva "phase" (nombre de su fase) y "kind" (setup|db|auth|backend|frontend|test|qa).
+TASKS: al menos 2-3 tareas CONCRETAS por fase, pequeñas y accionables, con descripción clara. Cada tarea lleva "phase" (nombre de su fase), "kind" (setup|db|auth|backend|frontend|test|qa) y "agent" (el PERFIL ESPECIALIZADO que la ejecutará):
+  - "planner" → planificación y análisis.
+  - "dev" → desarrollo de código (scaffold, modelo de datos, auth, backend, frontend).
+  - "infra" → infraestructura, despliegue, previews, CI, Dockerfile.
+  - "qa" → tests unitarios, tests de integración/E2E y revisión de la PR.
+Asigna el rol más adecuado a cada tarea (varios agentes distintos deben participar en el plan: dev, qa, infra y planner cuando corresponda).
 
 TEST STRATEGY: sé específico. Nombra los tests unitarios (lógica de negocio), los tests de integración/E2E (flujos principales del usuario) y la checklist de QA/manual que el usuario debe ejecutar para validar el MVP.
 
@@ -29,7 +34,7 @@ Respond with STRICT JSON only, matching this shape:
   "summary": "2-3 sentences in the user's language summarizing the plan",
   "phases": ["Setup", "Modelo de datos", "Auth", "Backend", "Frontend", "Tests unitarios", "Tests E2E", "QA"],
   "tasks": [
-    {"title": "...", "description": "...", "kind": "setup|db|auth|backend|frontend|test|qa", "phase": "Setup"}
+    {"title": "...", "description": "...", "kind": "setup|db|auth|backend|frontend|test|qa", "phase": "Setup", "agent": "dev"}
   ],
   "testStrategy": "detailed testing approach (unit, integration/E2E, QA checklist)",
   "risks": ["risk 1", "risk 2"]
@@ -82,6 +87,7 @@ export async function generatePlan(
           description: String(o.description ?? ""),
           kind: String(o.kind ?? "backend"),
           phase: typeof o.phase === "string" ? o.phase : undefined,
+          agent: typeof o.agent === "string" ? o.agent : undefined,
         };
       })
     : [
@@ -90,6 +96,7 @@ export async function generatePlan(
           description: "Scaffold inicial y configuración.",
           kind: "setup",
           phase: "Setup",
+          agent: "dev",
         },
       ];
 

@@ -13,6 +13,7 @@ import {
   isRepoResolutionIntent,
   githubUrlFromMessage,
 } from "@/lib/composer/readiness";
+import { agentRoleMeta } from "@/lib/agents/roles";
 import type {
   ComposerMessage,
   ComposerMessageKind,
@@ -437,11 +438,14 @@ function formatPlan(plan: ComposerPlan, withFeedback = false): string {
   ];
 
   // Agrupar tareas por fase (las que no tengan fase van en "Tareas").
-  const byPhase = new Map<string, { title: string; description: string }[]>();
+  const byPhase = new Map<
+    string,
+    { title: string; description: string; agent?: string }[]
+  >();
   for (const t of plan.tasks) {
     const key = (t.phase?.trim() || "Tareas").replace(/^[\d.\s]+/, "");
     const arr = byPhase.get(key) ?? [];
-    arr.push({ title: t.title, description: t.description });
+    arr.push({ title: t.title, description: t.description, agent: t.agent });
     byPhase.set(key, arr);
   }
   if (byPhase.size === 0) {
@@ -449,11 +453,12 @@ function formatPlan(plan: ComposerPlan, withFeedback = false): string {
   } else {
     for (const [phase, tasks] of byPhase) {
       lines.push(`🛠️ ${phase}`);
-      tasks.forEach((t, i) =>
+      tasks.forEach((t, i) => {
+        const meta = agentRoleMeta(t.agent);
         lines.push(
-          `  ${i + 1}. ${t.title}${t.description ? ` — ${t.description}` : ""}`
-        )
-      );
+          `  ${meta.icon} ${i + 1}. ${t.title}${t.description ? ` — ${t.description}` : ""}`
+        );
+      });
       lines.push("");
     }
   }
