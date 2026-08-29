@@ -53,7 +53,7 @@ export type ComposerProposal = {
 export type ComposerPlan = {
   summary: string;
   phases: string[];
-  tasks: { title: string; description: string; kind: string }[];
+  tasks: { title: string; description: string; kind: string; phase?: string }[];
   testStrategy: string;
   risks?: string[];
 };

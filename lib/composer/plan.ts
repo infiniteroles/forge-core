@@ -6,17 +6,33 @@ import { chatCompletion } from "@/lib/llm/client";
 import type { LLMMessage } from "@/lib/llm/types";
 import type { ComposerPlan, ComposerProposal, ComposerSpec } from "./types";
 
-const SYSTEM_PROMPT = `You are the engineering planner of "Forge Composer". Based on a confirmed app spec and architecture proposal you produce a pragmatic development and test plan. Keep it realistic and ordered; avoid over-engineering. Phases should go from setup → data model → auth → core backend → frontend → tests → polish. Tasks must be concrete and small enough to build autonomously. Testing must be pragmatic (unit tests for core logic, an API smoke test, and a manual checklist for the user to verify the MVP).
+const SYSTEM_PROMPT = `You are the engineering planner of "Forge Composer". Based on a confirmed app spec and architecture proposal, produce a DETAILED, realistic development and test plan that an autonomous builder can execute phase by phase. Do NOT be generic — tailor it to the app (data model, auth, screens, endpoints).
+
+PHASES (6 to 9, in this order when applicable):
+1. Setup — scaffold, configuración, dependencias, entorno.
+2. Modelo de datos — esquema/modelos, migraciones (Prisma), seeds.
+3. Autenticación — auth y sesiones (si la app la requiere; si no, indicarlo).
+4. Backend / API — endpoints, servicios, validaciones.
+5. Frontend — páginas, componentes, estado, navegación.
+6. Tests unitarios — lógica de negocio, validadores, helpers (vitest).
+7. Tests de integración / E2E — flujos completos (API + UI), smoke test del arranque.
+8. QA y revisión — checklist manual para el usuario, revisión de la PR, ajustes finales.
+
+TASKS: al menos 2-3 tareas CONCRETAS por fase, pequeñas y accionables, con descripción clara. Cada tarea lleva "phase" (nombre de su fase) y "kind" (setup|db|auth|backend|frontend|test|qa).
+
+TEST STRATEGY: sé específico. Nombra los tests unitarios (lógica de negocio), los tests de integración/E2E (flujos principales del usuario) y la checklist de QA/manual que el usuario debe ejecutar para validar el MVP.
+
+RISKS: 1-3 riesgos reales del proyecto.
 
 Respond with STRICT JSON only, matching this shape:
 {
-  "summary": "1-2 sentences in the user's language summarizing the plan",
-  "phases": ["Setup", "...", "Tests"],
+  "summary": "2-3 sentences in the user's language summarizing the plan",
+  "phases": ["Setup", "Modelo de datos", "Auth", "Backend", "Frontend", "Tests unitarios", "Tests E2E", "QA"],
   "tasks": [
-    {"title": "...", "description": "...", "kind": "setup|db|auth|backend|frontend|test"}
+    {"title": "...", "description": "...", "kind": "setup|db|auth|backend|frontend|test|qa", "phase": "Setup"}
   ],
-  "testStrategy": "short description of the testing approach",
-  "risks": ["optional risk bullets"]
+  "testStrategy": "detailed testing approach (unit, integration/E2E, QA checklist)",
+  "risks": ["risk 1", "risk 2"]
 }`;
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
@@ -53,7 +69,7 @@ export async function generatePlan(
   const result = await chatCompletion({
     messages,
     temperature: 0.3,
-    maxTokens: 2400,
+    maxTokens: 4000,
     responseFormat: "json_object",
   });
 
@@ -65,9 +81,17 @@ export async function generatePlan(
           title: String(o.title ?? "Tarea"),
           description: String(o.description ?? ""),
           kind: String(o.kind ?? "backend"),
+          phase: typeof o.phase === "string" ? o.phase : undefined,
         };
       })
-    : [{ title: "Preparar el proyecto base", description: "Scaffold inicial y configuración.", kind: "setup" }];
+    : [
+        {
+          title: "Preparar el proyecto base",
+          description: "Scaffold inicial y configuración.",
+          kind: "setup",
+          phase: "Setup",
+        },
+      ];
 
   return {
     summary:

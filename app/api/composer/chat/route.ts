@@ -425,18 +425,52 @@ function formatProposal(proposal: ComposerProposal): string {
 }
 
 function formatPlan(plan: ComposerPlan, withFeedback = false): string {
-  const tasks = plan.tasks
-    .map((t, i) => `${i + 1}. ${t.title} — ${t.description}`)
-    .join("\n");
-  return (
-    (withFeedback
-      ? "🔄 He ajustado el plan con tu feedback.\n\n"
-      : "✅ Plan de desarrollo y pruebas listo:\n\n") +
-    `${plan.summary}\n\n` +
-    `**Fases**: ${plan.phases.join(" · ")}\n\n` +
-    `**Tareas**:\n${tasks}\n\n` +
-    `**Estrategia de pruebas**: ${plan.testStrategy}\n` +
-    (plan.risks?.length ? `\n**Riesgos**: ${plan.risks.join("; ")}\n` : "") +
-    `\n¿Apruebas el plan para empezar a construir, o quieres ajustar algo?`
+  const lines = [
+    withFeedback
+      ? "🔄 He ajustado el plan con tu feedback."
+      : "✅ Plan de desarrollo y pruebas listo:",
+    "",
+    plan.summary,
+    "",
+    `📦 Fases: ${plan.phases.join(" → ")}`,
+    "",
+  ];
+
+  // Agrupar tareas por fase (las que no tengan fase van en "Tareas").
+  const byPhase = new Map<string, { title: string; description: string }[]>();
+  for (const t of plan.tasks) {
+    const key = (t.phase?.trim() || "Tareas").replace(/^[\d.\s]+/, "");
+    const arr = byPhase.get(key) ?? [];
+    arr.push({ title: t.title, description: t.description });
+    byPhase.set(key, arr);
+  }
+  if (byPhase.size === 0) {
+    plan.tasks.forEach((t, i) => lines.push(`${i + 1}. ${t.title} — ${t.description}`));
+  } else {
+    for (const [phase, tasks] of byPhase) {
+      lines.push(`🛠️ ${phase}`);
+      tasks.forEach((t, i) =>
+        lines.push(
+          `  ${i + 1}. ${t.title}${t.description ? ` — ${t.description}` : ""}`
+        )
+      );
+      lines.push("");
+    }
+  }
+
+  lines.push("🧪 Pruebas:");
+  lines.push(
+    plan.testStrategy
+      .split("\n")
+      .map((l) => `  ${l.trim()}`)
+      .join("\n")
   );
+  if (plan.risks?.length) {
+    lines.push("");
+    lines.push("⚠️ Riesgos:");
+    plan.risks.forEach((r) => lines.push(`  - ${r}`));
+  }
+  lines.push("");
+  lines.push("¿Apruebas el plan para empezar a construir, o quieres ajustar algo?");
+  return lines.join("\n");
 }
