@@ -2,6 +2,7 @@
 // From a confirmed ComposerSpec, proposes stack / database / auth / hosting.
 
 import { chatCompletion } from "@/lib/llm/client";
+import { applySkill } from "@/lib/agents/skills";
 import type { LLMMessage } from "@/lib/llm/types";
 import type { ComposerProposal, ComposerSpec } from "./types";
 
@@ -39,7 +40,7 @@ export async function generateProposal(
   spec: ComposerSpec
 ): Promise<ComposerProposal> {
   const messages: LLMMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: applySkill("planner", SYSTEM_PROMPT) },
     {
       role: "user",
       content: `App spec:\n${JSON.stringify(spec, null, 2)}\n\nGenerate the initial architecture proposal.`,

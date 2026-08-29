@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { applySkill } from "@/lib/agents/skills";
 import { prisma } from "@/lib/db";
 import { chatCompletion, getLLMConfig, isLLMConfigured } from "./client";
 import { LLMError } from "./types";
@@ -329,7 +330,7 @@ export async function runPrReviewAgent(
 
   const result = await chatCompletion({
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: applySkill("qa", SYSTEM_PROMPT) },
       { role: "user", content: formatReviewContext(context) },
     ],
     temperature: 0.1,

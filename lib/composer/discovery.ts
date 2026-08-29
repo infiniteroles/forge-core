@@ -2,6 +2,7 @@
 // Asks the minimum essential questions and produces a structured ComposerSpec.
 
 import { chatCompletion } from "@/lib/llm/client";
+import { applySkill } from "@/lib/agents/skills";
 import type { LLMMessage } from "@/lib/llm/types";
 import type {
   ComposerMessage,
@@ -55,7 +56,9 @@ export function specLooksComplete(spec: ComposerSpec | null | undefined): boolea
 }
 
 function toLLMMessages(history: ComposerMessage[], latestUser: string): LLMMessage[] {
-  const msgs: LLMMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+  const msgs: LLMMessage[] = [
+    { role: "system", content: applySkill("coordinator", SYSTEM_PROMPT) },
+  ];
   for (const m of history) {
     if (m.role === "user") {
       msgs.push({

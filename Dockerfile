@@ -28,6 +28,8 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
+# Fase 6.14 — skills de los agentes (cargadas en runtime por lib/agents/skills.ts).
+COPY --from=builder /app/skills ./skills
 
 EXPOSE 3000
 

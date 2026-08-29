@@ -9,6 +9,7 @@ import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { ProjectArchiveButton } from "@/components/ProjectArchiveButton";
 import { ProjectDeleteButton } from "@/components/ProjectDeleteButton";
 import { summarizeProjectAgents } from "@/lib/agents/summary";
+import { getAgentSkill } from "@/lib/agents/skills";
 import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
@@ -400,6 +401,7 @@ export default async function ProjectDetailPage({ params }: Props) {
               {agentSummary.map((a) => (
                 <div
                   key={a.role}
+                  title={`Skill: ${getAgentSkill(a.role).name}`}
                   className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                 >
                   <span>{a.icon}</span>
@@ -408,6 +410,9 @@ export default async function ProjectDetailPage({ params }: Props) {
                     {a.stages > 0 ? `${a.stages} etapas` : ""}
                     {a.stages > 0 && a.runs > 0 ? " · " : ""}
                     {a.runs > 0 ? `${a.runs} análisis` : ""}
+                  </span>
+                  <span className="ml-1 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                    {getAgentSkill(a.role).name}
                   </span>
                 </div>
               ))}

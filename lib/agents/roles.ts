@@ -1,8 +1,9 @@
 // Perfiles especializados de agentes que participan en cada proyecto.
 
-export type AgentRole = "planner" | "dev" | "infra" | "qa";
+export type AgentRole = "coordinator" | "planner" | "dev" | "infra" | "qa";
 
 export const AGENT_ROLES: { role: AgentRole; label: string; icon: string }[] = [
+  { role: "coordinator", label: "Coordinador", icon: "🧭" },
   { role: "planner", label: "Planificación", icon: "🧠" },
   { role: "dev", label: "Desarrollo", icon: "🧑‍💻" },
   { role: "infra", label: "Infraestructura", icon: "🛠️" },

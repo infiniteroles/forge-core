@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { applySkill } from "@/lib/agents/skills";
 import { prisma } from "@/lib/db";
 import { chatCompletion, getLLMConfig, isLLMConfigured } from "./client";
 import { LLMError } from "./types";
@@ -441,7 +442,7 @@ export async function generateBuilderCommitChanges(
 
   const result = await chatCompletion({
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: applySkill("dev", SYSTEM_PROMPT) },
       { role: "user", content: formatCommitContext(context) },
     ],
     temperature: 0.1,

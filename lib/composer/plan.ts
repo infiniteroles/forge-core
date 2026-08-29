@@ -3,6 +3,7 @@
 // build/test plan for the autonomous phase.
 
 import { chatCompletion } from "@/lib/llm/client";
+import { applySkill } from "@/lib/agents/skills";
 import type { LLMMessage } from "@/lib/llm/types";
 import type { ComposerPlan, ComposerProposal, ComposerSpec } from "./types";
 
@@ -60,7 +61,7 @@ export async function generatePlan(
   feedback?: string
 ): Promise<ComposerPlan> {
   const messages: LLMMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: applySkill("planner", SYSTEM_PROMPT) },
     {
       role: "user",
       content:

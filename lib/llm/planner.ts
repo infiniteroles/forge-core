@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { applySkill } from "@/lib/agents/skills";
 import { chatCompletion, getLLMConfig, isLLMConfigured } from "./client";
 import { LLMError, PlannerOutput, plannerOutputSchema } from "./types";
 
@@ -143,7 +144,7 @@ export async function runPlannerAgent(
 
   const result = await chatCompletion({
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: applySkill("planner", SYSTEM_PROMPT) },
       { role: "user", content: userPrompt },
     ],
     temperature: 0.2,

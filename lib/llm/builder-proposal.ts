@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { applySkill } from "@/lib/agents/skills";
 import { chatCompletion, getLLMConfig, isLLMConfigured } from "./client";
 import { LLMError } from "./types";
 import {
@@ -274,7 +275,7 @@ export async function runBuilderProposalAgent(
 
   const result = await chatCompletion({
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: applySkill("dev", SYSTEM_PROMPT) },
       { role: "user", content: formatContext(context) },
     ],
     temperature: 0.2,
