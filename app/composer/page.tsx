@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { ComposerClient } from "@/components/composer/ComposerClient";
-import { ComposerHeader } from "@/components/composer/ComposerHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +13,9 @@ export default async function ComposerPage({ searchParams }: Props) {
 
   return (
     <AppShell wide>
-      <div className="flex h-[calc(100dvh-120px)] flex-col">
-        <ComposerHeader />
-        <div className="mt-3 min-h-0 flex-1">
-          <ComposerClient initialSessionId={session} />
-        </div>
+      <div className="h-[calc(100dvh-120px)]">
+        {/* La cabecera (plegable + tip) la renderiza ComposerClient */}
+        <ComposerClient initialSessionId={session} />
       </div>
     </AppShell>
   );

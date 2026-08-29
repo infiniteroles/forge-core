@@ -11,6 +11,7 @@ import type {
 } from "@/lib/composer/types";
 import { agentRoleMeta } from "@/lib/agents/roles";
 import { Icon } from "@/components/Icon";
+import { ComposerHeader } from "./ComposerHeader";
 
 type ChatResponse = {
   id: string;
@@ -727,6 +728,51 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       </div>
     ) : null;
 
+  // Selector de proyecto / conversación — debajo del chat.
+  const sessionBar = (
+    <div className="mt-2 flex items-center gap-1.5 rounded-full border border-m3-outline-variant bg-m3-surface-container px-2 py-1">
+      <Icon
+        name="folder_open"
+        className="shrink-0 text-[16px] leading-none text-m3-on-surface-variant"
+      />
+      <select
+        id="composer-session-select"
+        value={sessionId ?? "__new__"}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__new__") newConversation();
+          else void onSelectSession(v);
+        }}
+        title="Proyecto / conversación"
+        className="w-full min-w-0 flex-1 bg-transparent text-xs text-m3-on-surface outline-none [&>option]:bg-surface"
+      >
+        <option value="__new__">Nueva conversación</option>
+        {sessions.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.projectName ?? `Sesión ${s.status}`} ·{" "}
+            {new Date(s.updatedAt).toLocaleString("es", {
+              day: "2-digit",
+              month: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </option>
+        ))}
+      </select>
+      {sessionId ? (
+        <button
+          type="button"
+          onClick={newConversation}
+          title="Nueva conversación"
+          aria-label="Nueva conversación"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-m3-on-surface-variant transition hover:bg-m3-surface-container-high hover:text-m3-on-surface"
+        >
+          <Icon name="add" className="text-[16px] leading-none" />
+        </button>
+      ) : null}
+    </div>
+  );
+
   const chatColumn = (
     <div className="flex min-h-0 min-w-0 flex-col">
       {buildLinks}
@@ -876,94 +922,60 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
           <Icon name="image" className="text-[14px] leading-none" /> {logoName} — paleta inferida y enviada a Forge.
         </p>
       ) : null}
+
+      {/* Desplegable de proyecto / nueva conversación, debajo del chat */}
+      {sessionBar}
     </div>
   );
 
   const tip = tipFor(status, loading);
 
+  // Pasos del Composer — debajo del área de previsualización.
+  const stepsBar = (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low px-3 py-1.5">
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-m3-on-surface-variant">
+        <Icon name="view_agenda" className="text-[14px] leading-none" /> Pasos
+      </span>
+      {STEPS.map((s, i) => (
+        <div key={s.key} className="flex items-center gap-1.5">
+          <span
+            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              i < step
+                ? "bg-m3-primary-container text-m3-on-primary-container"
+                : i === step
+                  ? "bg-m3-primary text-m3-on-primary"
+                  : "bg-m3-surface-container-high text-m3-on-surface-variant"
+            }`}
+          >
+            {i < step ? (
+              <Icon name="check" className="text-[12px] leading-none" />
+            ) : null}
+            {s.label}
+          </span>
+          {i < STEPS.length - 1 ? (
+            <Icon name="chevron_right" className="text-[14px] leading-none text-m3-outline" />
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex h-full flex-col gap-3">
+      {/* Cabecera plegable + tip contextual al lado de Forge Composer */}
+      <ComposerHeader tip={tip} />
 
       {/* Workspace: chat en sidebar ancha + contenido ocupa el resto */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         <aside className="flex min-h-0 w-full flex-col lg:w-[400px] lg:min-w-[360px] lg:max-w-[440px] lg:shrink-0">
           {chatColumn}
         </aside>
-        <div className="min-h-0 flex-1 overflow-hidden">{rightPanel}</div>
-      </div>
-
-      {/* Footer fijado al pie: pasos + selector de proyecto + tip */}
-      <footer className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low px-3 py-2">
-        <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-m3-on-surface-variant">
-          <Icon name="view_agenda" className="text-[14px] leading-none" /> Pasos
-        </span>
-        {STEPS.map((s, i) => (
-          <div key={s.key} className="flex items-center gap-1.5">
-            <span
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                i < step
-                  ? "bg-m3-primary-container text-m3-on-primary-container"
-                  : i === step
-                    ? "bg-m3-primary text-m3-on-primary"
-                    : "bg-m3-surface-container-high text-m3-on-surface-variant"
-              }`}
-            >
-              {i < step ? (
-                <Icon name="check" className="text-[12px] leading-none" />
-              ) : null}
-              {s.label}
-            </span>
-            {i < STEPS.length - 1 ? (
-              <Icon name="chevron_right" className="text-[14px] leading-none text-m3-outline" />
-            ) : null}
-          </div>
-        ))}
-
-        {/* Selector de proyecto / conversación, al lado de los pasos */}
-        <div className="flex items-center gap-1.5 rounded-full border border-m3-outline-variant bg-m3-surface-container px-2 py-1">
-          <Icon name="folder_open" className="text-[16px] leading-none text-m3-on-surface-variant" />
-          <select
-            id="composer-session-select"
-            value={sessionId ?? "__new__"}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v === "__new__") newConversation();
-              else void onSelectSession(v);
-            }}
-            title="Proyecto / conversación"
-            className="max-w-[180px] bg-transparent text-xs text-m3-on-surface outline-none [&>option]:bg-surface"
-          >
-            <option value="__new__">Nueva conversación</option>
-            {sessions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.projectName ?? `Sesión ${s.status}`} ·{" "}
-                {new Date(s.updatedAt).toLocaleString("es", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </option>
-            ))}
-          </select>
-          {sessionId ? (
-            <button
-              type="button"
-              onClick={newConversation}
-              title="Nueva conversación"
-              aria-label="Nueva conversación"
-              className="grid h-6 w-6 place-items-center rounded-full text-m3-on-surface-variant transition hover:bg-m3-surface-container-high hover:text-m3-on-surface"
-            >
-              <Icon name="add" className="text-[16px] leading-none" />
-            </button>
-          ) : null}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">{rightPanel}</div>
+          {/* Pasos debajo del área de previsualización */}
+          {stepsBar}
         </div>
-
-        <span className="ml-auto flex max-w-md items-center gap-1.5 text-[11px] text-m3-on-surface-variant">
-          <Icon name="lightbulb" className="text-[14px] leading-none text-m3-primary" />
-          <span className="truncate">{tip}</span>
-        </span>
-      </footer>
+      </div>
 
       {spec ? (
         <div className="flex items-center gap-1 text-xs text-m3-on-surface-variant">

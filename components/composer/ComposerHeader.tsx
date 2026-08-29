@@ -4,10 +4,11 @@ import { useState } from "react";
 import { Icon } from "@/components/Icon";
 
 /**
- * Cabecera del Composer: barra compacta y plegable. La descripción larga está
- * oculta por defecto para no ocupar espacio vertical; se despliega con el botón.
+ * Cabecera del Composer: barra compacta. Cuando está plegada muestra el tip
+ * contextual de la fase actual (al lado de "Forge Composer"); al desplegarla
+ * se ve la descripción larga. Así no se duplica información.
  */
-export function ComposerHeader() {
+export function ComposerHeader({ tip }: { tip?: string }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,6 +28,14 @@ export function ComposerHeader() {
             Cuéntame qué quieres construir. Haré solo las preguntas
             imprescindibles, propondré la arquitectura y, cuando la confirmes,
             pasaremos al plan y al desarrollo autónomo.
+          </p>
+        ) : tip ? (
+          <p className="hidden max-w-md items-center gap-1.5 text-[11px] text-m3-on-surface-variant sm:flex">
+            <Icon
+              name="lightbulb"
+              className="shrink-0 text-[14px] leading-none text-m3-primary"
+            />
+            <span className="truncate">{tip}</span>
           </p>
         ) : null}
         <button
