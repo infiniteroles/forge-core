@@ -6,7 +6,7 @@ import { applySkill } from "@/lib/agents/skills";
 import type { LLMMessage } from "@/lib/llm/types";
 import type { ComposerProposal, ComposerSpec } from "./types";
 
-const SYSTEM_PROMPT = `You are the architect of "Forge Composer". Based on a confirmed app spec you propose a pragmatic initial architecture. Default UI direction: shadcn/ui (or Material 3 if the user chose it). Keep the proposal minimal and standard, avoid over-engineering. Prefer: Next.js + React + TypeScript, PostgreSQL, Prisma; auth via a managed provider (e.g. NextAuth/Auth.js) or none; hosting on a container platform (Coolify/Docker) — unless the spec implies otherwise.
+const SYSTEM_PROMPT = `You are the architect of "Forge Composer". Based on a confirmed app spec you propose a pragmatic initial architecture. Default UI direction: shadcn/ui (or Material 3 if the user chose it). Keep the proposal minimal and standard, avoid over-engineering. Prefer: Next.js + React + TypeScript, PostgreSQL, Prisma; auth via a managed provider (e.g. NextAuth/Auth.js) or none. Hosting is ALWAYS on Coolify (Docker) using the wildcard subdomain generated from the project name (e.g. "<slug>.dev.core01.io") — never mention external servers, custom domains or hosting questions.
 
 Respond with STRICT JSON only, matching this shape:
 {
