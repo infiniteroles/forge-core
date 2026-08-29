@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `a2f0eef` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `5cb9b3e` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -49,6 +49,9 @@
 
 ### 6.19 — Control de calidad del plan del Composer ✅ (desplegado)
 - Hecho: gate de calidad (mín. 5 fases/6 tareas) con reintentos internos y error claro; ya no se devuelve el plan genérico por defecto.
+
+### 6.20 — Reforzar reintentos LLM para el build autónomo ✅ (desplegado)
+- Hecho: reintentos de `empty_response` de 3→5 (6 intentos) con backoff creciente; el build automático ya no muere por respuestas vacías intermitentes.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
