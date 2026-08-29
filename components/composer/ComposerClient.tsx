@@ -35,7 +35,9 @@ const STEPS: { key: ComposerStatus; label: string }[] = [
 
 function stepIndex(status: ComposerStatus): number {
   const i = STEPS.findIndex((s) => s.key === status);
-  return i < 0 ? 0 : i;
+  if (i >= 0) return i;
+  // Estados terminales fuera de la lista (p. ej. blocked) → último paso.
+  return STEPS.length - 1;
 }
 
 async function extractPalette(file: File): Promise<string[]> {
@@ -273,6 +275,14 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
           ["completed", "completed_with_warnings", "failed"].includes(data.status)
         ) {
           notifiedWsRef.current = key;
+          // Avanzar el stepper: el build ya no está en marcha.
+          setStatus(
+            data.status === "failed"
+              ? "blocked"
+              : data.status === "completed"
+                ? "done"
+                : "preview"
+          );
           const summary = (data.summary ?? data.error ?? "El build ha terminado.").trim();
           const emoji =
             data.status === "failed"
@@ -471,7 +481,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const isBlocked = false; // the chat stays usable: in building/preview it triggers iterations
   const step = stepIndex(status);
   const inWorkspace =
-    ["building", "preview", "done"].includes(status) || !!preview;
+    ["building", "preview", "done", "blocked"].includes(status) || !!preview;
   const inputPlaceholder =
     loading
       ? "…"
@@ -553,6 +563,25 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
             ) : (
               <iframe src={preview.url} title="DEV Preview" className="h-full w-full flex-1 border-0 bg-white" />
             )
+          ) : wsStatus === "failed" ? (
+            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
+              <div>
+                <p className="text-red-300">❌ El build falló.</p>
+                <p className="mt-1 text-xs">
+                  {wsSummary ?? "Revisa el detalle en el proyecto."}
+                </p>
+              </div>
+            </div>
+          ) : wsStatus === "completed" || wsStatus === "completed_with_warnings" ? (
+            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
+              <div>
+                <p className="text-neutral-200">✅ El build ha terminado, pero aún no hay una app que previsualizar.</p>
+                <p className="mt-1 text-xs">
+                  El repositorio todavía no contiene el código de la aplicación (solo el plan).
+                  Con el scaffold mínimo (Next.js + shadcn) verás aquí el MVP de verdad.
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
               <div>
