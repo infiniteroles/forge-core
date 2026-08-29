@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `873ab42` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `98e2658` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -134,6 +134,13 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Plan con agentes**: el generador de plan (`lib/composer/plan.ts`) asigna a cada tarea su **perfil especializado** (`agent`); el chat (`formatPlan`) y la tarjeta del plan muestran el icono del agente por tarea.
 - **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
+- `tsc` EXIT=0; `/api/health` 200.
+
+## 6.18 — Composer sin preguntas de hosting/dominio (desplegado)
+
+Commit `98e2658` → deploy `2bs1hxvairkan6fv0q3cggh4` **Success** (~5 min).
+- El descubrimiento ya **no pregunta por servidor/dominio**: el despliegue es siempre **Coolify** con **wildcard** de subdominio derivado del nombre del proyecto (p. ej. `<slug>.dev.core01.io`).
+- `discovery.ts`: regla explícita "HOSTING & DOMAIN ARE NEVER ASKED". `proposal.ts`: hosting siempre Coolify/Docker, sin preguntas de hosting ni dominios personalizados.
 - `tsc` EXIT=0; `/api/health` 200.
 
 ## 5.1 / 6.17 — Identidad visual Forge CORE01 + fix Composer (desplegado)

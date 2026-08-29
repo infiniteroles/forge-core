@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `873ab42` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `98e2658` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -43,6 +43,9 @@
 
 ### 5.1 / 6.17 — Identidad visual Forge CORE01 + fix Composer ✅ (desplegado)
 - Hecho: fix del Composer pillado (hidratación por link duplicado), paleta dark-first con verde CORE01, fuentes Geist/Space Grotesk/JetBrains Mono, logo nuevo dark/light en header y login, utilidades forge-*.
+
+### 6.18 — Composer sin preguntas de hosting/dominio ✅ (desplegado)
+- Hecho: el discovery y la propuesta asumen siempre Coolify con wildcard del nombre del proyecto; ya no se pregunta por servidor/dominio.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
