@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `010fd30` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `f4663c5` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -126,6 +126,15 @@ Commit `4b84bb0` → deploy `mncoctq0du5zsuvydfos1n9l` **Success** (~4 min).
 - **`stageEnsureScaffold`** (nuevo stage `ensure_scaffold` en DEV_STAGES, tras crear la rama): si la rama no tiene `package.json`, genera el scaffold y lo commitea (Contents API). Así la PR contiene la app real.
 - **`stageEnsureDevPreview`** (nuevo stage `ensure_dev_preview`, último): al terminar el build, si Coolify está configurado, genera el **DEV Preview automáticamente** (`prepareDevPreview`) — el preview aparece solo.
 - Test `tests/scaffold/nextjs.test.ts` (5 casos). `tsc` EXIT=0; `/api/health` 200.
+
+## 6.13 — Perfiles especializados de agentes (desplegado)
+
+Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
+- **Roles**: `lib/agents/roles.ts` define `planner` (🧠 Planificación), `dev` (🧑‍💻 Desarrollo), `infra` (🛠️ Infraestructura), `qa` (🧪 Testing/QA) + `agentRoleMeta()`.
+- **Plan con agentes**: el generador de plan (`lib/composer/plan.ts`) asigna a cada tarea su **perfil especializado** (`agent`); el chat (`formatPlan`) y la tarjeta del plan muestran el icono del agente por tarea.
+- **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
+- **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
+- `tsc` EXIT=0; `/api/health` 200.
 
 ## Limpieza 2026-08-29 + endpoint de sesión
 

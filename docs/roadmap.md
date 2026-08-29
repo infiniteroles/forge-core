@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `010fd30` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `f4663c5` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -25,6 +25,10 @@
 ### 6.9 — Check previo de necesidades + histórico persistente ✅ (desplegado)
 - Hecho: check de readiness (nombre/repo verificados y solventables desde el chat) antes de arrancar; histórico del Composer persistente con desplegable de proyectos.
 - Pendiente de validar en pruebas: un flujo completo eligiendo "sin repo" (debe bloquear y pedir resolver) y retomar una conversación tras recargar.
+
+### 6.13 — Perfiles especializados de agentes ✅ (desplegado)
+- Hecho: el plan asigna planner/dev/infra/qa por tarea; los stages del build se etiquetan con su agente; el proyecto muestra el panel "Agentes del proyecto".
+- Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
 - Hecho: fases detalladas (setup→datos→auth→backend→frontend→unit→e2e→QA), 2-3 tareas por fase y estrategia de pruebas completa.
