@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `64c0bd1` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `7b5ce41` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -34,6 +34,9 @@
 
 ### 6.15 — Restyling Material 3 del Composer ✅ (desplegado)
 - Hecho: iconos Material Symbols en vez de emojis, tokens M3 (CSS), cabecera plegable, selector de proyecto movido al footer junto a los steps, restyling completo del Composer y chips de agentes con iconos por rol.
+
+### 6.15b — Reordenar layout del Composer ✅ (desplegado)
+- Hecho: selector de proyecto debajo del chat, pasos debajo del preview (footer eliminado) y tip contextual en la cabecera junto a "Forge Composer" sin duplicar info.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)

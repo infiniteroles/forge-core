@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `64c0bd1` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `7b5ce41` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -135,6 +135,14 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
 - `tsc` EXIT=0; `/api/health` 200.
+
+## 6.15b — Reordenar layout del Composer (desplegado)
+
+Commit `7b5ce41` → deploy `cdfceoy01fnwbz5bsevftiit` **Success** (~5 min).
+- **Desplegable bajo el chat**: el selector "Proyecto / conversación" se coloca **justo debajo del chat** (sidebar), a todo el ancho, con icono `folder_open` y botón ➕ de nueva conversación.
+- **Pasos bajo el preview**: la barra de pasos se mueve **debajo del área de previsualización** (columna derecha); se elimina el footer.
+- **Tip en la cabecera**: `ComposerHeader` ahora recibe `tip` y, plegada, muestra el tip contextual de la fase al lado de "Forge Composer" (icono `lightbulb`); al desplegarla muestra la descripción larga → no se duplica información. `ComposerClient` renderiza la cabecera (necesita el estado para el tip).
+- `tsc` EXIT=0; `/api/health` 200; validado en navegador (cabecera con tip, selector con Padel Tour bajo el chat, steps bajo el preview).
 
 ## 6.15 — Restyling Material 3 del Composer (desplegado)
 
