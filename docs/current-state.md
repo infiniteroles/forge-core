@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `8e201fc` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `64c0bd1` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -136,9 +136,21 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
 - `tsc` EXIT=0; `/api/health` 200.
 
+## 6.15 — Restyling Material 3 del Composer (desplegado)
+
+Commit `64c0bd1` → deploy `38vxm3y6nqqb7jbgeutpqi5v` **Success** (~4 min).
+- **Iconos Material Symbols** (librería oficial de Material 3): `components/Icon.tsx` + fuente vía `<link>` en `layout.tsx`; se sustituyen los emojis de la UI del Composer (botones, preview, steps, chips, tarjetas).
+- **Tokens Material 3** en `globals.css` (--m3-* para oscuro/claro) + colores tailwind `m3:` → estética M3 (superficies tonales, primary container, outline, errores, formas 12-24px).
+- **Cabecera plegable**: `components/composer/ComposerHeader.tsx` — barra compacta con título + icono; la descripción larga está oculta por defecto (botón chevron para desplegarla).
+- **Selector de proyecto al footer**: el desplegable "Proyecto / conversación" sale de la parte superior y se coloca en el footer, junto a los pasos (con icono folder_open y botón + de nueva conversación).
+- **Restyling completo del Composer**: chat con burbujas M3, input pill con botón de envío circular, tarjetas de propuesta/plan, stepper con iconos check/chevron, estados del preview con iconos error/check_circle, toggle escritorio/móvil con desktop_windows/phone_iphone.
+- **Iconos por rol**: `lib/agents/roles.ts` + `summary.ts` ganan `iconName` (hub/psychology/code/dns/science) → los chips de "Agentes del proyecto" muestran iconos en vez de emojis. `ThemeToggle` usa light_mode/dark_mode.
+- Nota: el aviso de hidratación React #418 aparece también en /dashboard (página sin tocar) → preexistente, no causado por esta fase.
+- `tsc` EXIT=0; `/api/health` 200, `/api/composer/chat` 401; fuente Material Symbols 200; /composer renderiza (cabecera plegable + footer con selector + 25 iconos).
+
 ## 6.14 — Skills por agente especializado (desplegado)
 
-Commit `8e201fc` → deploy `d7qtx6nane8sumjcj7qktsii`.
+Commit `8e201fc` → deploy `d7qtx6nane8sumjcj7qktsii` **Success** (~4 min).
 - **Skills por rol**: nuevo `skills/<rol>/SKILL.md` (coordinator, planner, dev, infra, qa) + `skills/README.md`; instrucciones de dominio para cada perfil.
 - **Loader**: `lib/agents/skills.ts` — `getAgentSkill(role)` (lee del disco con fallback incrustado y caché) y `applySkill(role, basePrompt)` que antepone `[SKILL: nombre]` al prompt.
 - **Inyección en prompts**: los 7 SYSTEM_PROMPT de agentes ahora se envuelven con `applySkill`: discovery→coordinator, proposal/plan→planner, builder-proposal/builder-commit→dev, pr-review→qa, planner.ts→planner.

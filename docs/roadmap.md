@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `8e201fc` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `64c0bd1` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -31,6 +31,9 @@
 
 ### 6.14 — Skills por agente especializado ✅ (desplegado)
 - Hecho: skills por rol (`skills/<rol>/SKILL.md`), loader (`lib/agents/skills.ts`) e inyección en los 7 prompts de agentes; rol coordinator (🧭); badge de skill en el panel de agentes; Dockerfile copia `skills/`.
+
+### 6.15 — Restyling Material 3 del Composer ✅ (desplegado)
+- Hecho: iconos Material Symbols en vez de emojis, tokens M3 (CSS), cabecera plegable, selector de proyecto movido al footer junto a los steps, restyling completo del Composer y chips de agentes con iconos por rol.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
