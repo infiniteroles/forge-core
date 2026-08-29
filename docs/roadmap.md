@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `98e2658` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `a2f0eef` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -46,6 +46,9 @@
 
 ### 6.18 — Composer sin preguntas de hosting/dominio ✅ (desplegado)
 - Hecho: el discovery y la propuesta asumen siempre Coolify con wildcard del nombre del proyecto; ya no se pregunta por servidor/dominio.
+
+### 6.19 — Control de calidad del plan del Composer ✅ (desplegado)
+- Hecho: gate de calidad (mín. 5 fases/6 tareas) con reintentos internos y error claro; ya no se devuelve el plan genérico por defecto.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)

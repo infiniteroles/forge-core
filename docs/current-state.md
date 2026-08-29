@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `98e2658` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `a2f0eef` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -134,6 +134,13 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Plan con agentes**: el generador de plan (`lib/composer/plan.ts`) asigna a cada tarea su **perfil especializado** (`agent`); el chat (`formatPlan`) y la tarjeta del plan muestran el icono del agente por tarea.
 - **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
+- `tsc` EXIT=0; `/api/health` 200.
+
+## 6.19 — Control de calidad del plan del Composer (desplegado)
+
+Commit `a2f0eef` → deploy `6awuljaqsumbiszgsaoi7hgg` **Success** (~4 min).
+- El plan pobre salía porque `generatePlan` caía **silenciosamente en fallbacks genéricos** cuando el LLM devolvía algo no parseable o muy corto.
+- Ahora `generatePlan` valida la calidad (mín. **5 fases y 6 tareas**), reintenta hasta 3 veces con un *nudge* pidiendo un plan detallado, y si sigue fallando devuelve un **error claro** en vez del plan genérico.
 - `tsc` EXIT=0; `/api/health` 200.
 
 ## 6.18 — Composer sin preguntas de hosting/dominio (desplegado)
