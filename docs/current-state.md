@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `f4663c5` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `8e201fc` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -135,6 +135,17 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
 - `tsc` EXIT=0; `/api/health` 200.
+
+## 6.14 — Skills por agente especializado (desplegado)
+
+Commit `8e201fc` → deploy `d7qtx6nane8sumjcj7qktsii`.
+- **Skills por rol**: nuevo `skills/<rol>/SKILL.md` (coordinator, planner, dev, infra, qa) + `skills/README.md`; instrucciones de dominio para cada perfil.
+- **Loader**: `lib/agents/skills.ts` — `getAgentSkill(role)` (lee del disco con fallback incrustado y caché) y `applySkill(role, basePrompt)` que antepone `[SKILL: nombre]` al prompt.
+- **Inyección en prompts**: los 7 SYSTEM_PROMPT de agentes ahora se envuelven con `applySkill`: discovery→coordinator, proposal/plan→planner, builder-proposal/builder-commit→dev, pr-review→qa, planner.ts→planner.
+- **Rol coordinator**: añadido a `lib/agents/roles.ts` (🧭 Coordinador).
+- **Panel de agentes**: cada chip del proyecto muestra la skill del agente (badge con `getAgentSkill(a.role).name`).
+- **Dockerfile**: la imagen final copia `skills/` (las skills se cargan en runtime).
+- `tsc` EXIT=0.
 
 ## Limpieza 2026-08-29 + endpoint de sesión
 

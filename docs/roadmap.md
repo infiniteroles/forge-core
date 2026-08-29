@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `f4663c5` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `8e201fc` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -28,6 +28,9 @@
 
 ### 6.13 — Perfiles especializados de agentes ✅ (desplegado)
 - Hecho: el plan asigna planner/dev/infra/qa por tarea; los stages del build se etiquetan con su agente; el proyecto muestra el panel "Agentes del proyecto".
+
+### 6.14 — Skills por agente especializado ✅ (desplegado)
+- Hecho: skills por rol (`skills/<rol>/SKILL.md`), loader (`lib/agents/skills.ts`) e inyección en los 7 prompts de agentes; rol coordinator (🧭); badge de skill en el panel de agentes; Dockerfile copia `skills/`.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
