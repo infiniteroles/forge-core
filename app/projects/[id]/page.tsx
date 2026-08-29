@@ -362,21 +362,21 @@ export default async function ProjectDetailPage({ params }: Props) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">
+              <h1 className="text-2xl font-semibold tracking-tight text-m3-on-surface">
                 {project.name}
               </h1>
               <StatusBadge status={project.status} />
             </div>
-            <p className="mt-1 font-mono text-sm text-text-dim">
+            <p className="mt-1 font-mono text-sm text-m3-on-surface-variant">
               /{project.slug}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <Link
               href={`/projects/${project.id}/edit`}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+              className="flex items-center gap-1.5 rounded-full bg-m3-primary px-4 py-2 text-sm font-medium text-m3-on-primary transition hover:opacity-90"
             >
-              Edit
+              <Icon name="edit" className="text-[16px] leading-none" /> Edit
             </Link>
             {!project.archivedAt ? (
               <ProjectArchiveButton
@@ -394,8 +394,8 @@ export default async function ProjectDetailPage({ params }: Props) {
         <MvpFlowPanel flow={mvpFlow} />
 
         {agentSummary.length > 0 ? (
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+          <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-m3-on-surface-variant">
               Agentes del proyecto
             </h2>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -403,16 +403,16 @@ export default async function ProjectDetailPage({ params }: Props) {
                 <div
                   key={a.role}
                   title={`Skill: ${getAgentSkill(a.role).name}`}
-                  className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
+                  className="flex items-center gap-1.5 rounded-full border border-m3-outline-variant bg-m3-surface-container px-3 py-1.5 text-sm"
                 >
-                  <Icon name={a.iconName} className="text-[16px] leading-none text-accent" />
-                  <span className="text-neutral-100">{a.label}</span>
-                  <span className="text-text-dim">
+                  <Icon name={a.iconName} className="text-[16px] leading-none text-m3-primary" />
+                  <span className="text-m3-on-surface">{a.label}</span>
+                  <span className="text-m3-on-surface-variant">
                     {a.stages > 0 ? `${a.stages} etapas` : ""}
                     {a.stages > 0 && a.runs > 0 ? " · " : ""}
                     {a.runs > 0 ? `${a.runs} análisis` : ""}
                   </span>
-                  <span className="ml-1 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                  <span className="ml-1 rounded bg-m3-primary-container px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-m3-on-primary-container">
                     {getAgentSkill(a.role).name}
                   </span>
                 </div>
@@ -422,19 +422,19 @@ export default async function ProjectDetailPage({ params }: Props) {
         ) : null}
 
         {project.archivedAt ? (
-          <div className="rounded-lg border border-neutral-700 bg-surface px-4 py-3 text-sm text-text-dim">
+          <div className="rounded-xl border border-m3-outline-variant bg-m3-surface-container-low px-4 py-3 text-sm text-m3-on-surface-variant">
             Archived on {project.archivedAt.toLocaleDateString()}
           </div>
         ) : null}
 
         {project.description ? (
-          <p className="max-w-3xl text-sm text-neutral-300">
+          <p className="max-w-3xl text-sm text-m3-on-surface-variant">
             {project.description}
           </p>
         ) : null}
 
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+        <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-m3-on-surface-variant">
             Overview
           </h2>
           <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
@@ -467,11 +467,11 @@ export default async function ProjectDetailPage({ params }: Props) {
             />
           </dl>
           {project.notes ? (
-            <div className="mt-4 border-t border-border pt-4">
-              <dt className="text-xs font-semibold uppercase tracking-wide text-text-dim">
+            <div className="mt-4 border-t border-m3-outline-variant pt-4">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-m3-on-surface-variant">
                 Notes
               </dt>
-              <dd className="mt-1 whitespace-pre-wrap text-sm text-neutral-200">
+              <dd className="mt-1 whitespace-pre-wrap text-sm text-m3-on-surface">
                 {project.notes}
               </dd>
             </div>
@@ -484,7 +484,7 @@ export default async function ProjectDetailPage({ params }: Props) {
           <button
             disabled
             title="Coming soon"
-            className="cursor-not-allowed rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-dim opacity-60"
+            className="cursor-not-allowed rounded-full border border-m3-outline-variant bg-m3-surface-container px-4 py-2 text-sm text-m3-on-surface-variant opacity-60"
           >
             Prepare DEV
           </button>
@@ -492,7 +492,7 @@ export default async function ProjectDetailPage({ params }: Props) {
           <button
             disabled
             title="Coming soon"
-            className="cursor-not-allowed rounded-md border border-border bg-surface px-4 py-2 text-sm text-text-dim opacity-60"
+            className="cursor-not-allowed rounded-full border border-m3-outline-variant bg-m3-surface-container px-4 py-2 text-sm text-m3-on-surface-variant opacity-60"
           >
             Prepare PRO
           </button>
@@ -500,11 +500,11 @@ export default async function ProjectDetailPage({ params }: Props) {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <div className="rounded-xl border border-border bg-surface p-6">
-              <h2 className="text-lg font-semibold tracking-tight">
+            <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+              <h2 className="text-lg font-semibold tracking-tight text-m3-on-surface">
                 Instructions
               </h2>
-              <p className="mt-1 text-sm text-text-dim">
+              <p className="mt-1 text-sm text-m3-on-surface-variant">
                 Capture what needs to happen next.
               </p>
 
@@ -514,24 +514,24 @@ export default async function ProjectDetailPage({ params }: Props) {
 
               <div className="mt-6 flex flex-col gap-3">
                 {project.instructions.length === 0 ? (
-                  <p className="text-sm text-text-dim">
+                  <p className="text-sm text-m3-on-surface-variant">
                     No instructions yet.
                   </p>
                 ) : (
                   project.instructions.map((instruction) => (
                     <div
                       key={instruction.id}
-                      className="rounded-lg border border-border bg-background p-4"
+                      className="rounded-xl border border-m3-outline-variant bg-m3-surface-container p-4"
                     >
-                      <p className="whitespace-pre-wrap text-sm text-neutral-200">
+                      <p className="whitespace-pre-wrap text-sm text-m3-on-surface">
                         {instruction.content}
                       </p>
-                      <div className="mt-2 flex items-center gap-2 text-[11px] text-text-dim">
-                        <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">
+                      <div className="mt-2 flex items-center gap-2 text-[11px] text-m3-on-surface-variant">
+                        <span className="rounded bg-m3-surface-container-high px-1.5 py-0.5 font-mono">
                           {instruction.source}
                         </span>
                         <span
-                          className={`rounded bg-surface-2 px-1.5 py-0.5 font-mono ${
+                          className={`rounded bg-m3-surface-container-high px-1.5 py-0.5 font-mono ${
                             instruction.status === "pending"
                               ? "text-amber-300"
                               : "text-emerald-300"
@@ -547,16 +547,16 @@ export default async function ProjectDetailPage({ params }: Props) {
               </div>
             </div>
 
-            <div className="mt-6 rounded-xl border border-border bg-surface p-6">
-              <h2 className="text-lg font-semibold tracking-tight">
+            <div className="mt-6 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+              <h2 className="text-lg font-semibold tracking-tight text-m3-on-surface">
                 Agent runs
               </h2>
-              <p className="mt-1 text-sm text-text-dim">
+              <p className="mt-1 text-sm text-m3-on-surface-variant">
                 Executions of planning and automation agents.
               </p>
               <div className="mt-5 flex flex-col gap-3">
                 {project.agentRuns.length === 0 ? (
-                  <p className="text-sm text-text-dim">
+                  <p className="text-sm text-m3-on-surface-variant">
                     No agent runs yet.
                   </p>
                 ) : (
@@ -573,8 +573,8 @@ export default async function ProjectDetailPage({ params }: Props) {
           </div>
 
           <div>
-            <div className="rounded-xl border border-border bg-surface p-6">
-              <h2 className="text-lg font-semibold tracking-tight">Activity</h2>
+            <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+              <h2 className="text-lg font-semibold tracking-tight text-m3-on-surface">Activity</h2>
               <div className="mt-5">
                 <ActivityTimeline activities={project.activityLogs} />
               </div>
@@ -582,9 +582,9 @@ export default async function ProjectDetailPage({ params }: Props) {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-lg font-semibold tracking-tight">New idea</h2>
-          <p className="mt-1 text-sm text-text-dim">
+        <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+          <h2 className="text-lg font-semibold tracking-tight text-m3-on-surface">New idea</h2>
+          <p className="mt-1 text-sm text-m3-on-surface-variant">
             Tell Forge what to build or change. It will work in DEV autonomously
             and prepare a pull request for you to review.
           </p>
@@ -593,15 +593,15 @@ export default async function ProjectDetailPage({ params }: Props) {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-lg font-semibold tracking-tight">Backlog</h2>
-          <p className="mt-1 text-sm text-text-dim">
+        <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+          <h2 className="text-lg font-semibold tracking-tight text-m3-on-surface">Backlog</h2>
+          <p className="mt-1 text-sm text-m3-on-surface-variant">
             Tasks derived from Planner runs and manual entries.
           </p>
           {project.repositoryFullName ? (
-            <p className="mt-3 rounded-md bg-background px-3 py-2 text-xs text-text-dim">
+            <p className="mt-3 rounded-lg bg-m3-surface-container px-3 py-2 text-xs text-m3-on-surface-variant">
               Repository context:{" "}
-              <span className="text-neutral-300">
+              <span className="text-m3-on-surface">
                 {project.repositoryFullName}
               </span>
               {project.repositoryDefaultBranch ? (

@@ -11,12 +11,12 @@ export default async function NewProjectPage() {
   return (
     <AppShell>
       <div className="max-w-xl">
-        <h1 className="text-2xl font-semibold tracking-tight">New project</h1>
-        <p className="mt-1 text-sm text-text-dim">
+        <h1 className="text-2xl font-semibold tracking-tight text-m3-on-surface">New project</h1>
+        <p className="mt-1 text-sm text-m3-on-surface-variant">
           Create a development initiative to start tracking work.
         </p>
 
-        <div className="mt-8 rounded-xl border border-border bg-surface p-6">
+        <div className="mt-8 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
           <ProjectForm />
         </div>
       </div>

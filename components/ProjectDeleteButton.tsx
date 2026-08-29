@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "./Icon";
 
 /**
  * Borra un proyecto COMPLETO (BD + repo GitHub + previews Coolify) para
@@ -52,8 +53,9 @@ export function ProjectDeleteButton({
       type="button"
       onClick={onDelete}
       disabled={loading}
-      className="rounded-md border border-red-500/40 px-4 py-2 text-sm text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:opacity-50"
+      className="flex items-center gap-1.5 rounded-full border border-m3-error/50 px-4 py-2 text-sm text-m3-error transition hover:bg-m3-error/10 disabled:opacity-50"
     >
+      <Icon name="delete" className="text-[16px] leading-none" />
       {loading ? "Borrando…" : "Borrar proyecto"}
     </button>
   );

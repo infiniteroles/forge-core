@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Icon } from "./Icon";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -14,9 +15,11 @@ export function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="text-sm text-text-dim transition hover:text-neutral-100"
+      title="Cerrar sesión"
+      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-m3-on-surface-variant transition hover:bg-m3-surface-container-high hover:text-m3-on-surface"
     >
-      Log out
+      <Icon name="logout" className="text-[16px] leading-none" />
+      <span className="hidden sm:inline">Log out</span>
     </button>
   );
 }

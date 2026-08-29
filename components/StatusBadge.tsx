@@ -6,7 +6,7 @@ import {
 export function StatusBadge({ status }: { status: string }) {
   const label = PROJECT_STATUS_LABELS[status] ?? status;
   const tone =
-    PROJECT_STATUS_TONES[status] ?? "bg-neutral-700/40 text-neutral-300";
+    PROJECT_STATUS_TONES[status] ?? "bg-m3-surface-container-high text-m3-on-surface-variant";
 
   return (
     <span

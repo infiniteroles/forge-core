@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { ActivityTimeline } from "@/components/ActivityTimeline";
+import { Icon } from "@/components/Icon";
 import { TASK_STATUS_LABELS } from "@/lib/task";
 
 export const dynamic = "force-dynamic";
@@ -58,16 +59,16 @@ export default async function DashboardPage() {
     <AppShell>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-text-dim">
+          <h1 className="text-2xl font-semibold tracking-tight text-m3-on-surface">Dashboard</h1>
+          <p className="mt-1 text-sm text-m3-on-surface-variant">
             Development control plane for agent-assisted projects.
           </p>
         </div>
         <Link
           href="/projects/new"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+          className="flex items-center gap-1.5 rounded-full bg-m3-primary px-4 py-2 text-sm font-medium text-m3-on-primary transition hover:opacity-90"
         >
-          New project
+          <Icon name="add" className="text-[16px] leading-none" /> New project
         </Link>
       </div>
 
@@ -75,12 +76,12 @@ export default async function DashboardPage() {
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="rounded-xl border border-border bg-surface p-5"
+            className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-5"
           >
-            <div className="text-3xl font-semibold text-neutral-100">
+            <div className="text-3xl font-semibold text-m3-on-surface">
               {stat.value}
             </div>
-            <div className="mt-1 text-sm text-text-dim">{stat.label}</div>
+            <div className="mt-1 text-sm text-m3-on-surface-variant">{stat.label}</div>
           </div>
         ))}
       </div>
@@ -89,24 +90,24 @@ export default async function DashboardPage() {
         {taskStats.map((stat) => (
           <div
             key={stat.label}
-            className="rounded-xl border border-border bg-surface p-5"
+            className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-5"
           >
-            <div className="text-2xl font-semibold text-neutral-100">
+            <div className="text-2xl font-semibold text-m3-on-surface">
               {stat.value}
             </div>
-            <div className="mt-1 text-sm text-text-dim">{stat.label}</div>
+            <div className="mt-1 text-sm text-m3-on-surface-variant">{stat.label}</div>
           </div>
         ))}
       </div>
 
       <div className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight">Recent tasks</h2>
-        <p className="mt-1 text-sm text-text-dim">
+        <h2 className="text-lg font-semibold tracking-tight text-m3-on-surface">Recent tasks</h2>
+        <p className="mt-1 text-sm text-m3-on-surface-variant">
           The latest work items across projects.
         </p>
-        <div className="mt-5 rounded-xl border border-border bg-surface p-6">
+        <div className="mt-5 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
           {recentTasks.length === 0 ? (
-            <p className="text-sm text-text-dim">No tasks yet.</p>
+            <p className="text-sm text-m3-on-surface-variant">No tasks yet.</p>
           ) : (
             <ul className="flex flex-col gap-3">
               {recentTasks.map((task) => (
@@ -116,14 +117,14 @@ export default async function DashboardPage() {
                 >
                   <Link
                     href={`/projects/${task.projectId}`}
-                    className="font-medium text-neutral-100 transition hover:text-accent"
+                    className="font-medium text-m3-on-surface transition hover:text-m3-primary"
                   >
                     {task.title}
                   </Link>
-                  <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] text-text-dim">
+                  <span className="rounded bg-m3-surface-container-high px-1.5 py-0.5 font-mono text-[11px] text-m3-on-surface-variant">
                     {task.type}
                   </span>
-                  <span className="ml-auto text-xs text-text-dim">
+                  <span className="ml-auto text-xs text-m3-on-surface-variant">
                     {TASK_STATUS_LABELS[task.status] ?? task.status}
                   </span>
                 </li>
@@ -134,11 +135,11 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight">Recent activity</h2>
-        <p className="mt-1 text-sm text-text-dim">
+        <h2 className="text-lg font-semibold tracking-tight text-m3-on-surface">Recent activity</h2>
+        <p className="mt-1 text-sm text-m3-on-surface-variant">
           Everything important, in one timeline.
         </p>
-        <div className="mt-5 rounded-xl border border-border bg-surface p-6">
+        <div className="mt-5 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
           <ActivityTimeline activities={recentActivity} />
         </div>
       </div>

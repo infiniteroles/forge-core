@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import type { MvpFlowState } from "@/lib/mvp-flow/flow-state";
 
 /**
@@ -75,13 +76,15 @@ export function MvpFlowPanel({ flow }: { flow: MvpFlowState }) {
                 {...(primaryIsExternal
                   ? { target: "_blank", rel: "noreferrer" }
                   : {})}
-                className="inline-flex items-center gap-2 rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-black transition hover:opacity-90"
+                className="inline-flex items-center gap-2 rounded-full bg-m3-primary px-4 py-1.5 text-sm font-medium text-m3-on-primary transition hover:opacity-90"
               >
                 {flow.nextActionLabel ?? flow.nextActionKind}
-                {primaryIsExternal ? <span aria-hidden>↗</span> : null}
+                {primaryIsExternal ? (
+                  <Icon name="open_in_new" className="text-[16px] leading-none" />
+                ) : null}
               </Link>
             ) : (
-              <span className="inline-flex items-center gap-2 rounded-md border border-accent/50 px-3.5 py-1.5 text-sm font-medium text-accent">
+              <span className="inline-flex items-center gap-2 rounded-full border border-m3-outline-variant px-3.5 py-1.5 text-sm font-medium text-m3-primary">
                 {flow.nextActionLabel ?? flow.nextActionKind}
               </span>
             )}
@@ -99,14 +102,14 @@ export function MvpFlowPanel({ flow }: { flow: MvpFlowState }) {
                 {...(a.url.startsWith("http")
                   ? { target: "_blank", rel: "noreferrer" }
                   : {})}
-                className="rounded-md border border-border px-2.5 py-1 text-xs text-text-dim transition hover:text-neutral-100"
+                className="rounded-full border border-m3-outline-variant px-2.5 py-1 text-xs text-m3-on-surface-variant transition hover:bg-m3-surface-container-high hover:text-m3-on-surface"
               >
                 {a.label}
               </Link>
             ) : (
               <span
                 key={a.kind}
-                className="rounded-md border border-border px-2.5 py-1 text-xs text-text-dim"
+                className="rounded-full border border-m3-outline-variant px-2.5 py-1 text-xs text-m3-on-surface-variant"
               >
                 {a.label}
               </span>
@@ -118,7 +121,9 @@ export function MvpFlowPanel({ flow }: { flow: MvpFlowState }) {
       {flow.warnings && flow.warnings.length > 0 ? (
         <ul className="mt-3 flex flex-col gap-1 text-xs text-amber-300/90">
           {flow.warnings.map((w, i) => (
-            <li key={i}>⚠ {w}</li>
+            <li key={i} className="flex items-start gap-1.5">
+              <Icon name="warning" className="mt-[1px] shrink-0 text-[14px] leading-none" /> {w}
+            </li>
           ))}
         </ul>
       ) : null}

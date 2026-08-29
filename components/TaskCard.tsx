@@ -18,6 +18,7 @@ import { BuilderCommitActions } from "./BuilderCommitActions";
 import { PrReviewGateActions } from "./PrReviewGateActions";
 import { WorkSessionButton } from "./WorkSessionButton";
 import { IterationActions } from "./IterationActions";
+import { Icon } from "@/components/Icon";
 import { TaskDevPreview } from "./TaskDevPreview";
 import {
   TaskProductionReadiness,
@@ -122,7 +123,7 @@ export function TaskCard({
   const nextStep = nextStepLabel({ workSession, production, promotion });
 
   return (
-    <div className="rounded-lg border border-border bg-background p-4">
+    <div className="rounded-xl border border-m3-outline-variant bg-m3-surface-container-low p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={`text-sm font-medium ${
@@ -139,7 +140,9 @@ export function TaskCard({
       </div>
 
       {nextStep ? (
-        <div className="mt-1.5 text-[11px] text-accent">→ {nextStep}</div>
+        <div className="mt-1.5 flex items-center gap-1 text-[11px] text-m3-primary">
+          <Icon name="arrow_forward" className="text-[12px] leading-none" /> {nextStep}
+        </div>
       ) : null}
 
       <WorkSessionButton taskId={task.id} />

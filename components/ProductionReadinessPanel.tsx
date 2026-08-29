@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/Icon";
 
 export interface ReadinessDiagnosticItem {
   source: string;
@@ -394,8 +395,8 @@ export function ProductionReadinessPanel({
               </h4>
               <ul className="mt-1 flex flex-col gap-1">
                 {review.diagnostics.positiveSignals.map((s, i) => (
-                  <li key={i} className="text-xs text-emerald-300/90">
-                    ✓ {s}
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-emerald-300/90">
+                    <Icon name="check_circle" className="mt-[1px] shrink-0 text-[14px] leading-none" /> {s}
                   </li>
                 ))}
               </ul>

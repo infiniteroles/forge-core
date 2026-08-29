@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { IterationActions } from "./IterationActions";
+import { Icon } from "@/components/Icon";
 
 interface WorkSessionResultData {
   taskId?: string;
@@ -118,8 +119,8 @@ export function WorkSessionButton({ taskId }: { taskId: string }) {
           {session.result?.warnings && session.result.warnings.length > 0 ? (
             <div className="mt-2 flex flex-col gap-1">
               {session.result.warnings.map((w, i) => (
-                <p key={i} className="text-xs text-amber-300">
-                  ⚠ {w}
+                <p key={i} className="flex items-start gap-1.5 text-xs text-amber-300">
+                  <Icon name="warning" className="mt-[1px] shrink-0 text-[14px] leading-none" /> {w}
                 </p>
               ))}
             </div>

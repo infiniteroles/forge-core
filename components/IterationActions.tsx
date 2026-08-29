@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 
 interface IterationResultData {
   prUrl?: string | null;
@@ -219,8 +220,8 @@ export function IterationActions({
       {session?.result?.warnings && session.result.warnings.length > 0 ? (
         <div className="flex w-full flex-col gap-1">
           {session.result.warnings.map((w, i) => (
-            <p key={i} className="text-xs text-amber-300">
-              ⚠ {w}
+            <p key={i} className="flex items-start gap-1.5 text-xs text-amber-300">
+              <Icon name="warning" className="mt-[1px] shrink-0 text-[14px] leading-none" /> {w}
             </p>
           ))}
         </div>

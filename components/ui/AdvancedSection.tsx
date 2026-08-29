@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon } from "@/components/Icon";
 
 /**
  * Reusable collapsible "advanced" section (Fase 5.0).
@@ -15,14 +16,19 @@ export function AdvancedSection({
 }) {
   return (
     <details
-      className="rounded-lg border border-border bg-surface"
+      className="group rounded-xl border border-m3-outline-variant bg-m3-surface-container-low"
       open={defaultOpen}
     >
-      <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-text-dim transition hover:text-neutral-200">
-        <span aria-hidden>▸</span>
+      <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-m3-on-surface-variant transition hover:text-m3-on-surface">
+        <Icon
+          name="expand_more"
+          className="text-[16px] leading-none transition-transform group-open:rotate-180"
+        />
         {title}
       </summary>
-      <div className="border-t border-border px-4 py-3">{children}</div>
+      <div className="border-t border-m3-outline-variant px-4 py-3">
+        {children}
+      </div>
     </details>
   );
 }

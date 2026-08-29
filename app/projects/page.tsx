@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { ProjectCard } from "@/components/ProjectCard";
+import { Icon } from "@/components/Icon";
 
 export const dynamic = "force-dynamic";
 
@@ -28,24 +29,25 @@ export default async function ProjectsPage() {
         </div>
         <Link
           href="/projects/new"
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+          className="flex items-center gap-1.5 rounded-full bg-m3-primary px-4 py-2 text-sm font-medium text-m3-on-primary transition hover:opacity-90"
         >
-          New project
+          <Icon name="add" className="text-[16px] leading-none" /> New project
         </Link>
       </div>
 
-      <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide text-text-dim">
+      <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide text-m3-on-surface-variant">
         Active projects
       </h2>
 
       {activeProjects.length === 0 ? (
-        <div className="mt-4 rounded-xl border border-dashed border-border p-10 text-center">
-          <p className="text-sm text-text-dim">No active projects yet.</p>
+        <div className="mt-4 rounded-2xl border border-dashed border-m3-outline p-10 text-center">
+          <p className="text-sm text-m3-on-surface-variant">No active projects yet.</p>
           <Link
             href="/projects/new"
-            className="mt-3 inline-block text-sm font-medium text-accent hover:underline"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-m3-primary hover:underline"
           >
-            Create the first one →
+            Create the first one
+            <Icon name="arrow_forward" className="text-[16px] leading-none" />
           </Link>
         </div>
       ) : (
@@ -58,7 +60,7 @@ export default async function ProjectsPage() {
 
       {archivedProjects.length > 0 ? (
         <>
-          <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide text-text-dim">
+          <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide text-m3-on-surface-variant">
             Archived projects
           </h2>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

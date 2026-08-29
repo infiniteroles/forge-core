@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "./Icon";
 
 export function ProjectArchiveButton({
   projectId,
@@ -41,8 +42,9 @@ export function ProjectArchiveButton({
       type="button"
       onClick={onArchive}
       disabled={loading}
-      className="rounded-md border border-border px-4 py-2 text-sm text-neutral-300 transition hover:border-red-500/50 hover:text-red-300 disabled:opacity-50"
+      className="flex items-center gap-1.5 rounded-full border border-m3-outline-variant px-4 py-2 text-sm text-m3-on-surface-variant transition hover:bg-m3-surface-container-high hover:text-m3-on-surface disabled:opacity-50"
     >
+      <Icon name="archive" className="text-[16px] leading-none" />
       {loading ? "Archiving…" : "Archive"}
     </button>
   );

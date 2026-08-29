@@ -378,32 +378,32 @@ const sessionBudget = getSessionBudgetPolicy();
   return (
     <AppShell>
       <div className="max-w-2xl">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-text-dim">
+        <h1 className="text-2xl font-semibold tracking-tight text-m3-on-surface">Settings</h1>
+        <p className="mt-1 text-sm text-m3-on-surface-variant">
           Read-only configuration summary for this deployment.
         </p>
 
-        <div className="mt-8 overflow-hidden rounded-xl border border-border bg-surface">
+        <div className="mt-8 overflow-hidden rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low">
           <dl>
             {rows.map((row, index) => (
               <div
                 key={row.label}
                 className={`grid grid-cols-1 gap-1 px-6 py-4 sm:grid-cols-2 ${
-                  index !== 0 ? "border-t border-border" : ""
+                  index !== 0 ? "border-t border-m3-outline-variant" : ""
                 }`}
               >
-                <dt className="text-sm text-text-dim">{row.label}</dt>
-                <dd className="text-sm text-neutral-100">{row.value}</dd>
+                <dt className="text-sm text-m3-on-surface-variant">{row.label}</dt>
+                <dd className="text-sm text-m3-on-surface">{row.value}</dd>
               </div>
             ))}
           </dl>
         </div>
 
-        <div className="mt-8 rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+        <div className="mt-8 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-m3-on-surface-variant">
             Coolify Preview Runner
           </h2>
-          <p className="mt-1 text-xs text-text-dim">
+          <p className="mt-1 text-xs text-m3-on-surface-variant">
             DEV Preview runner over the Coolify API. The token is never shown.
           </p>
           <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
@@ -475,11 +475,11 @@ const sessionBudget = getSessionBudgetPolicy();
           </div>
         </div>
 
-        <div className="mt-8 rounded-xl border border-border bg-surface p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-text-dim">
+        <div className="mt-8 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-m3-on-surface-variant">
             Preview Runtime Environment
           </h2>
-          <p className="mt-1 text-xs text-text-dim">
+          <p className="mt-1 text-xs text-m3-on-surface-variant">
             Env vars injected into preview applications so they can boot. Values
             are never shown; sensitive keys are always blocked.
           </p>
