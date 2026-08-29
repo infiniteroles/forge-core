@@ -43,8 +43,11 @@ export async function chatCompletion(
   }
 
   const url = `${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`;
-  const maxRetries = Number(process.env.LLM_MAX_RETRIES) || 3;
-  const retryDelayMs = Number(process.env.LLM_RETRY_DELAY_MS) || 900;
+  // DeepSeek devuelve `empty_response` de forma intermitente; 5 reintentos con
+  // backoff creciente dan margen para que el build autónomo no muera por un
+  // par de respuestas vacías seguidas.
+  const maxRetries = Number(process.env.LLM_MAX_RETRIES) || 5;
+  const retryDelayMs = Number(process.env.LLM_RETRY_DELAY_MS) || 1200;
 
   const attemptOnce = async (): Promise<LLMChatResult> => {
     const controller = new AbortController();
