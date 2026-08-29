@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `1348499` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `010fd30` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -132,6 +132,14 @@ Commit `4b84bb0` → deploy `mncoctq0du5zsuvydfos1n9l` **Success** (~4 min).
 - Nuevo `DELETE /api/composer/sessions/[id]` (borra una conversación del Composer; no toca el proyecto).
 - Limpieza operativa: borrados los proyectos de prueba/abandonados (TengoYBusco x2 → repos tengoybusco-3/t2 borrados, PadelHub, UI Test, T2) y 11 sesiones del Composer huérfanas. Quedan solo `Padel Tour` + `Forge Core01` (control plane) y 1 sesión.
 - Resto: `tengoybusco-2` no se puede borrar con el token actual (falta admin; lo creó otro token) — borrado manual pendiente.
+
+## 6.12 — Plan de desarrollo detallado (desplegado)
+
+Commit `010fd30` → deploy `iqcmadbldlckdws4hehu4jaz` **Success** (~4 min).
+- `lib/composer/plan.ts`: prompt mucho más exigente — pide **6-9 fases** (Setup → Modelo de datos → Auth → Backend → Frontend → Tests unitarios → Tests integración/E2E → QA) con **2-3 tareas concretas por fase**, cada una con `phase` y `kind` (setup|db|auth|backend|frontend|test|qa); **testStrategy específica** (unitarios, integración/E2E, checklist QA); `maxTokens` 2400→4000.
+- `lib/composer/types.ts`: `ComposerPlan.tasks` ahora incluye `phase?`.
+- `formatPlan` (route): agrupa las tareas **por fase** (🛠️ Fase + lista numerada) y muestra **🧪 Pruebas** y **⚠️ Riesgos** de forma clara (sin `**` literales).
+- `tsc` EXIT=0; `/api/health` 200.
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 

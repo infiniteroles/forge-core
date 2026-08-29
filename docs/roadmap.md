@@ -1,13 +1,8 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `4b84bb0` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `010fd30` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
-
-### 6.4c — Completar el build autónomo hasta el preview
-- El build autónomo (WorkSession) sobre el repo nuevo debe producir un **scaffold real** (Next.js + shadcn + Prisma) en una rama/PR, y **generar un preview** (`/api/composer/preview` ya lo expone).
-- Hacer que el **workspace** (chat + preview al lado) se actualice en vivo: cuando la WorkSession termina y hay preview `ready`, el iframe se carga automáticamente.
-- Mejorar el **plan del Composer**: tareas concretas por fase/capa (setup → modelo de datos → auth → backend → frontend → tests) en vez de una única tarea genérica.
 
 ### 6.5 — Iterar por chat viendo los cambios ✅ (desplegado, commit `2e0b6c0`)
 - Hecho: chat activo en `building`/`preview`/`done` → cada mensaje lanza una **WorkSession de iteración** (`startComposerIteration`) y el preview se regenera al lado del chat.
@@ -31,11 +26,12 @@
 - Hecho: check de readiness (nombre/repo verificados y solventables desde el chat) antes de arrancar; histórico del Composer persistente con desplegable de proyectos.
 - Pendiente de validar en pruebas: un flujo completo eligiendo "sin repo" (debe bloquear y pedir resolver) y retomar una conversación tras recargar.
 
+### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
+- Hecho: fases detalladas (setup→datos→auth→backend→frontend→unit→e2e→QA), 2-3 tareas por fase y estrategia de pruebas completa.
+
 ### 6.4c — Scaffold real del MVP ✅ (retomado y desplegado; pendiente de validación E2E)
 - Hecho: el build genera el scaffold Next.js + Tailwind en la rama (stage `ensure_scaffold`) y prepara el DEV Preview automáticamente (stage `ensure_dev_preview`).
 - Pendiente: validar en pruebas un flujo completo (aprovechar que la PR ya contiene la app y el preview aparece solo).
-- El build autónomo sobre un repo nuevo crea la rama/PR pero **solo sube el plan (`.forge/…`)**, no el código de la app. Falta que el builder genere un **scaffold real** (Next.js + shadcn/ui + Prisma según spec) en la rama para que el preview muestre una app de verdad.
-- Opciones: plantilla de scaffold determinista en el repo (sin LLM) + luego iteraciones LLM; o instruir al builder commit para crear los ficheros base.
 
 ## A medio plazo
 
