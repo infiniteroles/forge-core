@@ -4,6 +4,7 @@
 
 import { chatCompletion } from "@/lib/llm/client";
 import { applySkill } from "@/lib/agents/skills";
+import { LLMError } from "@/lib/llm/types";
 import type { LLMMessage } from "@/lib/llm/types";
 import type { ComposerPlan, ComposerProposal, ComposerSpec } from "./types";
 
@@ -55,32 +56,18 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
   return null;
 }
 
-export async function generatePlan(
-  spec: ComposerSpec,
-  proposal: ComposerProposal,
-  feedback?: string
-): Promise<ComposerPlan> {
-  const messages: LLMMessage[] = [
-    { role: "system", content: applySkill("planner", SYSTEM_PROMPT) },
-    {
-      role: "user",
-      content:
-        `App spec:\n${JSON.stringify(spec, null, 2)}\n\n` +
-        `Architecture proposal:\n${JSON.stringify(proposal, null, 2)}\n\n` +
-        (feedback ? `User feedback on the previous plan:\n${feedback}\n\n` : "") +
-        `Generate the development and test plan.`,
-    },
-  ];
+/** Un plan útil debe tener varias fases y un puñado de tareas concretas. */
+function isPlanGood(parsed: Record<string, unknown> | null): boolean {
+  if (!parsed) return false;
+  const tasks = parsed.tasks;
+  const phases = parsed.phases;
+  if (!Array.isArray(tasks) || !Array.isArray(phases)) return false;
+  if (phases.length < 5 || tasks.length < 6) return false;
+  return true;
+}
 
-  const result = await chatCompletion({
-    messages,
-    temperature: 0.3,
-    maxTokens: 4000,
-    responseFormat: "json_object",
-  });
-
-  const parsed = extractJsonObject(result.content);
-  const tasks = Array.isArray(parsed?.tasks)
+function buildPlan(parsed: Record<string, unknown>): ComposerPlan {
+  const tasks = Array.isArray(parsed.tasks)
     ? (parsed.tasks as unknown[]).map((t) => {
         const o = (t ?? {}) as Record<string, unknown>;
         return {
@@ -91,31 +78,66 @@ export async function generatePlan(
           agent: typeof o.agent === "string" ? o.agent : undefined,
         };
       })
-    : [
-        {
-          title: "Preparar el proyecto base",
-          description: "Scaffold inicial y configuración.",
-          kind: "setup",
-          phase: "Setup",
-          agent: "dev",
-        },
-      ];
-
+    : [];
   return {
     summary:
-      typeof parsed?.summary === "string"
+      typeof parsed.summary === "string"
         ? parsed.summary
         : "Plan de desarrollo generado.",
-    phases: Array.isArray(parsed?.phases)
+    phases: Array.isArray(parsed.phases)
       ? (parsed.phases as string[])
       : ["Setup", "Core", "Tests"],
     tasks,
     testStrategy:
-      typeof parsed?.testStrategy === "string"
+      typeof parsed.testStrategy === "string"
         ? parsed.testStrategy
         : "Tests unitarios del núcleo + smoke test del endpoint principal.",
-    risks: Array.isArray(parsed?.risks)
+    risks: Array.isArray(parsed.risks)
       ? (parsed.risks as string[])
       : undefined,
   };
+}
+
+export async function generatePlan(
+  spec: ComposerSpec,
+  proposal: ComposerProposal,
+  feedback?: string
+): Promise<ComposerPlan> {
+  const baseUser =
+    `App spec:\n${JSON.stringify(spec, null, 2)}\n\n` +
+    `Architecture proposal:\n${JSON.stringify(proposal, null, 2)}\n\n` +
+    (feedback ? `User feedback on the previous plan:\n${feedback}\n\n` : "") +
+    `Generate the development and test plan.`;
+
+  const NUDGE =
+    "\n\nIMPORTANTE: tu plan anterior fue rechazado por ser demasiado genérico o incompleto. " +
+    "Devuelve un plan DETALLADO: entre 6 y 9 fases y al menos 2-3 tareas CONCRETAS por fase " +
+    "(mínimo 10 tareas en total), cada tarea con phase, kind y agent bien asignados, " +
+    "y una testStrategy específica (unitarios, integración/E2E y checklist QA). NO lo recortes.";
+
+  // Control de calidad con reintentos: nunca devolver el plan genérico por defecto.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = await chatCompletion({
+      messages: [
+        { role: "system", content: applySkill("planner", SYSTEM_PROMPT) },
+        {
+          role: "user",
+          content: baseUser + (attempt > 0 ? NUDGE : ""),
+        },
+      ],
+      temperature: 0.3,
+      maxTokens: 4000,
+      responseFormat: "json_object",
+    });
+
+    const parsed = extractJsonObject(result.content);
+    if (parsed && isPlanGood(parsed)) {
+      return buildPlan(parsed);
+    }
+  }
+
+  throw new LLMError(
+    "El plan generado era demasiado genérico o no se pudo parsear. Dime 'regenera el plan' y lo vuelvo a intentar.",
+    "plan_too_generic"
+  );
 }
