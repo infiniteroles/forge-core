@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `2bf0e3a` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `bbdb035` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -111,6 +111,13 @@ Commit `2bf0e3a` → deploy `gnbtviccublbqkklrxypplpu` **Success** (~8 min).
 - **Fix**: `lib/llm/client.ts` `chatCompletion` ahora **reintenta automáticamente** (`empty_response`, `timeout` y errores de red) hasta `LLM_MAX_RETRIES` (default 3) con backoff `LLM_RETRY_DELAY_MS` (default 900ms). Beneficia a TODOS los agentes (discovery, propuesta, plan, builder proposal/commit, PR review) sin tocar cada llamada.
 - `.env.example` con `LLM_MAX_RETRIES` / `LLM_RETRY_DELAY_MS`.
 - Validado: el build fallido de TengoYBusco se **reanudó** (iteración 2) y pasa del punto donde antes fallaba (`run_iteration_builder_proposal` en marcha, sin error).
+
+## 6.11 — Stepper avanza al terminar el build + panel de preview honesto (desplegado)
+
+Commit `bbdb035` → deploy `qbhw1gplnf6fepkbp8jxuuor` **Success** (~4 min).
+- El **stepper inferior del Composer ya avanza** cuando la WorkSession termina: `completed` → **Listo**, `completed_with_warnings` → **Preview**, `failed` → **Bloqueado** (`stepIndex` trata los estados terminales como el último paso; `inWorkspace` incluye `blocked`).
+- El **panel de preview** ya no se queda en "en espera…": si el build terminó pero no hay app que previsualizar, muestra un aviso claro (el repo aún no contiene código de la app, solo el plan).
+- **Limitación honesta**: el preview sigue vacío porque el builder autónomo aún no genera el **código de la app** (solo el plan `.forge/…`). Para que el preview muestre un MVP real hace falta el **scaffold mínimo (Next.js + shadcn)** — el paso 6.4c que el usuario canceló; queda a su elección retomarlo.
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
