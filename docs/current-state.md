@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `bbdb035` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `4b84bb0` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -118,6 +118,15 @@ Commit `bbdb035` → deploy `qbhw1gplnf6fepkbp8jxuuor` **Success** (~4 min).
 - El **stepper inferior del Composer ya avanza** cuando la WorkSession termina: `completed` → **Listo**, `completed_with_warnings` → **Preview**, `failed` → **Bloqueado** (`stepIndex` trata los estados terminales como el último paso; `inWorkspace` incluye `blocked`).
 - El **panel de preview** ya no se queda en "en espera…": si el build terminó pero no hay app que previsualizar, muestra un aviso claro (el repo aún no contiene código de la app, solo el plan).
 - **Limitación honesta**: el preview sigue vacío porque el builder autónomo aún no genera el **código de la app** (solo el plan `.forge/…`). Para que el preview muestre un MVP real hace falta el **scaffold mínimo (Next.js + shadcn)** — el paso 6.4c que el usuario canceló; queda a su elección retomarlo.
+
+## 6.4c — Scaffold real del MVP + preview automático (desplegado)
+
+Commit `4b84bb0` → deploy `mncoctq0du5zsuvydfos1n9l` **Success** (~4 min).
+- **`lib/scaffold/nextjs.ts`** (función pura, testeable): `buildNextJsScaffold({name, purpose, accent, background})` genera un proyecto **Next.js 15 + Tailwind 3 funcional** (package.json, tsconfig, next.config, tailwind/postcss config, `app/{layout,page,globals.css}`, `.gitignore`, **Dockerfile** para Coolify, `.dockerignore`, favicon). La landing usa nombre/propósito/paleta con escape JSX seguro.
+- **`stageEnsureScaffold`** (nuevo stage `ensure_scaffold` en DEV_STAGES, tras crear la rama): si la rama no tiene `package.json`, genera el scaffold y lo commitea (Contents API). Así la PR contiene la app real.
+- **`stageEnsureDevPreview`** (nuevo stage `ensure_dev_preview`, último): al terminar el build, si Coolify está configurado, genera el **DEV Preview automáticamente** (`prepareDevPreview`) — el preview aparece solo.
+- Test `tests/scaffold/nextjs.test.ts` (5 casos). `tsc` EXIT=0; `/api/health` 200.
+- Próximo: probar un flujo completo del Composer para ver el scaffold en el repo y el preview automático.
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
