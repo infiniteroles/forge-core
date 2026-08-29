@@ -10,6 +10,7 @@ import type {
   ComposerStatus,
 } from "@/lib/composer/types";
 import { agentRoleMeta } from "@/lib/agents/roles";
+import { Icon } from "@/components/Icon";
 
 type ChatResponse = {
   id: string;
@@ -502,7 +503,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       case "building":
         return "El build está en marcha; puedes pedir cambios por chat aunque no haya terminado.";
       case "preview":
-        return "Alterna 🖥️/📱 en el preview para comprobar el responsive.";
+        return "Alterna escritorio/móvil en el preview para comprobar el responsive.";
       case "done":
         return "El MVP está listo: abre el proyecto y sigue iterando, o clónalo a tu IDE.";
       default:
@@ -514,25 +515,29 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const rightPanel = (() => {
     if (inWorkspace) {
       return (
-        <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-surface">
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-text-dim">Preview DEV</span>
+        <div className="flex h-full min-h-[420px] flex-col overflow-hidden rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low">
+          <div className="flex items-center justify-between border-b border-m3-outline-variant bg-m3-surface-container px-3 py-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-m3-on-surface-variant">
+              <Icon name="visibility" className="text-[16px] leading-none" /> Preview DEV
+            </span>
             <div className="flex items-center gap-2">
               {preview ? (
-                <div className="flex overflow-hidden rounded-md border border-border">
+                <div className="flex overflow-hidden rounded-full border border-m3-outline-variant">
                   <button
                     onClick={() => setDevice("desktop")}
                     title="Vista escritorio"
-                    className={`px-2 py-1 text-[11px] transition ${device === "desktop" ? "bg-accent text-black" : "bg-background text-text-dim hover:text-neutral-100"}`}
+                    aria-label="Vista escritorio"
+                    className={`grid h-7 w-8 place-items-center transition ${device === "desktop" ? "bg-m3-primary text-m3-on-primary" : "bg-background text-m3-on-surface-variant hover:text-m3-on-surface"}`}
                   >
-                    🖥️
+                    <Icon name="desktop_windows" className="text-[15px] leading-none" />
                   </button>
                   <button
                     onClick={() => setDevice("mobile")}
                     title="Vista móvil"
-                    className={`px-2 py-1 text-[11px] transition ${device === "mobile" ? "bg-accent text-black" : "bg-background text-text-dim hover:text-neutral-100"}`}
+                    aria-label="Vista móvil"
+                    className={`grid h-7 w-8 place-items-center transition ${device === "mobile" ? "bg-m3-primary text-m3-on-primary" : "bg-background text-m3-on-surface-variant hover:text-m3-on-surface"}`}
                   >
-                    📱
+                    <Icon name="phone_iphone" className="text-[15px] leading-none" />
                   </button>
                 </div>
               ) : null}
@@ -543,11 +548,13 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
                 </span>
               ) : null}
               {preview ? (
-                <a href={preview.url} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
-                  Abrir en pestaña ↗
+                <a href={preview.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-m3-primary hover:underline">
+                  <Icon name="open_in_new" className="text-[14px] leading-none" /> Abrir en pestaña
                 </a>
               ) : (
-                <span className="text-xs text-text-dim">en espera…</span>
+                <span className="flex items-center gap-1 text-xs text-m3-on-surface-variant">
+                  <Icon name="hourglass_empty" className="text-[14px] leading-none" /> en espera…
+                </span>
               )}
             </div>
           </div>
@@ -565,18 +572,22 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
               <iframe src={preview.url} title="DEV Preview" className="h-full w-full flex-1 border-0 bg-white" />
             )
           ) : wsStatus === "failed" ? (
-            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
+            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-m3-on-surface-variant">
               <div>
-                <p className="text-red-300">❌ El build falló.</p>
+                <p className="flex items-center justify-center gap-2 font-medium text-m3-error">
+                  <Icon name="error" className="text-[20px] leading-none" /> El build falló.
+                </p>
                 <p className="mt-1 text-xs">
                   {wsSummary ?? "Revisa el detalle en el proyecto."}
                 </p>
               </div>
             </div>
           ) : wsStatus === "completed" || wsStatus === "completed_with_warnings" ? (
-            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-text-dim">
+            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-m3-on-surface-variant">
               <div>
-                <p className="text-neutral-200">✅ El build ha terminado, pero aún no hay una app que previsualizar.</p>
+                <p className="flex items-center justify-center gap-2 font-medium text-m3-on-surface">
+                  <Icon name="check_circle" className="text-[20px] leading-none text-m3-primary" /> El build ha terminado, pero aún no hay una app que previsualizar.
+                </p>
                 <p className="mt-1 text-xs">
                   El repositorio todavía no contiene el código de la aplicación (solo el plan).
                   Con el scaffold mínimo (Next.js + shadcn) verás aquí el MVP de verdad.
@@ -602,57 +613,65 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
     }
     if (plan && status === "planning") {
       return (
-        <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-5">
+        <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-neutral-100">Plan de desarrollo y pruebas</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-m3-on-surface">
+              <Icon name="task_alt" className="text-[18px] leading-none text-m3-primary" /> Plan de desarrollo y pruebas
+            </h3>
             <button onClick={approvePlan} disabled={loading}
-              className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50">
+              className="rounded-full bg-m3-primary px-4 py-1.5 text-sm font-medium text-m3-on-primary transition hover:opacity-90 disabled:opacity-50">
               {loading ? "Procesando…" : "Aprobar plan y construir"}
             </button>
           </div>
-          <p className="mt-2 text-sm text-neutral-300">{plan.summary}</p>
-          <p className="mt-3 text-xs uppercase tracking-wide text-text-dim">Fases</p>
+          <p className="mt-2 text-sm text-m3-on-surface-variant">{plan.summary}</p>
+          <p className="mt-3 text-xs uppercase tracking-wide text-m3-on-surface-variant">Fases</p>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {plan.phases.map((ph) => (
-              <span key={ph} className="rounded-full bg-neutral-800/70 px-2 py-0.5 text-[11px] text-neutral-300">{ph}</span>
+              <span key={ph} className="rounded-full bg-m3-surface-container-high px-2 py-0.5 text-[11px] text-m3-on-surface-variant">{ph}</span>
             ))}
           </div>
-          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-neutral-300">
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-m3-on-surface-variant">
             {plan.tasks.map((t) => {
               const meta = agentRoleMeta(t.agent);
               return (
                 <li key={t.title}>
-                  <span className="mr-1" title={meta.label}>
-                    {meta.icon}
+                  <span className="mr-1 align-middle" title={meta.label}>
+                    <Icon name={meta.iconName} className="text-[14px] leading-none text-m3-primary" filled />
                   </span>
-                  <span className="text-neutral-100">{t.title}</span>
+                  <span className="text-m3-on-surface">{t.title}</span>
                   {t.description ? (
-                    <span className="text-text-dim"> — {t.description}</span>
+                    <span className="text-m3-on-surface-variant"> — {t.description}</span>
                   ) : null}
                 </li>
               );
             })}
           </ol>
-          <p className="mt-3 text-xs text-text-dim">
-            <span className="font-medium text-neutral-300">Pruebas:</span> {plan.testStrategy}
+          <p className="mt-3 text-xs text-m3-on-surface-variant">
+            <span className="font-medium text-m3-on-surface">Pruebas:</span> {plan.testStrategy}
           </p>
-          {plan.risks?.length ? <p className="mt-2 text-xs text-amber-300">Riesgos: {plan.risks.join("; ")}</p> : null}
+          {plan.risks?.length ? (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-300">
+              <Icon name="warning" className="text-[14px] leading-none" /> Riesgos: {plan.risks.join("; ")}
+            </p>
+          ) : null}
         </div>
       );
     }
     if (proposal && (status === "proposal" || status === "planning")) {
       return (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+        <div className="rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-neutral-100">Propuesta inicial</h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-m3-on-surface">
+              <Icon name="architecture" className="text-[18px] leading-none text-m3-primary" /> Propuesta inicial
+            </h3>
             {status === "proposal" ? (
               <button onClick={confirmProposal} disabled={loading}
-                className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50">
+                className="rounded-full bg-m3-primary px-4 py-1.5 text-sm font-medium text-m3-on-primary transition hover:opacity-90 disabled:opacity-50">
                 {loading ? "Procesando…" : "Confirmar propuesta"}
               </button>
             ) : null}
           </div>
-          <p className="mt-2 text-sm text-neutral-300">{proposal.summary}</p>
+          <p className="mt-2 text-sm text-m3-on-surface-variant">{proposal.summary}</p>
           <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
             {(["Frontend", "Backend", "Base de datos", "Auth", "Hosting"] as const).map((k) => {
               const v = k === "Frontend" ? proposal.stack.frontend
@@ -661,27 +680,30 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
                 : k === "Auth" ? proposal.stack.auth
                 : proposal.stack.hosting;
               return (
-                <div key={k} className="flex gap-2">
-                  <dt className="text-text-dim">{k}:</dt>
-                  <dd className="text-neutral-200">{v}</dd>
+                <div key={k} className="flex gap-2 rounded-lg bg-m3-surface-container px-2.5 py-1.5">
+                  <dt className="text-m3-on-surface-variant">{k}:</dt>
+                  <dd className="text-m3-on-surface">{v}</dd>
                 </div>
               );
             })}
           </dl>
           {proposal.structure?.length ? (
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-neutral-300">
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-m3-on-surface-variant">
               {proposal.structure.map((s) => <li key={s}>{s}</li>)}
             </ul>
           ) : null}
           {proposal.openQuestions?.length ? (
-            <p className="mt-3 text-xs text-amber-300">Antes de construir: {proposal.openQuestions.join("; ")}</p>
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-300">
+              <Icon name="help" className="text-[14px] leading-none" /> Antes de construir: {proposal.openQuestions.join("; ")}
+            </p>
           ) : null}
         </div>
       );
     }
     return (
-      <div className="flex h-full min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-dim">
-        <p className="text-neutral-400">La propuesta de arquitectura aparecerá aquí</p>
+      <div className="flex h-full min-h-[200px] flex-col items-center justify-center rounded-2xl border border-dashed border-m3-outline p-8 text-center text-sm text-m3-on-surface-variant">
+        <Icon name="architecture" className="mb-2 text-[32px] leading-none text-m3-outline" />
+        <p className="font-medium text-m3-on-surface-variant">La propuesta de arquitectura aparecerá aquí</p>
         <p className="mt-1 text-xs">una vez que Forge tenga suficiente contexto sobre tu app.</p>
       </div>
     );
@@ -692,14 +714,14 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       <div className="mb-3 flex flex-wrap gap-2 text-sm">
         {projectId ? (
           <Link href={`/projects/${projectId}`}
-            className="rounded-md bg-accent px-3.5 py-1.5 text-xs font-medium text-black transition hover:opacity-90">
-            Abrir proyecto creado →
+            className="flex items-center gap-1 rounded-full bg-m3-primary px-3.5 py-1.5 text-xs font-medium text-m3-on-primary transition hover:opacity-90">
+            Abrir proyecto creado <Icon name="arrow_forward" className="text-[14px] leading-none" />
           </Link>
         ) : null}
         {workSessionId ? (
           <Link href={`/work-sessions/${workSessionId}`} target="_blank" rel="noreferrer"
-            className="rounded-md border border-emerald-500/40 px-3.5 py-1.5 text-xs font-medium text-emerald-200 transition hover:bg-emerald-500/10">
-            Ver build autónomo en curso ↗
+            className="flex items-center gap-1 rounded-full border border-m3-outline-variant px-3.5 py-1.5 text-xs font-medium text-m3-primary transition hover:bg-m3-primary-container/40">
+            <Icon name="play_circle" className="text-[14px] leading-none" /> Ver build autónomo en curso
           </Link>
         ) : null}
       </div>
@@ -710,45 +732,46 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       {buildLinks}
       {/* Loading banner — always visible when Forge is working */}
       {loading ? (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-accent">
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+        <div className="mb-2 flex items-center gap-2 rounded-full border border-m3-outline-variant bg-m3-surface-container-high px-3 py-2 text-xs text-m3-primary">
+          <Icon name="sync" className="animate-spin text-[16px] leading-none" />
           Forge está trabajando…
         </div>
       ) : null}
       {/* Chat thread — ocupa toda la altura de la sidebar */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-surface p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low p-4">
         {messages.length === 0 ? (
-          <div className="mx-auto my-auto max-w-md text-center text-sm text-text-dim">
-            <p className="text-neutral-200">
-              👋 Hola, soy Forge Composer.
-            </p>
+          <div className="mx-auto my-auto max-w-md text-center text-sm text-m3-on-surface-variant">
+            <Icon name="waving_hand" className="mb-2 text-[40px] leading-none text-m3-primary" />
+            <p className="font-medium text-m3-on-surface">Hola, soy Forge Composer.</p>
             <p className="mt-2">
               Cuéntame qué quieres construir (por ejemplo:{" "}
               <em>
                 "una app para gestionar reservas de una peluquería, con login de
                 clientes"
               </em>
-              ). Si tienes logo, te lo preguntaré y podrás adjuntarlo con 📎.
+              ). Si tienes logo, te lo preguntaré y podrás adjuntarlo con{" "}
+              <Icon name="attach_file" className="align-middle text-[14px] leading-none" />.
             </p>
           </div>
         ) : (
           messages.map((m) => (
             <div
               key={m.id}
-              className={`max-w-[85%] rounded-xl border px-3 py-2 text-sm ${
+              className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
                 m.role === "user"
-                  ? "self-end border-accent/40 bg-accent/10 text-neutral-100"
+                  ? "self-end rounded-br-md bg-m3-primary-container text-m3-on-primary-container"
                   : m.kind === "proposal"
-                    ? "self-start border-emerald-500/30 bg-emerald-500/5 text-neutral-100"
+                    ? "self-start rounded-bl-md bg-m3-surface-container-high text-m3-on-surface"
                     : m.kind === "system"
-                      ? "self-start border-red-500/30 bg-red-500/5 text-red-200"
-                      : "self-start border-border bg-background text-neutral-200"
+                      ? "self-start rounded-bl-md border border-m3-outline-variant bg-m3-error/10 text-m3-error"
+                      : "self-start rounded-bl-md border border-m3-outline-variant bg-m3-surface-container text-m3-on-surface"
               }`}
             >
               {m.kind === "logo" ? (
-                <span className="text-neutral-300">
-                  🎨 Logo subido — paleta dominante:{" "}
-                  <span className="font-mono text-neutral-100">
+                <span className="flex items-center gap-1.5 text-m3-on-surface-variant">
+                  <Icon name="image" className="text-[16px] leading-none" />
+                  Logo subido — paleta dominante:{" "}
+                  <span className="font-mono text-m3-on-surface">
                     {m.content || "sí"}
                   </span>
                 </span>
@@ -777,7 +800,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
               key={opt}
               onClick={() => void pickOption(opt)}
               disabled={loading}
-              className="rounded-full border border-accent/40 bg-accent/10 px-3.5 py-1.5 text-sm text-neutral-100 transition hover:bg-accent/20 disabled:opacity-50"
+              className="rounded-full border border-m3-outline-variant bg-m3-surface-container px-3.5 py-1.5 text-sm text-m3-on-surface transition hover:bg-m3-surface-container-high disabled:opacity-50"
             >
               {opt}
             </button>
@@ -790,21 +813,21 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
         <div className="mt-2 flex flex-wrap gap-2">
           <button
             onClick={() => void continueWorkSession()}
-            className="rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full bg-m3-primary px-3.5 py-1.5 text-sm font-medium text-m3-on-primary transition hover:opacity-90 disabled:opacity-50"
           >
-            ▶️ Continuar
+            <Icon name="play_arrow" className="text-[18px] leading-none" /> Continuar
           </button>
           <button
             onClick={askForChange}
-            className="rounded-md border border-border bg-background px-3.5 py-1.5 text-sm text-neutral-100 transition hover:bg-surface-2 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full border border-m3-outline-variant bg-m3-surface-container px-3.5 py-1.5 text-sm text-m3-on-surface transition hover:bg-m3-surface-container-high disabled:opacity-50"
           >
-            ✏️ Pedir un cambio
+            <Icon name="edit" className="text-[16px] leading-none" /> Pedir un cambio
           </button>
         </div>
       ) : null}
 
       {/* Input — alto y a todo el ancho de la sidebar */}
-      <div className="mt-2 flex items-end gap-2 rounded-xl border border-border bg-surface p-2">
+      <div className="mt-2 flex items-end gap-2 rounded-[24px] border border-m3-outline-variant bg-m3-surface-container p-2">
         <input
           ref={fileRef}
           type="file"
@@ -821,9 +844,9 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
           disabled={loading || isBlocked}
           title="Adjuntar logo"
           aria-label="Adjuntar logo"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border bg-background text-base text-text-dim transition hover:text-neutral-100 disabled:opacity-50"
+          className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition disabled:opacity-50 ${logoName ? "bg-m3-primary-container text-m3-on-primary-container" : "text-m3-on-surface-variant hover:bg-m3-surface-container-high hover:text-m3-on-surface"}`}
         >
-          {logoName ? "🖼️" : "📎"}
+          <Icon name={logoName ? "image" : "attach_file"} className="text-[20px] leading-none" />
         </button>
         <textarea
           value={input}
@@ -837,18 +860,21 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
           rows={2}
           disabled={loading || isBlocked}
           placeholder={inputPlaceholder}
-          className="min-h-[2.5rem] w-full flex-1 resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-neutral-200 outline-none transition placeholder:text-text-dim focus:border-accent/60 disabled:opacity-50"
+          className="min-h-[2.5rem] w-full flex-1 resize-none rounded-[18px] bg-m3-surface-container-high px-3 py-2 text-sm text-m3-on-surface outline-none transition placeholder:text-m3-on-surface-variant focus:bg-m3-surface-container-highest disabled:opacity-50"
         />
         <button
           onClick={() => void sendMessage()}
           disabled={loading || !input.trim() || isBlocked}
-          className="h-11 shrink-0 rounded-md bg-accent px-4 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+          aria-label="Enviar mensaje"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-m3-primary text-m3-on-primary transition hover:opacity-90 disabled:opacity-50"
         >
-          Enviar
+          <Icon name="send" className="text-[20px] leading-none" />
         </button>
       </div>
       {logoName ? (
-        <p className="mt-1 text-[11px] text-text-dim">🖼️ {logoName} — paleta inferida y enviada a Forge.</p>
+        <p className="mt-1 flex items-center gap-1 text-[11px] text-m3-on-surface-variant">
+          <Icon name="image" className="text-[14px] leading-none" /> {logoName} — paleta inferida y enviada a Forge.
+        </p>
       ) : null}
     </div>
   );
@@ -857,47 +883,6 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
 
   return (
     <div className="flex h-full flex-col gap-3">
-      {/* Selector de proyecto/sesión — retomar el chat sin perder histórico */}
-      <div className="flex flex-wrap items-center gap-2">
-        <label
-          htmlFor="composer-session-select"
-          className="text-[11px] font-medium uppercase tracking-wide text-text-dim"
-        >
-          Proyecto / conversación
-        </label>
-        <select
-          id="composer-session-select"
-          value={sessionId ?? "__new__"}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === "__new__") newConversation();
-            else void onSelectSession(v);
-          }}
-          className="min-w-[260px] rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-neutral-100 outline-none transition focus:border-accent/60"
-        >
-          <option value="__new__">➕ Nueva conversación</option>
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.projectName ?? `Sesión ${s.status}`} ·{" "}
-              {new Date(s.updatedAt).toLocaleString("es", {
-                day: "2-digit",
-                month: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </option>
-          ))}
-        </select>
-        {sessionId ? (
-          <button
-            type="button"
-            onClick={newConversation}
-            className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-dim transition hover:text-neutral-100"
-          >
-            ➕ Nueva
-          </button>
-        ) : null}
-      </div>
 
       {/* Workspace: chat en sidebar ancha + contenido ocupa el resto */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
@@ -907,37 +892,83 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
         <div className="min-h-0 flex-1 overflow-hidden">{rightPanel}</div>
       </div>
 
-      {/* Footer fijado al pie: pasos del Composer + tip */}
-      <footer className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-surface px-3 py-2">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-text-dim">Pasos</span>
+      {/* Footer fijado al pie: pasos + selector de proyecto + tip */}
+      <footer className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-m3-outline-variant bg-m3-surface-container-low px-3 py-2">
+        <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-m3-on-surface-variant">
+          <Icon name="view_agenda" className="text-[14px] leading-none" /> Pasos
+        </span>
         {STEPS.map((s, i) => (
           <div key={s.key} className="flex items-center gap-1.5">
             <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                 i < step
-                  ? "bg-emerald-500/10 text-emerald-600"
+                  ? "bg-m3-primary-container text-m3-on-primary-container"
                   : i === step
-                    ? "bg-accent text-black"
-                    : "bg-neutral-800/60 text-neutral-500"
+                    ? "bg-m3-primary text-m3-on-primary"
+                    : "bg-m3-surface-container-high text-m3-on-surface-variant"
               }`}
             >
-              {i < step ? "✓ " : ""}
+              {i < step ? (
+                <Icon name="check" className="text-[12px] leading-none" />
+              ) : null}
               {s.label}
             </span>
             {i < STEPS.length - 1 ? (
-              <span className="text-text-dim">→</span>
+              <Icon name="chevron_right" className="text-[14px] leading-none text-m3-outline" />
             ) : null}
           </div>
         ))}
-        <span className="ml-auto flex max-w-md items-center gap-1.5 text-[11px] text-text-dim">
-          <span aria-hidden>💡</span>
+
+        {/* Selector de proyecto / conversación, al lado de los pasos */}
+        <div className="flex items-center gap-1.5 rounded-full border border-m3-outline-variant bg-m3-surface-container px-2 py-1">
+          <Icon name="folder_open" className="text-[16px] leading-none text-m3-on-surface-variant" />
+          <select
+            id="composer-session-select"
+            value={sessionId ?? "__new__"}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "__new__") newConversation();
+              else void onSelectSession(v);
+            }}
+            title="Proyecto / conversación"
+            className="max-w-[180px] bg-transparent text-xs text-m3-on-surface outline-none [&>option]:bg-surface"
+          >
+            <option value="__new__">Nueva conversación</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.projectName ?? `Sesión ${s.status}`} ·{" "}
+                {new Date(s.updatedAt).toLocaleString("es", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </option>
+            ))}
+          </select>
+          {sessionId ? (
+            <button
+              type="button"
+              onClick={newConversation}
+              title="Nueva conversación"
+              aria-label="Nueva conversación"
+              className="grid h-6 w-6 place-items-center rounded-full text-m3-on-surface-variant transition hover:bg-m3-surface-container-high hover:text-m3-on-surface"
+            >
+              <Icon name="add" className="text-[16px] leading-none" />
+            </button>
+          ) : null}
+        </div>
+
+        <span className="ml-auto flex max-w-md items-center gap-1.5 text-[11px] text-m3-on-surface-variant">
+          <Icon name="lightbulb" className="text-[14px] leading-none text-m3-primary" />
           <span className="truncate">{tip}</span>
         </span>
       </footer>
 
       {spec ? (
-        <div className="text-xs text-text-dim">
-          <span className="font-medium text-neutral-300">Spec:</span>{" "}
+        <div className="flex items-center gap-1 text-xs text-m3-on-surface-variant">
+          <Icon name="description" className="text-[14px] leading-none" />
+          <span className="font-medium text-m3-on-surface">Spec:</span>{" "}
           {spec.name} · {spec.purpose.slice(0, 90)}
           {spec.purpose.length > 90 ? "…" : ""} · auth: {spec.auth} · UI:{" "}
           {spec.uiLibrary}

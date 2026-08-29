@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "@/components/Icon";
 
 /**
  * Modo claro/oscuro de Forge Core. Persiste en localStorage y aplica la clase
@@ -29,9 +30,12 @@ export function ThemeToggle() {
       onClick={toggle}
       title={light ? "Cambiar a modo oscuro" : "Cambiar a modo claro"}
       aria-label={light ? "Modo oscuro" : "Modo claro"}
-      className="grid h-8 w-8 place-items-center rounded-md border border-border bg-surface text-sm text-text-dim transition hover:text-neutral-100"
+      className="grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-text-dim transition hover:text-neutral-100"
     >
-      {light ? "🌙" : "☀️"}
+      <Icon
+        name={light ? "dark_mode" : "light_mode"}
+        className="text-[18px] leading-none"
+      />
     </button>
   );
 }

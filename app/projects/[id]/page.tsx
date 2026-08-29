@@ -10,6 +10,7 @@ import { ProjectArchiveButton } from "@/components/ProjectArchiveButton";
 import { ProjectDeleteButton } from "@/components/ProjectDeleteButton";
 import { summarizeProjectAgents } from "@/lib/agents/summary";
 import { getAgentSkill } from "@/lib/agents/skills";
+import { Icon } from "@/components/Icon";
 import { AskPlannerButton } from "@/components/AskPlannerButton";
 import { AgentRunCard } from "@/components/AgentRunCard";
 import { TaskCard } from "@/components/TaskCard";
@@ -404,7 +405,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                   title={`Skill: ${getAgentSkill(a.role).name}`}
                   className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm"
                 >
-                  <span>{a.icon}</span>
+                  <Icon name={a.iconName} className="text-[16px] leading-none text-accent" />
                   <span className="text-neutral-100">{a.label}</span>
                   <span className="text-text-dim">
                     {a.stages > 0 ? `${a.stages} etapas` : ""}

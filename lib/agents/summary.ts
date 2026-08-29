@@ -7,6 +7,8 @@ export interface ProjectAgentSummary {
   role: string;
   label: string;
   icon: string;
+  /** Icono Material Symbols para la interfaz. */
+  iconName: string;
   /** Etapas de work-session ejecutadas por este rol. */
   stages: number;
   /** Agent runs registrados para este rol. */
@@ -50,6 +52,7 @@ export function summarizeProjectAgents(
     role: a.role,
     label: a.label,
     icon: a.icon,
+    iconName: a.iconName,
     stages: stageCount[a.role] ?? 0,
     runs: runCount[a.role] ?? 0,
   }));

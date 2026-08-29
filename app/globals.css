@@ -10,6 +10,22 @@
   --border: 38 38 48;
   --text-dim: 139 139 152;
   --accent: 255 107 87;
+  /* Material 3 — color roles (oscuro) */
+  --m3-primary: 255 107 87;
+  --m3-on-primary: 43 8 0;
+  --m3-primary-container: 91 30 17;
+  --m3-on-primary-container: 255 218 210;
+  --m3-surface-container-lowest: 9 9 12;
+  --m3-surface-container-low: 16 16 22;
+  --m3-surface-container: 20 20 27;
+  --m3-surface-container-high: 25 25 32;
+  --m3-surface-container-highest: 32 32 41;
+  --m3-on-surface: 228 226 230;
+  --m3-on-surface-variant: 199 197 208;
+  --m3-outline: 143 142 152;
+  --m3-outline-variant: 66 64 72;
+  --m3-error: 242 184 178;
+  --m3-on-error: 65 39 35;
   color-scheme: dark;
 }
 
@@ -21,6 +37,22 @@
   --border: 224 224 230;
   --text-dim: 100 100 112;
   --accent: 234 88 62;
+  /* Material 3 — color roles (claro) */
+  --m3-primary: 198 53 31;
+  --m3-on-primary: 255 255 255;
+  --m3-primary-container: 255 218 210;
+  --m3-on-primary-container: 57 16 10;
+  --m3-surface-container-lowest: 255 255 255;
+  --m3-surface-container-low: 247 244 245;
+  --m3-surface-container: 241 239 240;
+  --m3-surface-container-high: 235 233 235;
+  --m3-surface-container-highest: 229 227 229;
+  --m3-on-surface: 28 27 31;
+  --m3-on-surface-variant: 73 69 76;
+  --m3-outline: 121 116 124;
+  --m3-outline-variant: 201 197 205;
+  --m3-error: 179 38 30;
+  --m3-on-error: 255 255 255;
   color-scheme: light;
 }
 
@@ -77,4 +109,22 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Material Symbols — iconos de Material 3 (ver components/Icon.tsx) */
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
 }
