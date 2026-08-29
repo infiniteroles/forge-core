@@ -10,6 +10,8 @@ import {
   stageEnsurePlanCommit,
   stageEnsureDraftPr,
   stageEnsureBuilderProposal,
+  stageEnsureScaffold,
+  stageEnsureDevPreview,
   stageRunBuilderCommit,
   stageRunSessionChecks,
   stageAnalyzePr,
@@ -34,12 +36,14 @@ interface StageFn {
 const DEV_STAGES: StageFn[] = [
   { key: "ensure_issue", label: "Ensure GitHub issue", fn: stageEnsureIssue },
   { key: "ensure_branch", label: "Ensure GitHub branch", fn: stageEnsureBranch },
+  { key: "ensure_scaffold", label: "Generate MVP scaffold", fn: stageEnsureScaffold },
   { key: "ensure_plan_commit", label: "Ensure plan commit", fn: stageEnsurePlanCommit },
   { key: "ensure_draft_pr", label: "Ensure draft pull request", fn: stageEnsureDraftPr },
   { key: "ensure_builder_proposal", label: "Run Builder Proposal", fn: stageEnsureBuilderProposal },
   { key: "run_builder_commit", label: "Run Builder Commit", fn: stageRunBuilderCommit },
   { key: "run_session_checks", label: "Run lightweight session checks", fn: stageRunSessionChecks },
   { key: "analyze_pr", label: "Analyze pull request", fn: stageAnalyzePr },
+  { key: "ensure_dev_preview", label: "Generate DEV preview", fn: stageEnsureDevPreview },
 ];
 
 const ITERATION_STAGES: StageFn[] = [

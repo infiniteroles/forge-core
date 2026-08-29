@@ -7,6 +7,7 @@ import { generateBranchNameCandidates } from "@/lib/github/branch-name";
 import {
   createOrUpdateFile,
   createOrUpdateFiles,
+  getFileContent,
 } from "@/lib/github/files";
 import {
   buildPlanPath,
@@ -28,6 +29,9 @@ import { generateBuilderCommitChanges } from "@/lib/llm/builder-commit";
 import { runPrReviewAgent } from "@/lib/llm/pr-review";
 import { persistableUsage } from "@/lib/llm-efficiency/cost-policy";
 import { shouldReusePrReview } from "@/lib/llm-efficiency/pr-review-cache";
+import { buildNextJsScaffold } from "@/lib/scaffold/nextjs";
+import { isCoolifyConfigured } from "@/lib/coolify/client";
+import { getPreviewRunnerMode, prepareDevPreview } from "@/lib/coolify/preview";
 import { runSessionChecks } from "./checks";
 import type { Prisma } from "@prisma/client";
 import type { StageOutcome, WorkSessionResult } from "./types";
@@ -349,6 +353,112 @@ export async function stageEnsureDraftPr(ctx: StageContext): Promise<StageOutcom
   });
 
   ctx.result.prUrl = pr.html_url;
+  return { type: "continue" };
+}
+
+// ── ensure_scaffold (Fase 6.4c) ──────────────────────────────────────────────
+// Si la rama aún no tiene una app, genera un scaffold Next.js + Tailwind
+// funcional (con Dockerfile) para que la PR y el preview muestren un MVP real.
+
+async function hasFileOnBranch(
+  repositoryFullName: string,
+  branchName: string,
+  path: string
+): Promise<boolean> {
+  try {
+    await getFileContent({ repositoryFullName, branchName, path });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function extractPurpose(description: string | null): string {
+  if (!description) return "";
+  const m = description.match(/\*\*Propósito\*\*:\s*(.+)/i);
+  return (m?.[1]?.trim() ?? description.trim()) || "";
+}
+
+export async function stageEnsureScaffold(
+  ctx: StageContext
+): Promise<StageOutcome> {
+  const repo = ctx.project.repositoryFullName;
+  const branch = ctx.task.githubBranchName;
+  if (!repo || !branch) return { type: "continue" };
+
+  // Ya hay app en la rama → no repetimos.
+  if (await hasFileOnBranch(repo, branch, "package.json")) {
+    return { type: "continue" };
+  }
+
+  const files = buildNextJsScaffold({
+    name: ctx.project.name || ctx.task.title || "App",
+    purpose: extractPurpose(ctx.task.description),
+  });
+
+  await createOrUpdateFiles(
+    files.map((f) => ({
+      repositoryFullName: repo,
+      branchName: branch,
+      path: f.path,
+      message: `chore(scaffold): add ${f.path} (Next.js MVP)`,
+      content: f.content,
+    }))
+  );
+
+  await logActivity({
+    projectId: ctx.task.projectId,
+    type: "scaffold.created",
+    message: `Scaffold Next.js generado para "${ctx.project.name || ctx.task.title}" (${files.length} ficheros)`,
+    metadata: {
+      taskId: ctx.task.id,
+      workSessionId: ctx.workSessionId,
+      branchName: branch,
+      files: files.map((f) => f.path),
+    },
+  });
+
+  return { type: "continue" };
+}
+
+// ── ensure_dev_preview (Fase 6.4c) ───────────────────────────────────────────
+// Al terminar el build, genera el DEV Preview automáticamente (si Coolify está
+// configurado) para que el Composer lo muestre al lado del chat.
+
+export async function stageEnsureDevPreview(
+  ctx: StageContext
+): Promise<StageOutcome> {
+  const repo = ctx.project.repositoryFullName;
+  const branch = ctx.task.githubBranchName;
+  if (!repo || !branch) return { type: "continue" };
+  if (getPreviewRunnerMode() === "disabled" || !isCoolifyConfigured()) {
+    return { type: "continue" };
+  }
+  try {
+    const preview = await prepareDevPreview({
+      projectId: ctx.task.projectId,
+      taskId: ctx.task.id,
+      workSessionId: ctx.workSessionId,
+      repositoryFullName: repo,
+      branchName: branch,
+      pullRequestNumber: ctx.task.githubPrNumber,
+      commitSha: null,
+    });
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "preview.auto_requested",
+      message: `DEV Preview generado automáticamente (${preview.status})`,
+      metadata: {
+        workSessionId: ctx.workSessionId,
+        taskId: ctx.task.id,
+        previewDeploymentId: preview.id,
+        status: preview.status,
+        previewUrl: preview.previewUrl ?? null,
+      },
+    });
+  } catch (err) {
+    console.error("auto preview failed:", err);
+  }
   return { type: "continue" };
 }
 
