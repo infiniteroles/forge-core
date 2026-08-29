@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `602d773` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `873ab42` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -135,6 +135,15 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
 - `tsc` EXIT=0; `/api/health` 200.
+
+## 5.1 / 6.17 — Identidad visual Forge CORE01 + fix Composer (desplegado)
+
+Commits `5e6b296` + `873ab42` (assets) → deploy `hk7mfpe18iicg3iwkn4mkuym` **Success** (~4 min).
+- **Fix bug**: el Composer se quedaba "pillado" tras adjuntar el logo → causa raíz: error de hidratación React #418 por un `<link>` de Material Symbols duplicado (Next lo hoistea a `<head>` pero deja el original en el body). Se mueven las fuentes a `@import` en `globals.css` y se elimina el `<link>`; además se blinda `onUploadLogo` (try/catch).
+- **Identidad Forge CORE01**: paleta dark-first (bg `#080A0D`, verde acento `#7CFF4D`), fuentes Geist/Space Grotesk/JetBrains Mono, fondo con radial sutil verde.
+- **Logo nuevo**: `components/BrandLogo.tsx` (cambia variante dark/light) integrado en header (30px) y login (48px); assets en `app/res/`.
+- **Utilidades**: `forge-card`, `forge-pill`, `forge-label`, `forge-button-primary/secondary`, `forge-input`; colores `forge.*` y `fontFamily` en Tailwind.
+- `tsc` EXIT=0; `/api/health` 200; dashboard/composer OK sin error React.
 
 ## 6.16 — Estilo Material 3 en todo el site (desplegado)
 

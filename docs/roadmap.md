@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `602d773` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `873ab42` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -40,6 +40,9 @@
 
 ### 6.16 — Estilo Material 3 en todo el site ✅ (desplegado)
 - Hecho: header/nav global con iconos y pill activa, componentes compartidos (badges, cards, timeline, paneles, botones) y páginas (login, dashboard, projects, new, detalle, settings) con tokens M3 y Material Symbols en vez de emojis.
+
+### 5.1 / 6.17 — Identidad visual Forge CORE01 + fix Composer ✅ (desplegado)
+- Hecho: fix del Composer pillado (hidratación por link duplicado), paleta dark-first con verde CORE01, fuentes Geist/Space Grotesk/JetBrains Mono, logo nuevo dark/light en header y login, utilidades forge-*.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
