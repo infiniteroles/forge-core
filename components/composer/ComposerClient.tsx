@@ -448,7 +448,14 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
     async (file: File) => {
       setLogoName(file.name);
       setInput("");
-      const colors = await extractPalette(file);
+      // La extracción de paleta es best-effort: si falla, seguimos y enviamos
+      // el logo sin paleta para que el flujo nunca se quede colgado.
+      let colors: string[] = [];
+      try {
+        colors = await extractPalette(file);
+      } catch {
+        colors = [];
+      }
       await post({
         sessionId,
         message: "",
@@ -490,7 +497,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       ? "…"
       : ["building", "preview", "done"].includes(status)
         ? "Pide un cambio… (Enter para enviar)"
-        : "Describe tu aplicación… (Enter para enviar)";
+        : "Describe qué quieres que Forge construya… (Enter para enviar)";
 
   function tipFor(s: ComposerStatus, loadingNow: boolean): string {
     if (loadingNow) return "Forge está trabajando en ello…";

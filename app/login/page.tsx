@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,12 +35,7 @@ export default function LoginPage() {
     <div className="grid min-h-screen place-items-center px-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-m3-primary text-base font-bold text-m3-on-primary">
-            F
-          </span>
-          <span className="text-lg font-semibold tracking-tight text-m3-on-surface">
-            Forge Core01
-          </span>
+          <BrandLogo height={48} />
         </div>
 
         <h1 className="text-2xl font-semibold tracking-tight text-m3-on-surface">Sign in</h1>

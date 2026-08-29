@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { LogoutButton } from "./LogoutButton";
 import { ThemeToggle } from "./ThemeToggle";
 import { NavLinks } from "./NavLinks";
+import { BrandLogo } from "./BrandLogo";
 import { Icon } from "./Icon";
 
 export async function AppShell({
@@ -20,13 +21,12 @@ export async function AppShell({
       <header className="sticky top-0 z-20 border-b border-m3-outline-variant bg-m3-surface-container-low/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex min-w-0 items-center gap-6">
-            <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-m3-primary text-sm font-bold text-m3-on-primary">
-                F
-              </span>
-              <span className="truncate font-semibold tracking-tight text-m3-on-surface">
-                Forge Core01
-              </span>
+            <Link
+              href="/dashboard"
+              className="flex shrink-0 items-center"
+              aria-label="Forge CORE01 — dashboard"
+            >
+              <BrandLogo height={30} />
             </Link>
             <NavLinks />
           </div>
