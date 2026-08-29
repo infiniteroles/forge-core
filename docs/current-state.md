@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `4b84bb0` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `1348499` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -126,7 +126,12 @@ Commit `4b84bb0` → deploy `mncoctq0du5zsuvydfos1n9l` **Success** (~4 min).
 - **`stageEnsureScaffold`** (nuevo stage `ensure_scaffold` en DEV_STAGES, tras crear la rama): si la rama no tiene `package.json`, genera el scaffold y lo commitea (Contents API). Así la PR contiene la app real.
 - **`stageEnsureDevPreview`** (nuevo stage `ensure_dev_preview`, último): al terminar el build, si Coolify está configurado, genera el **DEV Preview automáticamente** (`prepareDevPreview`) — el preview aparece solo.
 - Test `tests/scaffold/nextjs.test.ts` (5 casos). `tsc` EXIT=0; `/api/health` 200.
-- Próximo: probar un flujo completo del Composer para ver el scaffold en el repo y el preview automático.
+
+## Limpieza 2026-08-29 + endpoint de sesión
+
+- Nuevo `DELETE /api/composer/sessions/[id]` (borra una conversación del Composer; no toca el proyecto).
+- Limpieza operativa: borrados los proyectos de prueba/abandonados (TengoYBusco x2 → repos tengoybusco-3/t2 borrados, PadelHub, UI Test, T2) y 11 sesiones del Composer huérfanas. Quedan solo `Padel Tour` + `Forge Core01` (control plane) y 1 sesión.
+- Resto: `tengoybusco-2` no se puede borrar con el token actual (falta admin; lo creó otro token) — borrado manual pendiente.
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
