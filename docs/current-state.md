@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-28 · HEAD: `1e77958` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `2bf0e3a` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -103,6 +103,14 @@ Commit `1e77958` → deploy `mabiaogdgz7ipuyichhnyvt2` **Success** (~4 min).
 - **Check previo antes de construir**: nuevo `lib/composer/readiness.ts` (`evaluateComposerReadiness`, `formatReadinessChecklist`, `readinessOptions`, `isRepoResolutionIntent`, `githubUrlFromMessage`). Antes de aprobar el plan se valida nombre, propósito y repositorio (repo nuevo → verifica nombre libre en GitHub y que GitHub esté configurado; URL → valida formato y acceso; sin repo → bloquea). Si hay ❌ bloqueantes, **no arranca**: muestra la checklist en el chat con botones para solventar (**Crear repo nuevo** / **Usar URL de repo existente**) y se queda en `planning` hasta resolver.
 - **Histórico persistente**: nuevo `GET /api/composer/sessions` lista las sesiones (con proyecto). El Composer guarda la sesión en `localStorage` + URL (`?session=`), **retoma la última al recargar** y muestra un **desplegable arriba** para seleccionar proyecto/conversación (con "Nueva conversación"). `GET /api/composer/chat` ahora deriva `workSessionId` del proyecto para seguir el estado del build al retomar.
 - Validado en prod: `/api/composer/sessions` devuelve 11 sesiones (TengoYBusco con proyecto y status building).
+
+## 6.10 — Reintentos automáticos del LLM (desplegado)
+
+Commit `2bf0e3a` → deploy `gnbtviccublbqkklrxypplpu` **Success** (~8 min).
+- **Problema**: DeepSeek devuelve `empty_response` de forma intermitente → un build podía fallar (`❌ El build ha fallado. LLM provider returned an empty or invalid response`) sin posibilidad de auto-recuperación.
+- **Fix**: `lib/llm/client.ts` `chatCompletion` ahora **reintenta automáticamente** (`empty_response`, `timeout` y errores de red) hasta `LLM_MAX_RETRIES` (default 3) con backoff `LLM_RETRY_DELAY_MS` (default 900ms). Beneficia a TODOS los agentes (discovery, propuesta, plan, builder proposal/commit, PR review) sin tocar cada llamada.
+- `.env.example` con `LLM_MAX_RETRIES` / `LLM_RETRY_DELAY_MS`.
+- Validado: el build fallido de TengoYBusco se **reanudó** (iteración 2) y pasa del punto donde antes fallaba (`run_iteration_builder_proposal` en marcha, sin error).
 - `lib/composer/build.ts`: `createComposerProject` llama a `pushComposerHandoff` justo antes de lanzar el build autónomo (para que la rama del builder también herede los ficheros); evento `composer.handoff_created`.
 - Test `tests/composer/handoff.test.ts` (6 casos). Solo aplica a repos **nuevos** creados por el Composer (no a URLs de repos existentes).
 
