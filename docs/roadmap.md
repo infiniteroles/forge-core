@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `7b5ce41` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `602d773` (main), 2026-08-29. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -37,6 +37,9 @@
 
 ### 6.15b — Reordenar layout del Composer ✅ (desplegado)
 - Hecho: selector de proyecto debajo del chat, pasos debajo del preview (footer eliminado) y tip contextual en la cabecera junto a "Forge Composer" sin duplicar info.
+
+### 6.16 — Estilo Material 3 en todo el site ✅ (desplegado)
+- Hecho: header/nav global con iconos y pill activa, componentes compartidos (badges, cards, timeline, paneles, botones) y páginas (login, dashboard, projects, new, detalle, settings) con tokens M3 y Material Symbols en vez de emojis.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)

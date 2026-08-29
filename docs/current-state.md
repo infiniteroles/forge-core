@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `7b5ce41` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-29 · HEAD: `602d773` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -135,6 +135,15 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
 - `tsc` EXIT=0; `/api/health` 200.
+
+## 6.16 — Estilo Material 3 en todo el site (desplegado)
+
+Commit `602d773` → deploy `5lxs92vky3x81tiqxksy5a1x` **Success** (~4 min).
+- **Header/Nav global M3**: `NavLinks.tsx` (client, `usePathname`) con iconos Material Symbols y pill activa; `AppShell` M3 (logo, botón New project con icono, logout con icono).
+- **Componentes compartidos a M3**: `StatusBadge`, `AdvancedSection` (chevron que rota), `ProjectCard`, `TaskCard`, `ActivityTimeline`, `MvpFlowPanel`, botones de proyecto (delete/archive con iconos), avisos ⚠→Icon, ✓→Icon.
+- **Páginas M3**: login, dashboard, projects, new project, detalle de proyecto (cabecera + paneles) y settings (cabecera + tablas).
+- Los tokens M3 ya eran globales (6.15); aquí se aplican al resto del site y se sustituyen los emojis de la UI por Material Symbols.
+- `tsc` EXIT=0; `/api/health` 200, `/login` 200, `/dashboard` renderiza con nav de iconos.
 
 ## 6.15b — Reordenar layout del Composer (desplegado)
 
