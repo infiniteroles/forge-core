@@ -58,6 +58,7 @@ const ITERATION_STAGES: StageFn[] = [
   { key: "run_builder_commit", label: "Run Builder Commit", agent: "dev", fn: stageRunBuilderCommit },
   { key: "run_session_checks", label: "Run lightweight session checks", agent: "qa", fn: stageRunSessionChecks },
   { key: "analyze_pr", label: "Analyze pull request", agent: "qa", fn: stageAnalyzePr },
+  { key: "ensure_dev_preview", label: "Generate DEV preview", agent: "infra", fn: stageEnsureDevPreview },
 ];
 
 /**

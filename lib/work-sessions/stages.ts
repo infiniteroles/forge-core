@@ -604,11 +604,47 @@ export async function stageRunBuilderCommit(ctx: StageContext): Promise<StageOut
     metadata: { taskId: ctx.task.id, agentRunId: run.id, workSessionId: ctx.workSessionId },
   });
 
-  const result = await generateBuilderCommitChanges(ctx.task.id, {
-    requestedChanges: ctx.requestedChanges,
-    iterationNumber: ctx.iterationNumber,
-    workSessionId: ctx.workSessionId,
-  });
+  let result: Awaited<ReturnType<typeof generateBuilderCommitChanges>>;
+  try {
+    result = await generateBuilderCommitChanges(ctx.task.id, {
+      requestedChanges: ctx.requestedChanges,
+      iterationNumber: ctx.iterationNumber,
+      workSessionId: ctx.workSessionId,
+    });
+  } catch (error) {
+    // El LLM del builder commit falló (p. ej. empty_response). No tiramos abajo
+    // el build: si ya hay scaffold en la rama, lo registramos y seguimos para
+    // poder generar el preview. El código específico se añade en iteraciones.
+    const msg =
+      error instanceof Error ? error.message : "Builder commit falló";
+    await prisma.agentRun.update({
+      where: { id: run.id },
+      data: {
+        status: "failed",
+        output: JSON.stringify({ status: "failed", reason: msg }),
+        finishedAt: new Date(),
+      },
+    });
+    await prisma.task.update({
+      where: { id: ctx.task.id },
+      data: {
+        builderLastRunId: run.id,
+        builderLastStatus: "failed",
+        builderLastSummary: msg.slice(0, 300),
+      },
+    });
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "builder.commit.failed",
+      message: `Builder commit no aplicado (se continúa con el scaffold): ${msg.slice(0, 200)}`,
+      metadata: {
+        taskId: ctx.task.id,
+        agentRunId: run.id,
+        workSessionId: ctx.workSessionId,
+      },
+    });
+    return { type: "continue" };
+  }
 
   if (result.status === "completed_with_warnings") {
     await prisma.agentRun.update({
@@ -769,7 +805,34 @@ export async function stageAnalyzePr(ctx: StageContext): Promise<StageOutcome> {
     },
   });
 
-  const result = await runPrReviewAgent(ctx.task.id);
+  let result: Awaited<ReturnType<typeof runPrReviewAgent>>;
+  try {
+    result = await runPrReviewAgent(ctx.task.id);
+  } catch (error) {
+    // Si el LLM de la PR review falla, no tiramos abajo el build: registramos
+    // el fallo y seguimos para poder llegar al preview.
+    const msg =
+      error instanceof Error ? error.message : "PR review falló";
+    await prisma.agentRun.update({
+      where: { id: run.id },
+      data: {
+        status: "failed",
+        output: JSON.stringify({ status: "failed", reason: msg }),
+        finishedAt: new Date(),
+      },
+    });
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "pr_review.failed",
+      message: `PR review no completada (se continúa hacia el preview): ${msg.slice(0, 200)}`,
+      metadata: {
+        taskId: ctx.task.id,
+        agentRunId: run.id,
+        workSessionId: ctx.workSessionId,
+      },
+    });
+    return { type: "continue" };
+  }
   const now = new Date();
 
   if (result.status === "completed_with_warnings") {
