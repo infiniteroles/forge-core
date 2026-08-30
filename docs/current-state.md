@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-30 · HEAD: `f3725e4` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-30 · HEAD: `c95b0b8` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -151,6 +151,16 @@ Commit `f3725e4` (desplegado).
   - `prepareDevPreview` consulta la visibilidad del repo vía GitHub; si es **privado**, marca el preview `failed` con un mensaje accionable (hacer el repo público **o** conectar un GitHub App en Coolify → Sources) en lugar de quedarse `deploying`.
   - `GET /api/composer/preview` **refresca el estado real desde Coolify** (cooldown 20s) mientras el preview está `queued/creating/deploying`, para que un fallo real converja a `failed` con su error.
   - `ComposerClient` muestra el **error del preview en el panel derecho** y deja de hacer polling al fallar.
+- `tsc` EXIT=0.
+
+## 6.23b — Previews de repos privados vía GitHub App (desplegado)
+
+Commit `c95b0b8` (desplegado).
+- El usuario prefiere **no hacer públicos** sus repos: se configuró una **GitHub App** en Coolify (fuente `forge-core01`, App ID `4769631`, instalada en la org `infiniteroles` con acceso a repos) para que Coolify pueda clonar repos privados.
+- `getCoolifyConfig` lee `COOLIFY_GITHUB_APP_UUID` (uuid de la fuente en Coolify).
+- `createOrReusePreviewApplication`: si el repo es **privado** crea la app con `POST /applications/github` (`github_app_uuid` + `git_repository owner/repo`); si es **público** sigue con `/applications/public` (URL completa).
+- `prepareDevPreview` solo marca `failed` por repo privado si **no hay** GitHub App configurada.
+- Variable `COOLIFY_GITHUB_APP_UUID=nthsfrnjuuifpkokj9sld8pk` añadida a la app web en Coolify.
 - `tsc` EXIT=0.
 
 ## 6.21 — Build resiliente (desplegado)
