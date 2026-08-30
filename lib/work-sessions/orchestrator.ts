@@ -323,12 +323,23 @@ async function runSession(
     }
 
     if (outcome.type === "completed_with_warnings") {
-      finalStatus = "completed_with_warnings";
-      finalSummary = isIteration
-        ? buildIterationSummary(result, ws.requestedChanges)
-        : buildHumanSummary(result);
       result.warnings?.push(outcome.reason);
-      break;
+      // Registrar el aviso pero CONTINUAR con las siguientes etapas (p. ej.
+      // ensure_dev_preview): un aviso en una etapa intermedia (builder commit,
+      // PR review…) no debe impedir llegar al preview. El estado final de la
+      // sesión se marcará como completed_with_warnings por los avisos.
+      await logActivity({
+        projectId: ws.task.projectId,
+        type: "work_session.stage_warning",
+        message: `${stage.label} terminó con avisos: ${outcome.reason}`,
+        metadata: {
+          workSessionId: ws.id,
+          taskId: ws.taskId,
+          stage: stage.key,
+          status: "completed_with_warnings",
+        },
+      });
+      continue;
     }
 
     if (outcome.type === "failed") {
@@ -355,6 +366,15 @@ async function runSession(
   // A session with failing checks is not a clean "completed" — mark it with
   // warnings (never revert, never block, never deploy).
   if (finalStatus === "completed" && result.checks?.status === "failed") {
+    finalStatus = "completed_with_warnings";
+    finalSummary = isIteration
+      ? buildIterationSummary(result, ws.requestedChanges)
+      : buildHumanSummary(result);
+  }
+
+  // Cualquier aviso acumulado en el camino (builder commit, PR review…)
+  // mantiene el estado "completed_with_warnings" sin impedir llegar al preview.
+  if (finalStatus === "completed" && (result.warnings?.length ?? 0) > 0) {
     finalStatus = "completed_with_warnings";
     finalSummary = isIteration
       ? buildIterationSummary(result, ws.requestedChanges)
