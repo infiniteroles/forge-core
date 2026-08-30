@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-30 · HEAD: `ab52dad` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-30 · HEAD: `f3725e4` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -142,6 +142,16 @@ Commit `ab52dad` → deploy `1hl2qr9vjy129pkuquedig0o` **Success** (~9 min).
 - Un aviso en una etapa intermedia (builder commit, PR review…) ya **no detiene el bucle**: se registra y se continúa hasta `ensure_dev_preview`, así el **preview siempre se genera** aunque el LLM avise.
 - El estado final de la sesión conserva `completed_with_warnings` si hubo avisos.
 - `tsc` EXIT=0; `/api/health` 200.
+
+## 6.23 — Preview de repos privados: error claro + sync de estado (desplegado)
+
+Commit `f3725e4` (desplegado).
+- **Causa raíz diagnosticada**: el build terminaba (iter 5 `cmtfgj` updated `app/page.tsx`) pero el preview no aparecía. La app de preview se creaba con fuente **«Public GitHub»** y el repo `infiniteroles/tengoybusco` es **privado** → Coolify no podía clonarlo → el deploy fallaba en ~10s, pero la fila `PreviewDeployment` se quedaba `deploying` para siempre (nadie sincronizaba el estado con Coolify) y el Composer mostraba «aún no hay una app que previsualizar».
+- **Fix**:
+  - `prepareDevPreview` consulta la visibilidad del repo vía GitHub; si es **privado**, marca el preview `failed` con un mensaje accionable (hacer el repo público **o** conectar un GitHub App en Coolify → Sources) en lugar de quedarse `deploying`.
+  - `GET /api/composer/preview` **refresca el estado real desde Coolify** (cooldown 20s) mientras el preview está `queued/creating/deploying`, para que un fallo real converja a `failed` con su error.
+  - `ComposerClient` muestra el **error del preview en el panel derecho** y deja de hacer polling al fallar.
+- `tsc` EXIT=0.
 
 ## 6.21 — Build resiliente (desplegado)
 
