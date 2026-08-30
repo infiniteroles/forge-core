@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `161afbe` (main), 2026-08-29. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `ab52dad` (main), 2026-08-30. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -55,6 +55,9 @@
 
 ### 6.21 — Build resiliente ✅ (desplegado)
 - Hecho: builder-commit y PR review no tiran abajo el build (se continúa al preview); las iteraciones por chat regeneran el preview.
+
+### 6.22 — `completed_with_warnings` no detiene el build ✅ (desplegado)
+- Hecho: los avisos intermedios ya no paran el bucle → siempre se llega a generar el DEV preview; el estado final conserva los avisos.
 - Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)

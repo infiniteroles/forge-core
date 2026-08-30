@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-08-29 · HEAD: `161afbe` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-08-30 · HEAD: `ab52dad` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -134,6 +134,13 @@ Commit `f4663c5` → deploy `oy2nenmqbboyz0wap55xv7kt` **Success** (~5 min).
 - **Plan con agentes**: el generador de plan (`lib/composer/plan.ts`) asigna a cada tarea su **perfil especializado** (`agent`); el chat (`formatPlan`) y la tarjeta del plan muestran el icono del agente por tarea.
 - **Stages etiquetados**: cada etapa del build (`orchestrator.ts`) lleva su agente (issue/branch/PR/commit→dev; scaffold/preview→infra; plan→planner; checks/review→qa) y se registra en el activity (`metadata.agent`).
 - **Panel "Agentes del proyecto"**: en la página del proyecto (`lib/agents/summary.ts` + UI) muestra qué agentes han trabajado, con nº de etapas y análisis por rol.
+- `tsc` EXIT=0; `/api/health` 200.
+
+## 6.22 — `completed_with_warnings` ya no detiene el build (desplegado)
+
+Commit `ab52dad` → deploy `1hl2qr9vjy129pkuquedig0o` **Success** (~9 min).
+- Un aviso en una etapa intermedia (builder commit, PR review…) ya **no detiene el bucle**: se registra y se continúa hasta `ensure_dev_preview`, así el **preview siempre se genera** aunque el LLM avise.
+- El estado final de la sesión conserva `completed_with_warnings` si hubo avisos.
 - `tsc` EXIT=0; `/api/health` 200.
 
 ## 6.21 — Build resiliente (desplegado)
