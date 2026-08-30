@@ -95,6 +95,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const [logoName, setLogoName] = useState<string | null>(null);
   const [options, setOptions] = useState<string[]>([]);
   const [preview, setPreview] = useState<{ url: string; status: string } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [wsStatus, setWsStatus] = useState<string | null>(null);
   const [wsSummary, setWsSummary] = useState<string | null>(null);
@@ -135,6 +136,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       else setWorkSessionId(null);
       setOptions([]);
       setPreview(null);
+      setPreviewError(null);
       setDecision(null);
       notifiedWsRef.current = null;
       return true;
@@ -212,6 +214,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
     setWorkSessionId(null);
     setOptions([]);
     setPreview(null);
+    setPreviewError(null);
     setDecision(null);
     setWsStatus(null);
     setWsSummary(null);
@@ -227,13 +230,26 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
       try {
         const res = await fetch(`/api/composer/preview?projectId=${projectId}`);
         const data = (await res.json().catch(() => null)) as {
-          preview?: { id: string; status: string; previewUrl: string | null } | null;
+          preview?: { id: string; status: string; previewUrl: string | null; error: string | null } | null;
         } | null;
         const p = data?.preview;
-        if (p?.previewUrl && p.status === "ready") {
+        if (!p) return;
+        if (p.previewUrl && p.status === "ready") {
           setPreview({ url: p.previewUrl, status: p.status });
+          setPreviewError(null);
+          clearInterval(id);
+          return;
+        }
+        if (p.status === "failed" || p.status === "not_configured") {
+          setPreviewError(
+            p.error ||
+              (p.status === "not_configured"
+                ? "El preview no está configurado en este entorno."
+                : "El preview no pudo desplegarse.")
+          );
           clearInterval(id);
         }
+        // queued/creating/deploying → keep polling
       } catch {
         // keep polling
       }
@@ -579,6 +595,17 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
             ) : (
               <iframe src={preview.url} title="DEV Preview" className="h-full w-full flex-1 border-0 bg-white" />
             )
+          ) : previewError ? (
+            <div className="grid flex-1 place-items-center p-6 text-center text-sm text-m3-on-surface-variant">
+              <div className="max-w-md">
+                <p className="flex items-center justify-center gap-2 font-medium text-m3-error">
+                  <Icon name="error" className="text-[20px] leading-none" /> El preview no está disponible.
+                </p>
+                <p className="mt-2 whitespace-pre-line text-xs leading-relaxed">
+                  {previewError}
+                </p>
+              </div>
+            </div>
           ) : wsStatus === "failed" ? (
             <div className="grid flex-1 place-items-center p-6 text-center text-sm text-m3-on-surface-variant">
               <div>

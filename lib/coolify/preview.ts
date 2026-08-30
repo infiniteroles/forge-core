@@ -8,6 +8,7 @@ import {
   listCoolifyApplications,
 } from "./client";
 import { buildPreviewAppName, buildPreviewDomain } from "./preview-domain";
+import { checkRepository } from "@/lib/github/repository";
 import { setPreviewApplicationEnvironment } from "./environment";
 import {
   PreviewRunnerConfig,
@@ -495,6 +496,54 @@ export async function prepareDevPreview(
       branchName: row.branchName ?? undefined,
     },
   });
+
+  // Private repositories cannot be deployed by Coolify's "Public GitHub" source
+  // (Forge has no GitHub App source connected in Coolify). Detect this up front
+  // and fail with a clear, actionable error instead of leaving the preview stuck
+  // "deploying" forever after Coolify fails to clone the repo.
+  if (repositoryFullName) {
+    try {
+      const repo = await checkRepository(repositoryFullName);
+      if (repo.visibility === "private") {
+        const error =
+          `El repositorio «${repositoryFullName}» es privado y el preview de Coolify no puede clonarlo ` +
+          `(fuente «Public GitHub»). Para previsualizar repositorios privados: ` +
+          `(a) haz el repositorio público, o (b) conecta un GitHub App en Coolify ` +
+          `(Sources) con acceso a tus repositorios.`;
+        await prisma.previewDeployment.update({
+          where: { id: row.id },
+          data: { status: "failed", error },
+        });
+        await logActivity({
+          projectId: row.projectId,
+          type: "preview.failed",
+          message: `DEV Preview failed: repositorio privado (${repositoryFullName}).`,
+          metadata: {
+            previewDeploymentId: row.id,
+            workSessionId: row.workSessionId ?? undefined,
+            taskId: row.taskId ?? undefined,
+            provider: "coolify",
+            status: "failed",
+            previewUrl: row.previewUrl ?? undefined,
+            domain: row.domain ?? undefined,
+            branchName: row.branchName ?? undefined,
+            repository: repositoryFullName,
+          },
+        });
+        return {
+          id: row.id,
+          status: "failed" as PreviewStatus,
+          provider: "coolify",
+          previewUrl: row.previewUrl,
+          error,
+        };
+      }
+    } catch {
+      // Best-effort: si no podemos consultar la visibilidad (red, permisos),
+      // dejamos que Coolify intente el despliegue y el refresco posterior
+      // reportará el fallo real.
+    }
+  }
 
   try {
     const { applicationUuid, created, reused } = await createOrReusePreviewApplication({
