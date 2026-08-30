@@ -115,15 +115,13 @@ export async function createOrReusePreviewApplication(input: {
   }
 
   // 3. Create a new app in the DEV environment (never production).
-  // NOTE: Coolify API exposes creation under /applications/public for public
-  // GitHub repos (there is no bare POST /applications). The repo field is
-  // `git_repository` (full URL), not `github_repository`.
+  // Public repos use POST /applications/public (proven). Private repos use the
+  // GitHub App source via POST /applications/github so Coolify can clone them.
   const cfg = getCoolifyConfig();
-  const body: Record<string, unknown> = {
+  const common: Record<string, unknown> = {
     project_uuid: cfg.projectUuid ?? undefined,
     server_uuid: cfg.serverUuid ?? undefined,
     environment_name: cfg.environmentName,
-    git_repository: `https://github.com/${input.repositoryFullName}`,
     git_branch: input.branchName,
     build_pack: cfg.buildPack,
     ports_exposes: cfg.defaultPort,
@@ -132,7 +130,36 @@ export async function createOrReusePreviewApplication(input: {
     name: buildPreviewAppName(input.taskId),
   };
 
-  const created = await coolifyFetch<{ uuid?: string }>("/applications/public", {
+  let repoIsPrivate = false;
+  try {
+    const repo = await checkRepository(input.repositoryFullName);
+    repoIsPrivate = repo.visibility === "private";
+  } catch {
+    repoIsPrivate = false; // best-effort; if we can't tell, let Coolify try
+  }
+
+  let endpoint = "/applications/public";
+  let body: Record<string, unknown>;
+  if (repoIsPrivate) {
+    if (!cfg.githubAppUuid) {
+      throw new Error(
+        `El repositorio «${input.repositoryFullName}» es privado y no hay GitHub App configurada en Forge (COOLIFY_GITHUB_APP_UUID).`
+      );
+    }
+    endpoint = "/applications/github";
+    body = {
+      ...common,
+      github_app_uuid: cfg.githubAppUuid,
+      git_repository: input.repositoryFullName, // full name owner/repo for GitHub App sources
+    };
+  } else {
+    body = {
+      ...common,
+      git_repository: `https://github.com/${input.repositoryFullName}`,
+    };
+  }
+
+  const created = await coolifyFetch<{ uuid?: string }>(endpoint, {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -497,19 +524,16 @@ export async function prepareDevPreview(
     },
   });
 
-  // Private repositories cannot be deployed by Coolify's "Public GitHub" source
-  // (Forge has no GitHub App source connected in Coolify). Detect this up front
-  // and fail with a clear, actionable error instead of leaving the preview stuck
-  // "deploying" forever after Coolify fails to clone the repo.
+  // Private repositories need a GitHub App source in Coolify (a "Public GitHub"
+  // source cannot clone them). If no GitHub App is configured, fail fast with a
+  // clear, actionable error instead of leaving the preview stuck "deploying".
   if (repositoryFullName) {
     try {
       const repo = await checkRepository(repositoryFullName);
-      if (repo.visibility === "private") {
+      if (repo.visibility === "private" && !cfg.githubAppUuid) {
         const error =
-          `El repositorio «${repositoryFullName}» es privado y el preview de Coolify no puede clonarlo ` +
-          `(fuente «Public GitHub»). Para previsualizar repositorios privados: ` +
-          `(a) haz el repositorio público, o (b) conecta un GitHub App en Coolify ` +
-          `(Sources) con acceso a tus repositorios.`;
+          `El repositorio «${repositoryFullName}» es privado y no hay ninguna GitHub App conectada en Coolify. ` +
+          `Conecta una GitHub App (Sources) con acceso a tus repositorios para poder previsualizar repos privados.`;
         await prisma.previewDeployment.update({
           where: { id: row.id },
           data: { status: "failed", error },

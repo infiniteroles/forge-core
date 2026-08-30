@@ -8,6 +8,7 @@ export interface CoolifyConfig {
   hasToken: boolean;
   serverUuid: string | null;
   projectUuid: string | null;
+  githubAppUuid: string | null;
   environmentName: string;
   domainSuffix: string;
   defaultPort: string;
@@ -26,6 +27,7 @@ export function getCoolifyConfig(): CoolifyConfig {
   const token = process.env.COOLIFY_API_TOKEN ?? "";
   const serverUuid = process.env.COOLIFY_SERVER_UUID ?? "";
   const projectUuid = process.env.COOLIFY_PROJECT_UUID ?? "";
+  const githubAppUuid = process.env.COOLIFY_GITHUB_APP_UUID ?? "";
   const environmentName = process.env.COOLIFY_ENVIRONMENT_NAME ?? "dev";
   const domainSuffix = process.env.PREVIEW_DOMAIN_SUFFIX ?? ".dev.core01.io";
   const defaultPort = process.env.PREVIEW_DEFAULT_PORT ?? "3000";
@@ -39,6 +41,7 @@ export function getCoolifyConfig(): CoolifyConfig {
     hasToken: token.trim().length > 0,
     serverUuid: serverUuid.trim() || null,
     projectUuid: projectUuid.trim() || null,
+    githubAppUuid: githubAppUuid.trim() || null,
     environmentName,
     domainSuffix,
     defaultPort,
