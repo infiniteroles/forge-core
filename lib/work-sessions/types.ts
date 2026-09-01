@@ -28,6 +28,7 @@ export const WORK_SESSION_STAGES = [
   "ensure_draft_pr",
   "ensure_builder_proposal",
   "run_builder_commit",
+  "verify_spec_compliance",
   "run_session_checks",
   "analyze_pr",
   "ensure_dev_preview",

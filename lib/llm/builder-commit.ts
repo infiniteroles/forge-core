@@ -10,6 +10,10 @@ import {
   BuilderContextOptions,
 } from "./builder-context";
 import {
+  getComposerSpecForTask,
+  formatSpecForBuilder,
+} from "@/lib/composer/spec-resolver";
+import {
   CommitFileChange,
   validateBuilderCommitChanges,
 } from "@/lib/github/safe-file-policy";
@@ -110,6 +114,8 @@ export interface BuilderCommitContext {
   }[];
   lastReviewSummary: string | null;
   lastBuilderCommitSummary: string | null;
+  /** Spec del Composer (paleta, auth, logo, uiLibrary) para cumplirla. */
+  composerSpec: import("@/lib/composer/types").ComposerSpec | null;
 }
 
 export async function buildBuilderCommitContext(
@@ -230,6 +236,7 @@ export async function buildBuilderCommitContext(
       status: run.status,
       createdAt: run.createdAt,
     })),
+    composerSpec: await getComposerSpecForTask(task.id),
     ...iteration,
   };
 }
@@ -292,6 +299,12 @@ function formatCommitContext(ctx: BuilderCommitContext): string {
   lines.push(`Repository: ${ctx.repositoryFullName ?? "Not linked"}`);
   if (ctx.repositoryDefaultBranch)
     lines.push(`Default branch: ${ctx.repositoryDefaultBranch}`);
+
+  const specBlock = formatSpecForBuilder(ctx.composerSpec);
+  if (specBlock) {
+    lines.push("");
+    lines.push(specBlock);
+  }
 
   lines.push("");
   lines.push("## Task context");

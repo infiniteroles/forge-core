@@ -27,9 +27,16 @@ import { runBuilderProposalAgent } from "@/lib/llm/builder-proposal";
 import { parseBuilderProposalOutput } from "@/lib/llm/builder-proposal";
 import { generateBuilderCommitChanges } from "@/lib/llm/builder-commit";
 import { runPrReviewAgent } from "@/lib/llm/pr-review";
+import { readRepoFiles } from "@/lib/github/context";
 import { persistableUsage } from "@/lib/llm-efficiency/cost-policy";
 import { shouldReusePrReview } from "@/lib/llm-efficiency/pr-review-cache";
 import { buildNextJsScaffold } from "@/lib/scaffold/nextjs";
+import {
+  specAccent,
+  specBackground,
+  specPalette,
+  specRequiresAuth,
+} from "@/lib/composer/spec-resolver";
 import { isCoolifyConfigured } from "@/lib/coolify/client";
 import { getPreviewRunnerMode, prepareDevPreview } from "@/lib/coolify/preview";
 import { runSessionChecks } from "./checks";
@@ -44,6 +51,8 @@ export interface StageContext {
   iterationNumber: number;
   parentWorkSessionId: string | null;
   isIteration: boolean;
+  /** Spec del Composer vinculada al proyecto (paleta, auth, logo, uiLibrary…). */
+  composerSpec?: import("@/lib/composer/types").ComposerSpec | null;
   task: {
     id: string;
     projectId: string;
@@ -394,6 +403,16 @@ export async function stageEnsureScaffold(
   const files = buildNextJsScaffold({
     name: ctx.project.name || ctx.task.title || "App",
     purpose: extractPurpose(ctx.task.description),
+    accent: ctx.composerSpec
+      ? specAccent(ctx.composerSpec)
+      : undefined,
+    background: ctx.composerSpec
+      ? specBackground(ctx.composerSpec)
+      : undefined,
+    requiresAuth: ctx.composerSpec
+      ? specRequiresAuth(ctx.composerSpec)
+      : false,
+    uiLibrary: ctx.composerSpec?.uiLibrary ?? "shadcn",
   });
 
   await createOrUpdateFiles(
@@ -418,6 +437,192 @@ export async function stageEnsureScaffold(
     },
   });
 
+  return { type: "continue" };
+}
+
+// ── verify_spec_compliance (Fase 6.24) ───────────────────────────────────────
+// QA gate: verifica que el código generado cumple la spec del Composer (paleta
+// del logo, página de login si pide auth) y, si no, lanza UNA pasada de fix
+// automática con instrucciones concretas. Hace que el build "se corrija solo".
+
+async function applyBuilderResult(
+  ctx: StageContext,
+  agentRunId: string,
+  result: Awaited<ReturnType<typeof generateBuilderCommitChanges>>
+) {
+  if (result.status === "completed_with_warnings" || !result.changes) {
+    await prisma.agentRun.update({
+      where: { id: agentRunId },
+      data: { status: "completed_with_warnings", finishedAt: new Date() },
+    });
+    return;
+  }
+  const commits = await createOrUpdateFiles(
+    result.changes.files.map((file) => ({
+      repositoryFullName: ctx.project.repositoryFullName!,
+      branchName: ctx.task.githubBranchName!,
+      path: file.path,
+      message: `fix(forge-builder): ${file.operation === "create" ? "add" : "update"} ${file.path} (spec compliance)`.slice(0, 120),
+      content: file.content,
+    }))
+  );
+  const lastCommit = commits[commits.length - 1];
+  await prisma.task.update({
+    where: { id: ctx.task.id },
+    data: {
+      githubBuilderCommitSha: lastCommit?.commitSha ?? undefined,
+      githubBuilderCommitUrl: lastCommit?.commitUrl ?? undefined,
+      githubBuilderCommitMessage: lastCommit?.commitMessage ?? undefined,
+      githubBuilderCommittedAt: lastCommit?.committedAt
+        ? new Date(lastCommit.committedAt)
+        : undefined,
+      githubBuilderLastCheckedAt: new Date(),
+      builderLastRunId: agentRunId,
+      builderLastStatus: "completed",
+      builderLastSummary: (result.changes?.summary ?? "").slice(0, 300),
+    },
+  });
+  await prisma.agentRun.update({
+    where: { id: agentRunId },
+    data: {
+      status: "completed",
+      output: JSON.stringify({
+        summary: result.changes.summary,
+        files: result.changes.files,
+        commits,
+      }),
+      finishedAt: new Date(),
+    },
+  });
+}
+
+export async function stageVerifySpecCompliance(
+  ctx: StageContext
+): Promise<StageOutcome> {
+  const repo = ctx.project.repositoryFullName;
+  const branch = ctx.task.githubBranchName;
+  const spec = ctx.composerSpec;
+  if (!repo || !branch || !spec) return { type: "continue" };
+
+  const violations: string[] = [];
+  const palette = specPalette(spec);
+
+  // Lee los ficheros clave de la rama (best-effort, missing => skip).
+  const read = await readRepoFiles({
+    repositoryFullName: repo,
+    branchName: branch,
+    paths: ["app/page.tsx", "app/login/page.tsx"],
+    maxFiles: 5,
+  });
+  const page = read.files.find((f) => f.path === "app/page.tsx");
+  const loginPage = read.files.find((f) => f.path === "app/login/page.tsx");
+
+  // 1) La landing usa la paleta del logo.
+  if (palette.length > 0) {
+    if (!page) {
+      violations.push("No se encontró app/page.tsx para verificar la paleta.");
+    } else {
+      const lower = page.content.toLowerCase();
+      const used = palette.filter((c) => lower.includes(c.toLowerCase()));
+      if (used.length === 0) {
+        violations.push(
+          `La landing NO usa la paleta del logo (${palette.join(", ")}).`
+        );
+      }
+    }
+  }
+
+  // 2) Si la spec pide auth, debe existir la página de login.
+  if (specRequiresAuth(spec) && !loginPage) {
+    violations.push(
+      "La spec pide autenticación pero no existe app/login/page.tsx."
+    );
+  }
+
+  if (violations.length === 0) {
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "spec.compliant",
+      message: `Código cumple la spec del Composer (paleta/auth).`,
+      metadata: {
+        taskId: ctx.task.id,
+        workSessionId: ctx.workSessionId,
+        branchName: branch,
+      },
+    });
+    return { type: "continue" };
+  }
+
+  // Auto-fix: UNA pasada extra del builder con la instrucción de cumplimiento.
+  const fixInstruction =
+    "Cumple EXACTAMENTE la especificación del producto (sección 'Especificación del producto' del contexto).\n" +
+    "Problemas detectados por QA:\n- " +
+    violations.join("\n- ") +
+    "\nAplica los cambios necesarios (usa la paleta indicada, crea/ajusta la página de login si se pide auth). No añadas features que no estén en la spec.";
+
+  await logActivity({
+    projectId: ctx.task.projectId,
+    type: "spec.violation",
+    message: `QA detectó incumplimiento de spec (${violations.length}): ${violations.join(" | ")}`,
+    metadata: {
+      taskId: ctx.task.id,
+      workSessionId: ctx.workSessionId,
+      branchName: branch,
+      violations,
+    },
+  });
+
+  const run = await prisma.agentRun.create({
+    data: {
+      projectId: ctx.task.projectId,
+      taskId: ctx.task.id,
+      workSessionId: ctx.workSessionId,
+      agentName: "builder-commit",
+      model: getLLMConfig().model,
+      status: "running",
+      startedAt: new Date(),
+    },
+  });
+
+  try {
+    const result = await generateBuilderCommitChanges(ctx.task.id, {
+      requestedChanges: fixInstruction,
+      iterationNumber: (ctx.iterationNumber ?? 0) + 1,
+      workSessionId: ctx.workSessionId,
+    });
+    await applyBuilderResult(ctx, run.id, result);
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "spec.auto_fixed",
+      message: `QA auto-corrigió la spec (commit en la rama).`,
+      metadata: {
+        taskId: ctx.task.id,
+        agentRunId: run.id,
+        workSessionId: ctx.workSessionId,
+        violations,
+      },
+    });
+    ctx.result.warnings?.push(`spec_fixed: ${violations.join(" | ")}`);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Fix falló";
+    await prisma.agentRun.update({
+      where: { id: run.id },
+      data: { status: "failed", finishedAt: new Date() },
+    });
+    await logActivity({
+      projectId: ctx.task.projectId,
+      type: "spec.auto_fix_failed",
+      message: `QA no pudo auto-corregir la spec: ${msg}`,
+      metadata: {
+        taskId: ctx.task.id,
+        agentRunId: run.id,
+        workSessionId: ctx.workSessionId,
+      },
+    });
+    ctx.result.warnings?.push(`spec_fix_failed: ${msg}`);
+  }
+
+  // No bloquea el build: si la corrección no llega, el preview sigue igual.
   return { type: "continue" };
 }
 

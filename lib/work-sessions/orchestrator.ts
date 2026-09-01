@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { logActivity } from "@/lib/activity";
 import { isSimpleApiEndpoint } from "@/lib/llm-efficiency/simple-task-detector";
 import { checkSessionBudget } from "@/lib/llm-efficiency/session-budget";
+import { getComposerSpecForProject } from "@/lib/composer/spec-resolver";
 import type { AgentRole } from "@/lib/agents/roles";
 import type { WorkSessionResult, WorkSessionStage, StageOutcome } from "./types";
 import {
@@ -14,6 +15,7 @@ import {
   stageEnsureScaffold,
   stageEnsureDevPreview,
   stageRunBuilderCommit,
+  stageVerifySpecCompliance,
   stageRunSessionChecks,
   stageAnalyzePr,
   stageRefreshContext,
@@ -43,6 +45,7 @@ const DEV_STAGES: StageFn[] = [
   { key: "ensure_draft_pr", label: "Ensure draft pull request", agent: "dev", fn: stageEnsureDraftPr },
   { key: "ensure_builder_proposal", label: "Run Builder Proposal", agent: "dev", fn: stageEnsureBuilderProposal },
   { key: "run_builder_commit", label: "Run Builder Commit", agent: "dev", fn: stageRunBuilderCommit },
+  { key: "verify_spec_compliance", label: "Verify spec compliance (QA)", agent: "qa", fn: stageVerifySpecCompliance },
   { key: "run_session_checks", label: "Run lightweight session checks", agent: "qa", fn: stageRunSessionChecks },
   { key: "analyze_pr", label: "Analyze pull request", agent: "qa", fn: stageAnalyzePr },
   { key: "ensure_dev_preview", label: "Generate DEV preview", agent: "infra", fn: stageEnsureDevPreview },
@@ -56,6 +59,7 @@ const ITERATION_STAGES: StageFn[] = [
   { key: "ensure_draft_pr", label: "Ensure draft pull request", agent: "dev", fn: stageEnsureDraftPr },
   { key: "run_iteration_builder_proposal", label: "Run Builder Proposal", agent: "dev", fn: stageRunIterationBuilderProposal },
   { key: "run_builder_commit", label: "Run Builder Commit", agent: "dev", fn: stageRunBuilderCommit },
+  { key: "verify_spec_compliance", label: "Verify spec compliance (QA)", agent: "qa", fn: stageVerifySpecCompliance },
   { key: "run_session_checks", label: "Run lightweight session checks", agent: "qa", fn: stageRunSessionChecks },
   { key: "analyze_pr", label: "Analyze pull request", agent: "qa", fn: stageAnalyzePr },
   { key: "ensure_dev_preview", label: "Generate DEV preview", agent: "infra", fn: stageEnsureDevPreview },
@@ -102,6 +106,7 @@ async function runSession(
     iterationNumber: ws.iterationNumber,
     parentWorkSessionId: ws.parentWorkSessionId,
     isIteration,
+    composerSpec: await getComposerSpecForProject(ws.projectId),
     task: {
       id: ws.task.id,
       projectId: ws.task.projectId,

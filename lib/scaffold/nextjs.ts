@@ -15,6 +15,10 @@ export interface NextJsScaffoldInput {
   accent?: string;
   /** Color de fondo principal. */
   background?: string;
+  /** Genera página de login/registro cuando la spec pide autenticación. */
+  requiresAuth?: boolean;
+  /** "shadcn" | "material3" | "other" — se refleja en la UI por defecto. */
+  uiLibrary?: string;
 }
 
 function slugify(name: string): string {
@@ -46,6 +50,7 @@ export function buildNextJsScaffold(
   const purpose = input.purpose || "Aplicación construida con Forge Core01.";
   const accent = input.accent || "#ff6b57";
   const background = input.background || "#0b0b0f";
+  const requiresAuth = Boolean(input.requiresAuth);
   const pkg = slugify(name);
   const nameJsx = escJsx(name);
   const purposeJsx = escJsx(purpose);
@@ -196,11 +201,67 @@ export function buildNextJsScaffold(
       `        ${nameJsx}\n` +
       "      </h1>\n" +
       `      <p className="max-w-xl text-sm opacity-80 sm:text-base">\n${purposeJsx}\n      </p>\n` +
+      (requiresAuth
+        ? '      <a href="/login" style={{ backgroundColor: "' +
+          accent +
+          '", color: "#0b0b0f" }} className="mt-2 rounded-lg px-5 py-2.5 text-sm font-semibold">Entrar / Registrarse</a>\n'
+        : "") +
       '      <span className="mt-2 text-[11px] uppercase tracking-widest opacity-40">Generado por Forge Core01</span>\n' +
       "    </main>\n" +
       "  );\n" +
       "}\n",
   });
+
+  if (requiresAuth) {
+    files.push({
+      path: "app/login/page.tsx",
+      content:
+        '"use client";\n\n' +
+        "import { useState } from \"react\";\n\n" +
+        "export default function LoginPage() {\n" +
+        "  const [tab, setTab] = useState<\"login\" | \"register\">(\"login\");\n" +
+        "  const [email, setEmail] = useState(\"\");\n" +
+        "  const [password, setPassword] = useState(\"\");\n" +
+        "  const [message, setMessage] = useState(\"\");\n\n" +
+        "  function submit(e: React.FormEvent) {\n" +
+        "    e.preventDefault();\n" +
+        "    setMessage(\n" +
+        `      tab === "login"\n` +
+        '        ? "Acceso aún no conectado al backend. Registra el flujo en la spec."\n' +
+        '        : "Registro aún no conectado al backend. Registra el flujo en la spec."\n' +
+        "    );\n" +
+        "  }\n\n" +
+        "  return (\n" +
+        `    <main style={{ backgroundColor: "${background}", color: "#f5f5f5" }} className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">\n` +
+        "      <div className=\"w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6\">\n" +
+        "        <div className=\"mb-5 flex rounded-full bg-white/5 p-1\">\n" +
+        `          {(["login", "register"] as const).map((t) => (\n` +
+        "            <button key={t} onClick={() => { setTab(t); setMessage(\"\"); }}\n" +
+        `              style={tab === t ? { backgroundColor: "${accent}", color: "#0b0b0f" } : undefined}\n` +
+        "              className=\"flex-1 rounded-full px-3 py-1.5 text-sm font-medium capitalize\">\n" +
+        "              {t === \"login\" ? \"Entrar\" : \"Registrarse\"}\n" +
+        "            </button>\n" +
+        "          ))}\n" +
+        "        </div>\n" +
+        "        <form onSubmit={submit} className=\"flex flex-col gap-3\">\n" +
+        '          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required placeholder="Correo electrónico"\n' +
+        '            className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/40" />\n' +
+        '          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required placeholder="Contraseña"\n' +
+        '            className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/40" />\n' +
+        '          <button type="submit" style={{ backgroundColor: "' +
+        accent +
+        '", color: "#0b0b0f" }} className="rounded-lg px-4 py-2 text-sm font-semibold">\n' +
+        "            {tab === \"login\" ? \"Entrar\" : \"Crear cuenta\"}\n" +
+        "          </button>\n" +
+        "        </form>\n" +
+        "        {message ? <p className=\"mt-3 text-xs opacity-70\">{message}</p> : null}\n" +
+        '        <a href="/" className="mt-4 block text-center text-xs opacity-50 hover:opacity-90">← Volver</a>\n' +
+        "      </div>\n" +
+        "    </main>\n" +
+        "  );\n" +
+        "}\n",
+    });
+  }
 
   files.push({
     path: ".gitignore",
