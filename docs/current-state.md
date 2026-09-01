@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-09-01 · HEAD: `a96d355` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-09-01 · HEAD: `8667b1d` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -186,6 +186,16 @@ Commit `a96d355` (desplegado).
 ## ✅ RESULTADO FINAL (validado)
 
 El preview de **TengoYBusco** (iteración 7, `ws-cmtitk.dev.core01.io`) quedó **READY** y sirve la landing: `<title>TengoYBusco</title>` (http 200). Flujo completo de repos privados operativo: Composer → builder → GitHub App (clona repo privado) → `POST /applications/private-github-app` → build (ignora type-check) → preview ready.
+
+## 6.24 — Traceability spec→build + QA compliance gate (desplegado)
+
+Commit `8667b1d` (desplegado).
+- **Brecha corregida**: la spec del Composer (paleta del logo, `auth`, `uiLibrary`…) **no llegaba al builder** → el código generado ignoraba colores/login o inventaba extras. Ahora:
+  - **`lib/composer/spec-resolver.ts`** (nuevo): `getComposerSpecForProject/Task`, `specPalette`, `specAccent`, `specBackground`, `specRequiresAuth`, `formatSpecForBuilder` (bloque compacto de la spec para el prompt).
+  - **Scaffold**: la landing usa la paleta del logo y genera `app/login/page.tsx` + enlace "Entrar / Registrarse" si `requiresAuth`.
+  - **Builder Commit**: inyecta la sección **"Especificación del producto"** en el contexto (entre project context y task context).
+  - **`verify_spec_compliance`** (nueva stage de QA, tras `run_builder_commit`): lee `app/page.tsx` y `app/login/page.tsx` de la rama; si la landing no usa la paleta o falta el login cuando la spec pide auth, lanza **UNA pasada de fix automática** (`generateBuilderCommitChanges` con instrucción concreta) y aplica los cambios en la rama. Eventos: `spec.compliant`, `spec.violation`, `spec.auto_fixed`, `spec.auto_fix_failed`. No bloquea el build.
+- `tsc` EXIT=0.
 
 ## 6.21 — Build resiliente (desplegado)
 

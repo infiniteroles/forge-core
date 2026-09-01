@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `a96d355` (main), 2026-09-01. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `8667b1d` (main), 2026-09-01. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -58,7 +58,11 @@
 
 ### 6.22 — `completed_with_warnings` no detiene el build ✅ (desplegado)
 - Hecho: los avisos intermedios ya no paran el bucle → siempre se llega a generar el DEV preview; el estado final conserva los avisos.
-- Próximo (opcional): que cada fase la ejecute realmente un agente especializado distinto (hoy es un solo builder con roles etiquetados).
+
+### 6.24 — Traceability spec→build + QA compliance gate ✅ (desplegado, commit `8667b1d`)
+- Hecho: la spec del Composer (paleta del logo, auth, uiLibrary) viaja hasta el scaffold y el builder (`spec-resolver`, sección "Especificación del producto" en el contexto, landing con paleta + `/login` si auth).
+- Hecho: stage de QA `verify_spec_compliance` tras el build — si el código no cumple la spec (paleta no usada, falta login), lanza **una pasada de fix automática** en la rama (eventos `spec.violation` / `spec.auto_fixed`).
+- Próximo (Fase B): separación real de agentes (hoy es un solo LLM con roles etiquetados) — ver "Vision V0/Bolt".
 
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
 - Hecho: fases detalladas (setup→datos→auth→backend→frontend→unit→e2e→QA), 2-3 tareas por fase y estrategia de pruebas completa.
