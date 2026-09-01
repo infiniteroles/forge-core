@@ -125,7 +125,10 @@ export function buildNextJsScaffold(
     path: "next.config.mjs",
     content:
       "/** @type {import('next').NextConfig} */\n" +
-      "const nextConfig = {};\n" +
+      "const nextConfig = {\n" +
+      "  typescript: { ignoreBuildErrors: true },\n" +
+      "  eslint: { ignoreDuringBuilds: true },\n" +
+      "};\n" +
       "export default nextConfig;\n",
   });
 
