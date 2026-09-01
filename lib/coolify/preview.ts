@@ -146,7 +146,9 @@ export async function createOrReusePreviewApplication(input: {
         `El repositorio «${input.repositoryFullName}» es privado y no hay GitHub App configurada en Forge (COOLIFY_GITHUB_APP_UUID).`
       );
     }
-    endpoint = "/applications/github";
+    // Coolify v4: creating an app from a private repo through a GitHub App uses
+    // POST /applications/private-github-app (github_app_uuid + owner/repo).
+    endpoint = "/applications/private-github-app";
     body = {
       ...common,
       github_app_uuid: cfg.githubAppUuid,
