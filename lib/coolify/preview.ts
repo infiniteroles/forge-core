@@ -6,6 +6,7 @@ import {
   coolifyFetch,
   checkCoolifyConnection,
   listCoolifyApplications,
+  CoolifyError,
 } from "./client";
 import { buildPreviewAppName, buildPreviewDomain } from "./preview-domain";
 import { checkRepository } from "@/lib/github/repository";
@@ -161,12 +162,30 @@ export async function createOrReusePreviewApplication(input: {
     };
   }
 
-  const created = await coolifyFetch<{ uuid?: string }>(endpoint, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  // Coolify sometimes returns a transient 404 right after creating a resource
+  // (a race where the app isn't immediately queryable). Retry a few times on
+  // not_found before giving up so previews don't fail randomly.
+  let created: { uuid?: string } | null = null;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      created = await coolifyFetch<{ uuid?: string }>(endpoint, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      break;
+    } catch (error) {
+      lastError = error;
+      const transient =
+        error instanceof CoolifyError && error.code === "not_found";
+      if (!transient) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
+  }
   if (!created?.uuid) {
-    throw new Error("Coolify did not return an application UUID");
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Coolify did not return an application UUID");
   }
   return { applicationUuid: created.uuid, created: true, reused: false };
 }
@@ -359,11 +378,22 @@ export async function getPreviewDeploymentStatus(previewDeploymentId: string) {
 
     return updated;
   } catch (error) {
+    // A 404 on a just-created deployment is a transient Coolify race: keep the
+    // current status and avoid surfacing a scary error that flips the preview.
+    const transient =
+      error instanceof CoolifyError && error.code === "not_found";
     return prisma.previewDeployment.update({
       where: { id: preview.id },
       data: {
         lastCheckedAt: new Date(),
-        error: error instanceof Error ? error.message : "Could not refresh preview",
+        ...(transient
+          ? { error: null }
+          : {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Could not refresh preview",
+            }),
       },
     });
   }
