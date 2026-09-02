@@ -32,6 +32,7 @@ import { persistableUsage } from "@/lib/llm-efficiency/cost-policy";
 import { shouldReusePrReview } from "@/lib/llm-efficiency/pr-review-cache";
 import { buildNextJsScaffold } from "@/lib/scaffold/nextjs";
 import {
+  getComposerSpecForProject,
   specAccent,
   specBackground,
   specPalette,
@@ -400,19 +401,22 @@ export async function stageEnsureScaffold(
     return { type: "continue" };
   }
 
+  // Fase 6.25b — re-resolución perezosa: ctx.composerSpec se calculó al arrancar
+  // la sesión, y puede ser null si la WorkSession arrancó antes de que el route
+  // del Composer enlazara projectId a la sesión (race). Para cuando se llega a
+  // esta etapa (minutos después) el enlace ya existe → reintentar aquí garantiza
+  // que el scaffold reciba paleta/auth/uiLibrary de la spec.
+  const spec =
+    ctx.composerSpec ??
+    (await getComposerSpecForProject(ctx.task.projectId).catch(() => null));
+
   const files = buildNextJsScaffold({
     name: ctx.project.name || ctx.task.title || "App",
     purpose: extractPurpose(ctx.task.description),
-    accent: ctx.composerSpec
-      ? specAccent(ctx.composerSpec)
-      : undefined,
-    background: ctx.composerSpec
-      ? specBackground(ctx.composerSpec)
-      : undefined,
-    requiresAuth: ctx.composerSpec
-      ? specRequiresAuth(ctx.composerSpec)
-      : false,
-    uiLibrary: ctx.composerSpec?.uiLibrary ?? "shadcn",
+    accent: spec ? specAccent(spec) : undefined,
+    background: spec ? specBackground(spec) : undefined,
+    requiresAuth: spec ? specRequiresAuth(spec) : false,
+    uiLibrary: spec?.uiLibrary ?? "shadcn",
   });
 
   await createOrUpdateFiles(
@@ -501,7 +505,11 @@ export async function stageVerifySpecCompliance(
 ): Promise<StageOutcome> {
   const repo = ctx.project.repositoryFullName;
   const branch = ctx.task.githubBranchName;
-  const spec = ctx.composerSpec;
+  // Igual que en ensure_scaffold: re-resuelve la spec (puede ser null en ctx si
+  // la sesión arrancó antes de que el Composer enlazara el projectId).
+  const spec =
+    ctx.composerSpec ??
+    (await getComposerSpecForProject(ctx.task.projectId).catch(() => null));
   if (!repo || !branch || !spec) return { type: "continue" };
 
   const violations: string[] = [];
