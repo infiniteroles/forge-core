@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-09-01 · HEAD: `8667b1d` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-09-02 · HEAD: `069338e` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -196,6 +196,36 @@ Commit `8667b1d` (desplegado).
   - **Builder Commit**: inyecta la sección **"Especificación del producto"** en el contexto (entre project context y task context).
   - **`verify_spec_compliance`** (nueva stage de QA, tras `run_builder_commit`): lee `app/page.tsx` y `app/login/page.tsx` de la rama; si la landing no usa la paleta o falta el login cuando la spec pide auth, lanza **UNA pasada de fix automática** (`generateBuilderCommitChanges` con instrucción concreta) y aplica los cambios en la rama. Eventos: `spec.compliant`, `spec.violation`, `spec.auto_fixed`, `spec.auto_fix_failed`. No bloquea el build.
 - `tsc` EXIT=0.
+
+## 6.25 — Preview estable + paleta real del logo + agilidad (desplegado)
+
+Commits `a9a856c` + `a354a6d` (fix race) + `069338e` (Dockerfile endurecido).
+- **Preview estable por tarea**: una iteración reutiliza la preview (mismo app Coolify + dominio) de la misma tarea en vez de crear `ws-xxxxxx`/app nuevos por iteración → URL estable y deploys incrementales.
+- **Fix paleta→spec**: la paleta extraída del logo en el cliente (canvas) se fusiona DENTRO del spec (`spec.palette`/`logoStyle`); antes se quedaba en `session.palette` y `spec-resolver` no la leía → el scaffold/builder recibían defaults.
+- **Sin redeploys inútiles**: `stageRunBuilderCommit` marca por sesión (`ctx.result.builderCommitUrl=null` al inicio); `ensure_dev_preview` salta el deploy si no hubo commit y hay preview ready reciente (<15 min) de la misma rama.
+- **Composer**: progreso en vivo de la etapa del build en el panel de preview + copy actualizado (se eliminó el texto obsoleto "no hay app que previsualizar").
+
+## 6.25b — Fix race spec→scaffold (encontrado en E2E, desplegado)
+
+Commit `a354a6d`.
+- `ctx.composerSpec` se resolvía UNA vez al arrancar la WorkSession, y podía ser null si la sesión arrancaba antes de que el route del Composer enlazara `projectId` (createComposerProject lanza `runDevWorkSession` fire-and-forget antes de persistir el enlace) → scaffold sin paleta ni `/login` pese a `auth: multi_user`.
+- `ensure_scaffold` y `verify_spec_compliance` re-resuelven la spec (`getComposerSpecForProject`) si `ctx.composerSpec` es null (perezoso).
+
+## 6.26 — Dockerfile de scaffold endurecido (desplegado)
+
+Commit `069338e`.
+- El preview de TestPaleta (prisma ^6 que metió el builder) fallaba en el contenedor: `npm install` → postinstall `prisma generate` fallaba (~3s, error redactado por Coolify; en local compila). El postinstall del proyecto rompía el build del contenedor.
+- Dockerfile del scaffold ahora: `npm install --ignore-scripts` (evita que un postinstall rompa el build) + `RUN (npx --no-install prisma generate >/dev/null 2>&1) || true` (prisma explícito y tolerante: si funciona, mejor; si no, no tira el build → el preview sirve la UI).
+- Validado E2E (TestPaleta): con el Dockerfile endurecido el preview pasó a **READY**.
+
+## ✅ VALIDACIÓN E2E (TestPaleta, 2026-09-02)
+
+Composer → discovery (spec con paleta `#F59E0B/#1E293B` + `auth: multi_user`) → plan (25 tareas) → build → preview **READY** en `ws-cmtk2l.dev.core01.io`:
+- Landing con la **paleta real del logo** (`#F59E0B` y `#1E293B` en el HTML) ✓
+- **`/login` responde 200** con paleta y pestañas Entrar/Registrarse ✓ (confirmado el fix 6.25b de la race)
+- Builder con commits funcionales (prisma/schema, lib/auth.ts, lib/db.ts, app/api/register) ✓
+- Sesión `completed` sin avisos; preview READY con el Dockerfile endurecido ✓
+- (TestMarca previo: preview READY con scaffold pero sin login → detectó la race 6.25b; y safe-file policy bloqueó el commit funcional esa vez)
 
 ## 6.21 — Build resiliente (desplegado)
 
