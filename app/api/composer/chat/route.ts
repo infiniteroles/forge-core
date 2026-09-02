@@ -348,6 +348,32 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Fase 6.25 — la paleta se extrae en el cliente (canvas del logo) y llega como
+  // dominantColors / session.palette, NO dentro del spec (el LLM del discovery no
+  // la conoce). La fusionamos dentro del spec para que spec-resolver
+  // (specPalette → accent/background) y el scaffold/builder reciban los colores.
+  const requestColors = (logo?.dominantColors ?? []).filter(Boolean) as string[];
+  const storedColors = Array.isArray(
+    (session as { palette?: unknown } | null)?.palette
+  )
+    ? (((session as { palette?: string[] } | null)?.palette ?? []).filter(
+        (c): c is string => typeof c === "string" && c.length > 0
+      ) as string[])
+    : [];
+  const clientPalette = requestColors.length ? requestColors : storedColors;
+  if (spec && clientPalette.length > 0) {
+    const specColors = spec.palette?.filter(Boolean) ?? [];
+    spec = {
+      ...spec,
+      palette: specColors.length ? specColors : clientPalette,
+      logoStyle: {
+        hasLogo: true,
+        dominantColors: clientPalette,
+        notes: spec.logoStyle?.notes,
+      },
+    };
+  }
+
   session =
     session ??
     (await prisma.composerSession.create({

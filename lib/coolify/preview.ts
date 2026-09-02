@@ -424,12 +424,29 @@ export async function prepareDevPreview(
 
   const requestedAt = new Date();
 
-  const existing = workSessionId
+  // Fase 6.25 — preview estable por tarea/proyecto: una iteración (WorkSession
+  // nueva sobre la MISMA tarea/rama) reutiliza la última preview healthy de esa
+  // tarea (mismo app Coolify + dominio) en vez de crear una app y un subdominio
+  // `ws-xxxxxx` nuevos por cada iteración. Resultado: URL estable y deploys
+  // incrementales sobre el mismo app (más ágil y menos residuo en Coolify).
+  let existing = workSessionId
     ? await prisma.previewDeployment.findFirst({
         where: { workSessionId, projectId },
         orderBy: { createdAt: "desc" },
       })
     : null;
+  if (!existing && taskId) {
+    existing = await prisma.previewDeployment.findFirst({
+      where: {
+        projectId,
+        taskId,
+        provider: "coolify",
+        status: { notIn: ["failed", "not_configured", "stopped"] },
+        coolifyApplicationUuid: { not: null },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
 
   const base = {
     projectId,

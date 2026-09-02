@@ -639,6 +639,37 @@ export async function stageEnsureDevPreview(
   if (getPreviewRunnerMode() === "disabled" || !isCoolifyConfigured()) {
     return { type: "continue" };
   }
+
+  // Fase 6.25 — agilidad: si el builder no produjo commit nuevo en ESTA sesión
+  // (ctx.result.builderCommitUrl null, marcado por stageRunBuilderCommit) y ya
+  // existe una preview ready y reciente de la MISMA tarea (rama), no relanzamos
+  // un deploy inútil: el código de la rama no cambió.
+  if (!ctx.result.builderCommitUrl) {
+    const last = await prisma.previewDeployment.findFirst({
+      where: { projectId: ctx.task.projectId, taskId: ctx.task.id },
+      orderBy: { createdAt: "desc" },
+    });
+    const readyRecently =
+      last?.status === "ready" &&
+      !!last.lastCheckedAt &&
+      Date.now() - last.lastCheckedAt.getTime() < 15 * 60 * 1000;
+    if (readyRecently) {
+      await logActivity({
+        projectId: ctx.task.projectId,
+        type: "preview.skipped_no_changes",
+        message:
+          "DEV Preview sin cambios: builder sin commit nuevo y preview ready reciente.",
+        metadata: {
+          workSessionId: ctx.workSessionId,
+          taskId: ctx.task.id,
+          previewDeploymentId: last!.id,
+          previewUrl: last!.previewUrl ?? null,
+        },
+      });
+      return { type: "continue" };
+    }
+  }
+
   try {
     const preview = await prepareDevPreview({
       projectId: ctx.task.projectId,
@@ -779,6 +810,11 @@ export async function stageRunBuilderCommit(ctx: StageContext): Promise<StageOut
   if (!ctx.project.repositoryFullName || !ctx.task.githubBranchName) {
     return { type: "continue" };
   }
+
+  // Fase 6.25 — marcador POR SESIÓN: indica si ESTA sesión generó un commit.
+  // ensure_dev_preview lo usa para no relanzar un deploy (~5-10min) cuando el
+  // builder no cambió nada (completed_with_warnings conservaba el valor previo).
+  ctx.result.builderCommitUrl = null;
 
   // Already committed in a previous run — except in iteration mode, where the
   // user's new instruction requires a NEW commit on the same branch.

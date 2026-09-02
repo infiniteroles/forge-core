@@ -43,6 +43,31 @@ function stepIndex(status: ComposerStatus): number {
   return STEPS.length - 1;
 }
 
+// Fase 6.25 — etiquetas legibles de las etapas del build (progreso en vivo).
+const STAGE_LABELS: Record<string, string> = {
+  ensure_task: "Preparando la tarea",
+  ensure_issue: "Creando issue en GitHub",
+  ensure_branch: "Creando la rama de trabajo",
+  ensure_scaffold: "Generando el scaffold del MVP",
+  ensure_plan_commit: "Guardando el plan en la rama",
+  ensure_draft_pr: "Abriendo la pull request",
+  ensure_builder_proposal: "Analizando cómo construir el MVP",
+  run_iteration_builder_proposal: "Analizando tu cambio",
+  run_builder_commit: "Generando el código del MVP",
+  verify_spec_compliance: "Verificando que cumple la especificación",
+  run_session_checks: "Ejecutando comprobaciones",
+  analyze_pr: "Revisando la pull request",
+  ensure_dev_preview: "Generando la previsualización",
+  summarize_result: "Cerrando el build",
+  refresh_context: "Actualizando el contexto",
+  ensure_existing_task: "Localizando la tarea",
+};
+
+function stageLabel(key: string | null): string {
+  if (!key) return "";
+  return STAGE_LABELS[key] ?? key.replace(/[_-]+/g, " ");
+}
+
 async function extractPalette(file: File): Promise<string[]> {
   const url = URL.createObjectURL(file);
   try {
@@ -99,6 +124,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [wsStatus, setWsStatus] = useState<string | null>(null);
   const [wsSummary, setWsSummary] = useState<string | null>(null);
+  const [stageKey, setStageKey] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ summary: string } | null>(null);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -218,6 +244,7 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
     setDecision(null);
     setWsStatus(null);
     setWsSummary(null);
+    setStageKey(null);
     notifiedWsRef.current = null;
     history.replaceState(null, "", "/composer");
     localStorage.removeItem("forge-composer-session");
@@ -267,11 +294,20 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
         if (!res.ok) return;
         const data = (await res.json()) as {
           status: string;
+          currentStage?: string | null;
           summary?: string | null;
           error?: string | null;
         };
         setWsStatus(data.status);
         setWsSummary(data.summary ?? data.error ?? null);
+        // Fase 6.25 — progreso en vivo: muestra la etapa actual mientras corre.
+        if (data.status === "queued" || data.status === "running") {
+          setStageKey(data.currentStage ?? null);
+        } else if (
+          ["completed", "completed_with_warnings", "failed"].includes(data.status)
+        ) {
+          setStageKey(null);
+        }
         const key = `${data.status}|${data.summary ?? data.error ?? ""}`;
         if (notifiedWsRef.current === key) return;
         if (data.status === "waiting_for_user") {
@@ -621,11 +657,11 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
             <div className="grid flex-1 place-items-center p-6 text-center text-sm text-m3-on-surface-variant">
               <div>
                 <p className="flex items-center justify-center gap-2 font-medium text-m3-on-surface">
-                  <Icon name="check_circle" className="text-[20px] leading-none text-m3-primary" /> El build ha terminado, pero aún no hay una app que previsualizar.
+                  <Icon name="hourglass_empty" className="text-[20px] leading-none text-m3-primary" /> El build terminó y el preview se está generando…
                 </p>
                 <p className="mt-1 text-xs">
-                  El repositorio todavía no contiene el código de la aplicación (solo el plan).
-                  Con el scaffold mínimo (Next.js + shadcn) verás aquí el MVP de verdad.
+                  En cuanto la previsualización esté lista aparecerá aquí.
+                  Si lleva demasiado, pide un cambio o abre el proyecto para ver el estado real.
                 </p>
               </div>
             </div>
@@ -638,8 +674,17 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
                       style={{ animationDelay: `${i * 0.15}s` }} />
                   ))}
                 </div>
-                Forge está construyendo el MVP…<br />
-                el preview aparecerá aquí cuando esté listo.
+                {stageKey ? (
+                  <>
+                    Forge está: <span className="font-medium text-m3-on-surface">{stageLabel(stageKey)}</span>…<br />
+                    el preview aparecerá aquí cuando esté listo.
+                  </>
+                ) : (
+                  <>
+                    Forge está construyendo el MVP…<br />
+                    el preview aparecerá aquí cuando esté listo.
+                  </>
+                )}
               </div>
             </div>
           )}
