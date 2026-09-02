@@ -281,9 +281,15 @@ export function buildNextJsScaffold(
       "FROM node:20-alpine\n\n" +
       "WORKDIR /app\n" +
       "ENV NEXT_TELEMETRY_DISABLED=1\n\n" +
+      // Fase 6.26 — Dockerfile endurecido: --ignore-scripts evita que un
+      // postinstall (p. ej. `prisma generate` que el builder añade) rompa el
+      // npm install del contenedor cuando falla la descarga de engines; prisma
+      // se genera explícito y tolerante (si funciona, mejor; si no, no tira el
+      // build → el preview al menos sirve la UI).
       "COPY package.json ./\n" +
-      "RUN npm install --no-audit --no-fund\n\n" +
+      "RUN npm install --no-audit --no-fund --ignore-scripts || npm install --no-audit --no-fund --ignore-scripts\n\n" +
       "COPY . .\n\n" +
+      "RUN (npx --no-install prisma generate >/dev/null 2>&1) || true\n\n" +
       "RUN npm run build\n\n" +
       "EXPOSE 3000\n" +
       'CMD ["npm", "run", "start"]\n',

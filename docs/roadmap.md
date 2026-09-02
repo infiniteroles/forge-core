@@ -67,15 +67,45 @@
 ### 6.12 — Plan de desarrollo detallado ✅ (desplegado)
 - Hecho: fases detalladas (setup→datos→auth→backend→frontend→unit→e2e→QA), 2-3 tareas por fase y estrategia de pruebas completa.
 
-### 6.4c — Scaffold real del MVP ✅ (retomado y desplegado; pendiente de validación E2E)
+### 6.4c — Scaffold real del MVP ✅ (desplegado y validado E2E)
 - Hecho: el build genera el scaffold Next.js + Tailwind en la rama (stage `ensure_scaffold`) y prepara el DEV Preview automáticamente (stage `ensure_dev_preview`).
-- Pendiente: validar en pruebas un flujo completo (aprovechar que la PR ya contiene la app y el preview aparece solo).
+- Validado E2E real (TestMarca, repo privado): preview automático READY con el título del producto.
 
-## A medio plazo
+### 6.25/6.25b — Preview estable + paleta real + agilidad ✅ (desplegado, commits `a9a856c` + `a354a6d`)
+- **Preview estable por tarea**: una iteración reutiliza la preview (mismo app Coolify + dominio) de la misma tarea en vez de crear `ws-xxxxxx`/app nuevos por iteración → URL estable + deploys incrementales.
+- **Fix paleta→spec**: la paleta extraída del logo (canvas cliente) se fusiona dentro del spec (`spec-resolver` solo lee `spec.palette`/`logoStyle`); antes se quedaba en `session.palette` y nunca llegaba al scaffold.
+- **Sin redeploys inútiles**: `run_builder_commit` marca por sesión si hubo commit (`ctx.result.builderCommitUrl=null` al inicio); `ensure_dev_preview` salta el deploy si no hubo commit y hay preview ready reciente (<15 min) de la misma rama.
+- **Fix race spec→scaffold** (6.25b, encontrado en E2E): `ctx.composerSpec` se resolvía al arrancar la sesión y podía ser null si la WorkSession arrancaba antes de que el Composer enlazara `projectId`; `ensure_scaffold` y `verify_spec_compliance` re-resuelven el spec (perezoso) si viene null → el scaffold ya recibe paleta + `/login` con `auth`.
+- **Composer**: progreso en vivo de la etapa del build en el panel de preview + copy actualizado.
 
 ### 5.1 — Pulido MVP (no imprescindible)
 - Mejoras estéticas/funcionales pendientes del flujo (TaskCard, paneles, micro-interacciones).
 - Traducir textos residuales en inglés de la UI si se quiere 100% español.
+
+## Siguiente ronda — Publicación automática en subdominio con el nombre del producto
+
+**Diseño acordado con el usuario (2026-09-02):** dominio `<producto>.dev.core01.io` y
+gatillo **un clic "Publicar" en el chat del Composer cuando el preview esté listo**.
+
+### 7.0 — Publicar el producto en `<producto>.dev.core01.io` (diseño; SIN implementar aún)
+- Objetivo: al terminar la iteración en el chat, el usuario pulsa **Publicar** y Forge deja la app
+  **viva en un subdominio estable con el nombre del producto** (`<slug>.dev.core01.io`), con
+  merge de la PR aprobada + deploy automático (el worker/API Coolify ya existe para esto).
+- Enlaces con lo ya construido (reutilizar):
+  - La preview estable por tarea (6.25) ya da URL estable y reutiliza el app de Coolify → el
+    "pase a producción" sería: crear/renombrar la app con dominio `<slug>.dev.core01.io` (o un
+    segundo app de producción por proyecto) y relanzar el deploy del commit de main.
+  - El flujo Production Readiness + Promotion (3.8/3.9/4.x) ya mergea la PR aprobada y despliega
+    main automáticamente vía `PRODUCTION_DEPLOY_MODE=coolify_api` (worker detached) → adaptar el
+    dominio objetivo por proyecto en lugar del app fijo de Forge.
+  - El spec del Composer ya tiene `name`/`slug` → derivar el dominio `<slug>.dev.core01.io`.
+- UX: botón **"🚀 Publicar"** en el Composer cuando el preview esté `ready` y el usuario lo
+  apruebe; estados en el chat (publicando → publicado en <url>).
+- Pendientes de decisión técnica: (a) una app "producción" por proyecto creada bajo demanda con
+  dominio `<slug>.dev.core01.io`; (b) env runtime por proyecto (hoy previews comparten la BD dev —
+  evaluar aprovisionar BD por proyecto); (c) cómo se replica el app para NO romper el DEV preview.
+
+## A medio plazo
 
 ### Operaciones / infraestructura
 - **Rotar GITHUB_TOKEN** (manual, requiere sesión web de GitHub).
