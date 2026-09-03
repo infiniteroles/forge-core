@@ -1,6 +1,6 @@
 # Forge Core01 — Estado actual
 
-> Última actualización: 2026-09-02 · HEAD: `069338e` (main) — todo pusheado a `origin/main`.
+> Última actualización: 2026-09-03 · HEAD: `bae6b9b` (main) — todo pusheado a `origin/main`.
 
 Forge Core01 es el **control plane** (Next.js/Prisma/Coolify) para desarrollo asistido por IA de INFINITEROLES / CORE01. El objetivo a largo plazo es un **equipo de desarrollo basado en IA**: tú describes la app y Forge pregunta, propone, planifica, construye de forma autónoma y te muestra un **MVP previsualizable** para iterar por chat.
 
@@ -226,6 +226,16 @@ Composer → discovery (spec con paleta `#F59E0B/#1E293B` + `auth: multi_user`) 
 - Builder con commits funcionales (prisma/schema, lib/auth.ts, lib/db.ts, app/api/register) ✓
 - Sesión `completed` sin avisos; preview READY con el Dockerfile endurecido ✓
 - (TestMarca previo: preview READY con scaffold pero sin login → detectó la race 6.25b; y safe-file policy bloqueó el commit funcional esa vez)
+
+## 7.0 — Publicación automática en <producto>.dev.core01.io (desplegado, pendiente de E2E completo)
+
+Commit `bae6b9b` (desplegado; migración `20260902000000_add_project_published` aplicada).
+- Diseño acordado con el usuario: dominio `<producto>.dev.core01.io` y gatillo **un clic "Publicar"** en el chat del Composer cuando el preview está listo.
+- `Project` + `publishedAppUuid`/`publishedAt` (reutiliza `productionUrl` para la URL).
+- `lib/production-publish/publish.ts`: `publishProduct(projectId)` publica el producto desplegando la **rama actual de la primera tarea** (el código exacto previsualizado) en una app de Coolify por proyecto con dominio `<slug>.dev.core01.io` (reusa la app por dominio; env runtime shared_dev como los previews; **no mergea a main; nunca toca Forge Core01**). `getPublishedStatus(projectId)` comprueba si la URL responde.
+- `POST/GET /api/projects/[id]/publish`.
+- Composer: botón **🚀 Publicar** en la cabecera del panel de preview (visible cuando hay preview ready) + mensaje en el chat con la URL publicada; tras publicar muestra "Publicado ✓" con enlace.
+- Pendiente: probar el **circuito completo** (Composer → build → preview → Publicar → `<slug>.dev.core01.io` responde). Nota: los previews/productos comparten la BD dev (limitar el registro/login hasta aprovisionar BD por proyecto).
 
 ## 6.21 — Build resiliente (desplegado)
 

@@ -1,6 +1,6 @@
 # Forge Core01 — Roadmap y siguientes pasos
 
-> Estado de referencia: HEAD `069338e` (main), 2026-09-02. Prioridad sugerida en orden.
+> Estado de referencia: HEAD `bae6b9b` (main), 2026-09-03. Prioridad sugerida en orden.
 
 ## A corto plazo (completar Fase 6.x — Composer end-to-end)
 
@@ -104,6 +104,11 @@ gatillo **un clic "Publicar" en el chat del Composer cuando el preview esté lis
 - Pendientes de decisión técnica: (a) una app "producción" por proyecto creada bajo demanda con
   dominio `<slug>.dev.core01.io`; (b) env runtime por proyecto (hoy previews comparten la BD dev —
   evaluar aprovisionar BD por proyecto); (c) cómo se replica el app para NO romper el DEV preview.
+
+### 7.0 — Publicar el producto en `<producto>.dev.core01.io` ✅ (implementado y desplegado; pendiente de E2E del circuito completo)
+- Hecho: botón "Publicar" en el chat cuando el preview está listo; despliega la rama actual de la primera tarea en una app por proyecto con dominio `<slug>.dev.core01.io`; reusa app por dominio; env shared_dev; no toca main ni Forge (commit `bae6b9b`).
+- Pendiente de validar: circuito completo Composer → build → preview → Publicar → URL responde.
+- A medio plazo: aprovisionar **BD por proyecto** (hoy previews/productos comparten la BD dev → registro/login limitado), y decidir si la publicación debe reflejar `main` (merge) en vez de la rama de la tarea.
 
 ## A medio plazo
 
