@@ -40,6 +40,8 @@ model Project {
   repositoryLastCheckedAt DateTime?
   coolifyApplicationId String?
   coolifyProjectId     String?
+  publishedAppUuid     String?
+  publishedAt          DateTime?
   notes                String?
   archivedAt           DateTime?
   createdAt            DateTime      @default(now())

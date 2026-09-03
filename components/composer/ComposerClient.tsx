@@ -122,6 +122,12 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
   const [preview, setPreview] = useState<{ url: string; status: string } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  // Fase 7 — publicación automática en <slug>.dev.core01.io
+  const [publishState, setPublishState] = useState<{
+    status: "idle" | "publishing" | "published" | "error";
+    url?: string;
+    error?: string;
+  }>({ status: "idle" });
   const [wsStatus, setWsStatus] = useState<string | null>(null);
   const [wsSummary, setWsSummary] = useState<string | null>(null);
   const [stageKey, setStageKey] = useState<string | null>(null);
@@ -429,6 +435,54 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
     ]);
   }, []);
 
+  // Fase 7 — Publicar el producto en <producto>.dev.core01.io (un clic).
+  const publishProject = useCallback(async () => {
+    if (!projectId) return;
+    if (publishState.status === "publishing") return;
+    setPublishState({ status: "publishing" });
+    try {
+      const res = await fetch(`/api/projects/${projectId}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        publishedUrl?: string;
+        error?: string;
+      } | null;
+      if (res.ok && data?.publishedUrl) {
+        setPublishState({ status: "published", url: data.publishedUrl });
+        setMessages((m) => [
+          ...m,
+          {
+            id: `publish-ok-${Date.now()}`,
+            role: "assistant",
+            kind: "text",
+            content:
+              `🚀 Producto publicado. En unos minutos estará disponible en ${data.publishedUrl}.`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      } else {
+        const err = data?.error ?? "Error al publicar.";
+        setPublishState({ status: "error", error: err });
+        setMessages((m) => [
+          ...m,
+          {
+            id: `publish-err-${Date.now()}`,
+            role: "assistant",
+            kind: "system",
+            content: `⚠️ No pude publicar: ${err}`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+    } catch {
+      setPublishState({ status: "error", error: "Error de conexión." });
+    }
+  }, [projectId, publishState.status]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
@@ -606,6 +660,21 @@ export function ComposerClient({ initialSessionId }: { initialSessionId?: string
                   <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
                   Forge trabajando…
                 </span>
+              ) : null}
+              {publishState.status === "published" && publishState.url ? (
+                <a href={publishState.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-m3-primary hover:underline">
+                  <Icon name="check_circle" className="text-[14px] leading-none" /> Publicado ✓
+                </a>
+              ) : preview && projectId ? (
+                <button
+                  onClick={publishProject}
+                  disabled={publishState.status === "publishing"}
+                  title="Deja el producto publicado en un subdominio con su nombre"
+                  className="flex items-center gap-1 rounded-full bg-m3-primary px-3 py-1 text-xs font-semibold text-m3-on-primary transition hover:opacity-90 disabled:opacity-50"
+                >
+                  <Icon name="rocket_launch" className="text-[14px] leading-none" />
+                  {publishState.status === "publishing" ? "Publicando…" : "Publicar"}
+                </button>
               ) : null}
               {preview ? (
                 <a href={preview.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-m3-primary hover:underline">
